@@ -1,0 +1,158 @@
+{
+  "device_info": {
+    "name": "Eastron SDM-230",
+    "id": "sdm230",
+    "device_group": "g-power-meter"
+  },
+  "registers": [
+    {
+      "address": 0,
+      "name": "Voltage",
+      "reg_type": "input",
+      "format": "float",
+      "units": "V",
+      "access": "read",
+      "channel_type": "value",
+      "group": "power_meters",
+      "group_title": "Power Meters",
+      "is_parameter": false,
+
+      "enabled": true,
+      "translations": {
+        "ru": { "name": "Напряжение" }
+      }
+    },
+    {
+      "address": 6,
+      "name": "Current",
+      "reg_type": "input",
+      "format": "float",
+      "units": "A",
+      "access": "read",
+      "channel_type": "value",
+      "group": "power_meters",
+      "group_title": "Power Meters",
+      "is_parameter": false,
+
+      "enabled": true,
+      "translations": {
+        "ru": { "name": "Ток" }
+      }
+    },
+    {
+      "address": 12,
+      "name": "Active Power",
+      "reg_type": "input",
+      "format": "float",
+      "units": "W",
+      "access": "read",
+      "channel_type": "value",
+      "group": "power_meters",
+      "group_title": "Power Meters",
+      "is_parameter": false,
+
+      "enabled": true,
+      "translations": {
+        "ru": { "name": "Активная мощность" }
+      }
+    },
+    {
+      "address": 342,
+      "name": "Total Active Energy",
+      "reg_type": "input",
+      "format": "float",
+      "units": "kWh",
+      "access": "read",
+      "channel_type": "value",
+      "group": "energy",
+      "group_title": "Energy",
+      "is_parameter": false,
+
+      "enabled": true,
+      "translations": {
+        "ru": { "name": "Потреблённая энергия" }
+      }
+    },
+    {
+      "address": 70,
+      "name": "Frequency",
+      "reg_type": "input",
+      "format": "float",
+      "units": "Hz",
+      "access": "read",
+      "channel_type": "value",
+      "group": "power_meters",
+      "group_title": "Power Meters",
+      "is_parameter": false,
+
+      "enabled": true,
+      "translations": {
+        "ru": { "name": "Частота" }
+      }
+    },
+    {
+      "address": 28,
+      "name": "Baud Rate",
+      "reg_type": "holding",
+      "format": "u16",
+      "access": "readwrite",
+      "channel_type": "value",
+      "group": "general",
+      "group_title": "General",
+      "is_parameter": true,
+
+      "enabled": true,
+      "enum": [0, 1, 2, 5],
+      "enum_titles": ["2400", "4800", "9600", "1200"],
+      "translations": {
+        "ru": { "name": "Скорость обмена" }
+      }
+    },
+    {
+      "address": 20,
+      "name": "Modbus Address",
+      "reg_type": "holding",
+      "format": "u16",
+      "access": "readwrite",
+      "channel_type": "value",
+      "group": "general",
+      "group_title": "General",
+      "is_parameter": true,
+
+      "enabled": true,
+      "min": 1,
+      "max": 247,
+      "translations": {
+        "ru": { "name": "Адрес Modbus" }
+      }
+    },
+    {
+      "address": 42,
+      "name": "Serial NO",
+      "reg_type": "holding",
+      "format": "string",
+      "access": "read",
+      "channel_type": "text",
+      "group": "hw_info",
+      "group_title": "HW Info",
+      "is_parameter": false,
+
+      "enabled": true,
+      "string_data_size": 4,
+      "readonly": true,
+      "translations": {
+        "ru": { "name": "Серийный номер" }
+      }
+    },
+    {
+      "address": 99,
+      "name": "Disabled Register",
+      "reg_type": "input",
+      "format": "u16",
+      "channel_type": "value",
+      "group": "power_meters",
+      "is_parameter": false,
+      "enabled": false
+    }
+  ]
+}
