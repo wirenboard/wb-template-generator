@@ -160,8 +160,6 @@ docker compose build --no-cache && docker compose up -d
 docker compose logs -f backend
 ```
 
-`docker-compose.override.yml` переопределяет сетевые настройки для dev-окружения: host networking, backend на порту 9000, nginx на 9080.
-
 ### Mock-режим
 
 Если `LLM_API_URL` не задан — backend работает в mock-режиме с тестовыми данными SDM-230. Удобно для разработки фронтенда без реального LLM.
