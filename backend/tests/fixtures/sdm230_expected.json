@@ -1,0 +1,122 @@
+{
+  "device_type": "sdm230",
+  "title": "sdm230_template_title",
+  "group": "g-power-meter",
+  "device": {
+    "name": "Eastron SDM-230",
+    "id": "sdm230",
+    "groups": [
+      { "title": "Power Meters", "id": "g_power_meters" },
+      { "title": "Energy", "id": "g_energy" },
+      { "title": "HW Info", "id": "g_hw_info" },
+      { "title": "General", "id": "g_general" }
+    ],
+    "channels": [
+      {
+        "id": "voltage",
+        "name": "Voltage",
+        "reg_type": "input",
+        "address": 0,
+        "group": "g_power_meters",
+        "format": "float",
+        "units": "V"
+      },
+      {
+        "id": "current",
+        "name": "Current",
+        "reg_type": "input",
+        "address": 6,
+        "group": "g_power_meters",
+        "format": "float",
+        "units": "A"
+      },
+      {
+        "id": "active_power",
+        "name": "Active Power",
+        "reg_type": "input",
+        "address": 12,
+        "group": "g_power_meters",
+        "format": "float",
+        "units": "W"
+      },
+      {
+        "id": "total_active_energy",
+        "name": "Total Active Energy",
+        "reg_type": "input",
+        "address": 342,
+        "group": "g_energy",
+        "format": "float",
+        "units": "kWh"
+      },
+      {
+        "id": "frequency",
+        "name": "Frequency",
+        "reg_type": "input",
+        "address": 70,
+        "group": "g_power_meters",
+        "format": "float",
+        "units": "Hz"
+      },
+      {
+        "id": "serial_no",
+        "name": "Serial NO",
+        "reg_type": "holding",
+        "address": 42,
+        "group": "g_hw_info",
+        "type": "text",
+        "format": "string",
+        "readonly": true,
+        "string_data_size": 4
+      },
+      {
+        "id": "disabled_register",
+        "name": "Disabled Register",
+        "reg_type": "input",
+        "address": 99,
+        "group": "g_power_meters",
+        "enabled": false
+      }
+    ],
+    "parameters": {
+      "baud_rate": {
+        "title": "Baud Rate",
+        "address": 28,
+        "reg_type": "holding",
+        "group": "g_general",
+        "order": 0,
+        "enum": [0, 1, 2, 5],
+        "enum_titles": ["2400", "4800", "9600", "1200"],
+        "default": 0
+      },
+      "modbus_address": {
+        "title": "Modbus Address",
+        "address": 20,
+        "reg_type": "holding",
+        "group": "g_general",
+        "order": 1,
+        "min": 1,
+        "max": 247
+      }
+    },
+    "translations": {
+      "en": {
+        "sdm230_template_title": "Eastron SDM-230"
+      },
+      "ru": {
+        "sdm230_template_title": "Eastron SDM-230",
+        "Power Meters": "Power Meters",
+        "Energy": "Energy",
+        "HW Info": "HW Info",
+        "General": "General",
+        "Voltage": "Напряжение",
+        "Current": "Ток",
+        "Active Power": "Активная мощность",
+        "Total Active Energy": "Потреблённая энергия",
+        "Frequency": "Частота",
+        "Serial NO": "Серийный номер",
+        "Baud Rate": "Скорость обмена",
+        "Modbus Address": "Адрес Modbus"
+      }
+    }
+  }
+}
