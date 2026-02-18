@@ -7,15 +7,13 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-19
+
 ### Добавлено
 - Автоматическое версионирование: backend парсит версию из CHANGELOG.md при старте
 - Отображение версии приложения в шапке UI (бейдж `vX.Y.Z`)
 - CI: проверка обновления CHANGELOG.md в pull request (мягкое предупреждение)
 - `.dockerignore` для оптимизации контекста сборки
-
-### Исправлено
-- Фикс `crypto.randomUUID()` в non-secure context (HTTP) (#11)
-- Версия в коде (`main.py`) синхронизирована с CHANGELOG.md (была захардкожена `0.2.0`)
 
 ### Изменено
 - CHANGELOG.md — единственный источник истины для версии приложения
@@ -24,6 +22,8 @@
 ### Исправлено
 - **Безопасность**: полная изоляция серверных настроек LLM (ключ, прокси) — при пользовательском URL серверные настройки не используются
 - Пользовательские настройки LLM (temperature, timeout, legacy_max_tokens) теперь передаются в `/api/translate`
+- Фикс `crypto.randomUUID()` в non-secure context (HTTP) (#11)
+- Версия в коде (`main.py`) синхронизирована с CHANGELOG.md (была захардкожена `0.2.0`)
 
 ## [0.3.0] - 2026-02-18
 
@@ -63,7 +63,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wirenboard/wb-template-generator/releases/tag/v0.1.0
