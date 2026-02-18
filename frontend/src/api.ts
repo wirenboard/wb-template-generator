@@ -198,7 +198,7 @@ export async function importTemplate(
 export async function translateStrings(
   strings: Record<string, string>,
   targetLang: string,
-  llmConfig?: { apiUrl?: string; apiKey?: string; model?: string },
+  llmConfig?: { apiUrl?: string; apiKey?: string; model?: string; temperature?: number; timeout?: number; legacyMaxTokens?: boolean },
 ): Promise<Record<string, string>> {
   const targetLangName = LANGUAGE_NAMES[targetLang] || targetLang;
   const res = await fetch('/api/translate', {
@@ -211,6 +211,9 @@ export async function translateStrings(
       llm_api_url: llmConfig?.apiUrl,
       llm_api_key: llmConfig?.apiKey,
       llm_model: llmConfig?.model,
+      llm_temperature: llmConfig?.temperature,
+      llm_timeout: llmConfig?.timeout,
+      llm_legacy_max_tokens: llmConfig?.legacyMaxTokens,
     }),
   });
   if (!res.ok) {
