@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress, Language } from './types';
 import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi } from './api';
 import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY } from './constants';
+import { generateId } from './utils';
 
 // Debounce-хелпер
 let buildTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -221,7 +222,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
 
   addRegister: () => {
     const { lastActiveGroup } = get();
-    const newId = crypto.randomUUID();
+    const newId = generateId();
     const newReg: Register = {
       id: newId,
       address: 0,

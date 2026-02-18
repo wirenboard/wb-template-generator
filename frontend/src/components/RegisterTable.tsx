@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useMemo, useEffect, Fragment } from 'rea
 import { useStore } from '../store';
 import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, getChannelTypesForRegType } from '../constants';
+import { generateId } from '../utils';
 import { translateStrings } from '../api';
 import FormatSelect from './FormatSelect';
 import RegisterDetailPanel from './RegisterDetailPanel';
@@ -691,7 +692,7 @@ export default function RegisterTable() {
         const channelType = col(cols, 'channel_type', -1) || 'value';
 
         allRegs.push({
-          id: crypto.randomUUID(),
+          id: generateId(),
           enabled: col(cols, 'enabled', 0) !== '0',
           address: col(cols, 'address', 1)?.includes(':')
             ? col(cols, 'address', 1)
