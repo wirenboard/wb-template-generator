@@ -149,6 +149,13 @@ function translateEnumTitles(
   return titles.map((t) => translate(t, lang, translations));
 }
 
+/** Извлекает ключ перевода из строки предупреждения о конфликте.
+ *  Формат: Конфликт перевода [ru]: "Some Key" → "val1" vs "val2" */
+function parseWarningKey(warning: string): string | null {
+  const m = warning.match(/Конфликт перевода \[[^\]]+\]: "([^"]+)"/);
+  return m ? m[1] : null;
+}
+
 /** Основной компонент превью шаблона */
 export default function TemplatePreview() {
   const template = useStore((s) => s.template);
@@ -156,6 +163,35 @@ export default function TemplatePreview() {
   const previewLang = useStore((s) => s.previewLang);
   const setPreviewLang = useStore((s) => s.setPreviewLang);
   const highlightedRegisterId = useStore((s) => s.highlightedRegisterId);
+  const setHighlightedRegister = useStore((s) => s.setHighlightedRegister);
+  const collapsedGroups = useStore((s) => s.collapsedGroups);
+  const toggleGroupCollapsed = useStore((s) => s.toggleGroupCollapsed);
+  const setRowExpanded = useStore((s) => s.setRowExpanded);
+
+  /** Клик по предупреждению о конфликте — найти регистр и перейти к нему */
+  const handleWarningClick = useCallback((warning: string) => {
+    const key = parseWarningKey(warning);
+    if (!key) return;
+
+    // Ищем регистр по имени, description или enum title
+    const reg = registers.find((r) =>
+      r.name === key ||
+      (r.description && r.description === key) ||
+      (r.enum_entries?.some((e) => e.title === key)),
+    );
+    if (!reg) return;
+
+    // Разворачиваем группу если свёрнута
+    if (collapsedGroups.has(reg.group)) {
+      toggleGroupCollapsed(reg.group);
+    }
+
+    // Разворачиваем строку чтобы показать переводы
+    setRowExpanded(reg.id, true);
+
+    // Подсвечиваем регистр (автоскролл уже встроен в RegisterTable)
+    setHighlightedRegister(reg.id);
+  }, [registers, collapsedGroups, toggleGroupCollapsed, setHighlightedRegister, setRowExpanded]);
 
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [paramsOpen, setParamsOpen] = useState(true);
@@ -296,7 +332,14 @@ export default function TemplatePreview() {
           <div className="text-xs font-semibold text-yellow-700 mb-1">Конфликты переводов ({warnings.length})</div>
           <ul className="text-[11px] text-yellow-600 space-y-0.5 max-h-24 overflow-y-auto">
             {warnings.map((w, i) => (
-              <li key={i}>{w}</li>
+              <li
+                key={i}
+                onClick={() => handleWarningClick(w)}
+                className="cursor-pointer hover:text-yellow-800 hover:underline"
+                title="Нажмите, чтобы перейти к регистру"
+              >
+                {w}
+              </li>
             ))}
           </ul>
         </div>
