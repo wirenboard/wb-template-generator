@@ -120,13 +120,17 @@ or control it regularly?" → Channel. "Is this set once during installation?" �
 5. **Assign channel_type** (for channels, i.e. `is_parameter: false`) — ONLY these values:
    - `"value"` — numeric measurement or status value (temperature, voltage, counter...). \
 This is the most common type. Use with appropriate `units`.
-   - `"switch"` — on/off toggle (boolean). Use for coil and discrete registers (relay control, status flags). \
+   - `"switch"` — on/off toggle (boolean). Use for ANY readable on/off register — \
+including coil, discrete, and holding registers with read or readwrite access. \
 ONLY when there are no named states. If the register has named states like "0=Auto, 1=Manual", \
 use `"value"` with enum instead.
+   - `"wo-switch"` — write-only switch. Use ONLY when the register is strictly write-only \
+(access="write") and CANNOT be read back. If a register can be both read AND written (access="readwrite"), \
+use `"switch"`, NOT `"wo-switch"`. This is critical: `wo-switch` means the driver will NEVER attempt \
+to read this register. Typical use: reset commands, trigger-only coils with no readback.
    - `"pushbutton"` — momentary action trigger (write 1 to activate, auto-resets)
    - `"range"` — bounded numeric control with min/max (must set `min` and `max` fields)
    - `"text"` — string value (must set `string_data_size` = number of registers for string)
-   - `"wo-switch"` — write-only switch (set and forget, no readback)
    - `"rgb"` — RGB color value (3-register color)
 
    Do NOT use deprecated types like "temperature", "voltage", "current", "power", "humidity", "lux", etc. \
@@ -324,6 +328,8 @@ Important:
 Use `enum_entries` with `translations` if you want to include enum translations.
 - For switch channels without named states: format "u16", scale 1.
 - For coil and discrete registers: use channel_type "switch" (not "value").
+- NEVER use "wo-switch" for registers that can be read (access "read" or "readwrite"). \
+"wo-switch" is ONLY for write-only registers (access "write"). For readable on/off registers, always use "switch".
 - Pay attention to scale factors: "×0.1", "/100", "LSB=0.01" → specific scale values.
 - If the document describes bits within a status/control register, split them into separate entries \
 with bitwise address format "reg:bit:width".
