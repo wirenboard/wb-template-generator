@@ -253,6 +253,15 @@ RATE_LIMIT_REQUESTS=10
 RATE_LIMIT_WINDOW=60
 ```
 
+## CHANGELOG
+
+Проект ведёт `CHANGELOG.md` в формате [Keep a Changelog](https://keepachangelog.com/) + [Semantic Versioning](https://semver.org/).
+
+**При каждом PR обязательно обновлять `CHANGELOG.md`:**
+- Добавлять записи в секцию `[Unreleased]`
+- Категории: `Добавлено`, `Изменено`, `Исправлено`, `Удалено`
+- При релизе — переименовать `[Unreleased]` в `[X.Y.Z] - YYYY-MM-DD`
+
 ## Формат целевого шаблона (wb-mqtt-serial)
 
 - **channel.type**: value, switch, wo-switch, pushbutton, range, text, rgb, temperature, voltage, current, power, ...
