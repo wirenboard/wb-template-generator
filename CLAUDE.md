@@ -139,7 +139,7 @@ event: error      → {message, request_id}
 - `units: str | None` — единицы измерения
 - `access`: read, write, readwrite
 - `is_parameter: bool` — false=канал (данные/управление), true=параметр (настройки)
-- `channel_type`: value, switch, wo-switch, pushbutton, range, text, alarm, rgb
+- `channel_type`: value, switch, wo-switch, pushbutton, range, text, rgb
 - `group: str` — ID группы (default: `"general"`)
 - `condition: str | None` — условие показа (`"parameter_id==value"`)
 - `enabled: bool` — включён/выключен в шаблоне
@@ -255,7 +255,7 @@ RATE_LIMIT_WINDOW=60
 
 ## Формат целевого шаблона (wb-mqtt-serial)
 
-- **channel.type**: value, switch, wo-switch, pushbutton, range, text, alarm, rgb, temperature, voltage, current, power, ...
+- **channel.type**: value, switch, wo-switch, pushbutton, range, text, rgb, temperature, voltage, current, power, ...
 - **channel.format**: u16, s16, u32, s32, u64, s64, float, double, u8, s8, string
 - **channel.reg_type**: holding, input, coil, discrete, holding_single, holding_multi
 - **channel.units**: V, mV, A, mA, W, kWh, Hz, rpm, Ohm, mOhm, bar, mbar, Pa, deg C, %, RH, ppm, ppb, lx, dB, s, min, h, m, mm/h, m/s, m^3/h, m^3, g, kg, mol, cd, Gcal/h, cal, Gcal, deg, rad
