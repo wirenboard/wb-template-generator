@@ -109,6 +109,31 @@ export default function RegisterTable() {
     name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''),
   []);
 
+  // Карта: id параметра → количество каналов, которые на него ссылаются через condition
+  // Используется для постоянного бейджа «влияет на N каналов» рядом с именем параметра
+  const conditionDependentsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    // Собираем все condition-ссылки
+    for (const reg of registers) {
+      if (!reg.condition) continue;
+      // Извлекаем все имена параметров из condition (может быть несколько через && / ||)
+      // Скобки и isDefined() могут предшествовать имени, поэтому используем lookbehind-free подход
+      const refs = reg.condition.matchAll(/(?:^|[^a-zA-Z0-9_])([a-zA-Z_][a-zA-Z0-9_ ]*?)(?:==|!=|>=|<=|>|<)/g);
+      for (const m of refs) {
+        const refNorm = normalize(m[1].trim());
+        // Ищем параметр по имени, id или original_channel_id
+        const param = registers.find((r) => r.is_parameter && (
+          normalize(r.name) === refNorm || normalize(r.id) === refNorm ||
+          (r.original_channel_id && normalize(r.original_channel_id) === refNorm)
+        ));
+        if (param) {
+          map.set(param.id, (map.get(param.id) ?? 0) + 1);
+        }
+      }
+    }
+    return map;
+  }, [registers, normalize]);
+
   // Вычисляем зависимые регистры для подсветки
   const relatedRegisterIds = useMemo(() => {
     if (!highlightedRegisterId) return new Set<string>();
@@ -118,21 +143,45 @@ export default function RegisterTable() {
     const related = new Set<string>();
     const highlightedNorm = normalize(highlighted.name);
 
+    // Извлекает все имена параметров из condition
+    const extractConditionRefs = (condition: string): string[] => {
+      const refs: string[] = [];
+      for (const m of condition.matchAll(
+        /(?:^|[^a-zA-Z0-9_])([a-zA-Z_][a-zA-Z0-9_]*?)(?:==|!=|>=|<=|>|<)/g
+      )) {
+        refs.push(normalize(m[1].trim()));
+      }
+      return refs;
+    };
+
+    // Ищет регистр по ссылке из condition (может быть id, name или original_channel_id)
+    const matchesRef = (r: typeof registers[0], ref: string) =>
+      normalize(r.name) === ref || normalize(r.id) === ref ||
+      (r.original_channel_id && normalize(r.original_channel_id) === ref);
+    const findByCondRef = (ref: string) =>
+      registers.find((r) => matchesRef(r, ref));
+
+    // Все нормализованные идентификаторы выделенного регистра
+    const highlightedRefs = [
+      highlightedNorm,
+      normalize(highlighted.id),
+      ...(highlighted.original_channel_id ? [normalize(highlighted.original_channel_id)] : []),
+    ];
+
     // 1. Регистры, чьи condition ссылаются на выделенный (зависят от него)
     for (const reg of registers) {
       if (reg.id === highlightedRegisterId || !reg.condition) continue;
-      const m = reg.condition.match(/^(.+?)(==|!=|>=|<=|>|<)/);
-      if (m && normalize(m[1]) === highlightedNorm) {
+      const refs = extractConditionRefs(reg.condition);
+      if (refs.some((r) => highlightedRefs.includes(r))) {
         related.add(reg.id);
       }
     }
 
-    // 2. Регистр, на который ссылается condition выделенного (влияет на него)
+    // 2. Регистры, на которые ссылается condition выделенного (влияют на него)
     if (highlighted.condition) {
-      const m = highlighted.condition.match(/^(.+?)(==|!=|>=|<=|>|<)/);
-      if (m) {
-        const condRef = normalize(m[1]);
-        const source = registers.find((r) => normalize(r.name) === condRef);
+      const refs = extractConditionRefs(highlighted.condition);
+      for (const condRef of refs) {
+        const source = findByCondRef(condRef);
         if (source) related.add(source.id);
       }
     }
@@ -922,6 +971,7 @@ export default function RegisterTable() {
                           isRelated={relatedRegisterIds.has(reg.id)}
                           isSelected={selected.has(reg.id)}
                           isExpanded={expandedRows.has(reg.id)}
+                          conditionDependentsCount={conditionDependentsMap.get(reg.id) ?? 0}
                           editing={editing}
                           groupOptions={groupOptions}
                           draggable={!sortField}
@@ -979,6 +1029,7 @@ export default function RegisterTable() {
                     isRelated={relatedRegisterIds.has(reg.id)}
                     isSelected={selected.has(reg.id)}
                     isExpanded={expandedRows.has(reg.id)}
+                    conditionDependentsCount={conditionDependentsMap.get(reg.id) ?? 0}
                     editing={editing}
                     groupOptions={groupOptions}
                     draggable={!sortField}
@@ -1080,6 +1131,8 @@ interface RegisterRowProps {
   isRelated: boolean;
   isSelected: boolean;
   isExpanded: boolean;
+  /** Количество каналов, зависящих от этого параметра через condition (0 = не используется) */
+  conditionDependentsCount: number;
   editing: EditingCell | null;
   groupOptions: string[];
   draggable?: boolean;
@@ -1112,6 +1165,7 @@ function RegisterRow({
   isRelated,
   isSelected,
   isExpanded,
+  conditionDependentsCount,
   editing,
   groupOptions,
   draggable,
@@ -1321,6 +1375,28 @@ function RegisterRow({
                   />
                 </div>
                 <NameNormalizeButton reg={reg} />
+                {/* Бейдж: параметр влияет на каналы через condition */}
+                {conditionDependentsCount > 0 && (
+                  <span
+                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-medium bg-purple-100 text-purple-700 rounded cursor-help"
+                    title={`Этот параметр используется в condition ${conditionDependentsCount} ${conditionDependentsCount === 1 ? 'канала' : 'каналов'} — влияет на их отображение`}
+                  >
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" />
+                    </svg>
+                    {conditionDependentsCount}
+                  </span>
+                )}
+                {/* Бейдж: канал/параметр имеет condition (зависит от другого параметра) */}
+                {reg.condition && (
+                  <span
+                    className="flex-shrink-0 inline-flex items-center px-1 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded cursor-help"
+                    title={`Условие: ${reg.condition}`}
+                  >
+                    ?=
+                  </span>
+                )}
               </div>
             ) : (
               <EditableCell

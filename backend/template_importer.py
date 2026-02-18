@@ -2,7 +2,7 @@
 
 import json
 import re
-from uuid import uuid4
+import re
 
 import jinja2
 
@@ -116,7 +116,7 @@ def _to_register(
     name = source.get(name_key, "")
     description = source.get("description")
     reg: dict = {
-        "id": str(uuid4()),
+        "id": original_id or re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "unknown",
         "name": name,
         "address": _parse_address(source.get("address", 0)),
         "reg_type": source.get("reg_type", "holding"),
@@ -281,7 +281,7 @@ def import_template(raw: dict) -> dict:
     elif isinstance(raw_params, list):
         # parameters как list (некоторые шаблоны используют массив)
         for param in raw_params:
-            param_id = param.get("id", str(uuid4()))
+            param_id = param.get("id") or re.sub(r"[^a-z0-9]+", "_", param.get("title", param.get("name", "param")).lower()).strip("_")
             registers.append(_parameter_to_register(param_id, param, translations))
 
     return {
