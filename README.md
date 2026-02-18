@@ -184,6 +184,8 @@ event: error     ->  {message, request_id}
 # Копируйте .env и настройте для production
 cp env.example .env
 
+# В файле .env важно добавить ваш API ключ из личного кабинета OpenAI
+
 # Запуск через prod-конфигурацию (bridge networking, restart: always)
 docker compose -f docker-compose.prod.yml up --build -d
 ```
