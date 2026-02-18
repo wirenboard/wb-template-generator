@@ -567,7 +567,12 @@ async def translate(request: TranslateRequest):
     if not is_custom_llm and settings.LLM_PROXY:
         import httpx
         http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
-    client = AsyncOpenAI(base_url=effective_url, api_key=effective_key, http_client=http_client)
+    # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
+    client = AsyncOpenAI(
+        base_url=effective_url,
+        api_key=effective_key or "no-key-provided",
+        http_client=http_client,
+    )
 
     try:
         # Выбираем параметр токенов в зависимости от настройки

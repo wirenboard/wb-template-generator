@@ -390,7 +390,13 @@ async def analyze_document(
         if not is_custom_llm and settings.LLM_PROXY:
             import httpx
             http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
-        client = AsyncOpenAI(base_url=effective_url, api_key=effective_key, http_client=http_client, max_retries=2)
+        # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
+        client = AsyncOpenAI(
+            base_url=effective_url,
+            api_key=effective_key or "no-key-provided",
+            http_client=http_client,
+            max_retries=2,
+        )
 
         batch_results: list[tuple[DeviceInfo, list[Register]]] = []
         last_parse_error: str | None = None  # фрагмент ответа LLM при неудаче парсинга
