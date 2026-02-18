@@ -122,7 +122,9 @@ or control it regularly?" → Channel. "Is this set once during installation?" �
 This is the most common type. Use with appropriate `units`.
    - `"switch"` — on/off toggle (boolean). Use for ANY readable on/off register — \
 including coil, discrete, and holding registers with read or readwrite access. \
-ONLY when there are no named states. If the register has named states like "0=Auto, 1=Manual", \
+**Coil and discrete registers MUST ALWAYS use "switch"** — never "value", even if \
+the document labels states (e.g. "0=No Error, 1=Error"). Do NOT add enum to switch channels. \
+For holding/input registers with named states like "0=Auto, 1=Manual", \
 use `"value"` with enum instead.
    - `"wo-switch"` — write-only switch. Use ONLY when the register is strictly write-only \
 (access="write") and CANNOT be read back. If a register can be both read AND written (access="readwrite"), \
@@ -150,8 +152,9 @@ split each bit into a **separate register** using bitwise address format `"regis
    - Example: Status register at address 0 with Bit 0 = Error, Bit 1 = Running → \
 create two registers with addresses `"0:0:1"` and `"0:1:1"`.
    - Each bit register should have a clear name (e.g. "Error Flag", "Running Status").
-   - Use `channel_type: "value"` with `enum: [0, 1]` and descriptive `enum_titles` \
-(e.g. ["No Error", "Error"]).
+   - For bit-fields extracted from holding/input registers: use `channel_type: "value"` \
+with `enum: [0, 1]` and descriptive `enum_titles` (e.g. ["No Error", "Error"]).
+   - For discrete registers: use `channel_type: "switch"` WITHOUT enum (discrete is always switch).
    - Do NOT create a single register for the whole bitmask — always split into individual bits.
    - `width` is usually 1 (single bit). Use wider width only for multi-bit fields \
 (e.g. "Bits 2-3: Mode" → `"0:2:2"`).
@@ -175,7 +178,9 @@ create two registers with addresses `"0:0:1"` and `"0:1:1"`.
 
    **Rules:**
    - For **channels** with enum: set `channel_type: "value"` (NOT "switch"). \
-The enum provides named labels in the UI instead of raw numbers.
+The enum provides named labels in the UI instead of raw numbers. \
+**Exception**: coil and discrete registers ALWAYS use "switch" without enum — \
+never add enum to coil/discrete channels.
    - For **parameters** with enum: creates a dropdown selector in the setup UI.
    - Set `default_value` for parameters with enums (the factory default from the document).
 
@@ -326,8 +331,8 @@ Important:
 - For u32/s32 registers (2 words), address is the first word address.
 - ALWAYS add `enum`/`enum_titles` when the document lists named values (e.g. "0=Off, 1=On"). \
 Use `enum_entries` with `translations` if you want to include enum translations.
-- For switch channels without named states: format "u16", scale 1.
-- For coil and discrete registers: use channel_type "switch" (not "value").
+- For switch channels: format "u16", scale 1, NO enum (switch never has enum).
+- For coil and discrete registers: ALWAYS use channel_type "switch" (NEVER "value"), and NEVER add enum.
 - NEVER use "wo-switch" for registers that can be read (access "read" or "readwrite"). \
 "wo-switch" is ONLY for write-only registers (access "write"). For readable on/off registers, always use "switch".
 - Pay attention to scale factors: "×0.1", "/100", "LSB=0.01" → specific scale values.
@@ -383,11 +388,11 @@ def _build_translation_languages_text(languages: list[str] | None) -> str:
         languages = ["ru"]
 
     # Убираем en — базовый язык, всегда имена на английском
-    langs = [l for l in languages if l != "en"]
+    langs = [lang for lang in languages if lang != "en"]
     if not langs:
         langs = ["ru"]
 
-    lang_list = ", ".join(f'"{l}"' for l in langs)
+    lang_list = ", ".join(f'"{lang}"' for lang in langs)
     if len(langs) == 1:
         return f"   - Always include {langs[0]} translations ({lang_list})"
     return f"   - Always include translations for these languages: {lang_list}"

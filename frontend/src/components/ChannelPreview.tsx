@@ -74,7 +74,7 @@ export default function ChannelPreview({ channel, registerId, displayName, condi
 
   /** Рендер правой части — контрол */
   function renderControl(): React.ReactNode {
-    // switch / wo-switch
+    // switch / wo-switch — всегда toggle
     if (isSwitch) {
       if (isReadonly) {
         return (
