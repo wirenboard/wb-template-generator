@@ -10,10 +10,10 @@ class Settings(BaseSettings):
 
     LLM_API_URL: str = ""  # если пусто — LLM отключён, используется mock
     LLM_API_KEY: str = ""  # необязательное — для локальных LLM ключ не нужен
-    LLM_MODEL: str = "gpt-5-mini"
-    LLM_MAX_TOKENS: int = 16384
+    LLM_MODEL: str = "gpt-4o"
+    LLM_MAX_TOKENS: int = 0  # 0 = не ограничивать (модель использует свой максимум)
     LLM_LEGACY_MAX_TOKENS: bool = False  # True = max_tokens (старые API), False = max_completion_tokens (OpenAI 2024+)
-    LLM_TEMPERATURE: float | None = None  # None = не передавать (модель использует свой дефолт), 0.0-2.0
+    LLM_TEMPERATURE: float | None = 0  # 0 = детерминированный вывод (рекомендуется), None = дефолт модели
     LLM_PROXY: str = ""  # HTTP/SOCKS5 прокси для запросов к LLM API
     LLM_TIMEOUT: int = 600  # Жёсткий таймаут HTTP-запроса к LLM API (сек)
     LLM_SOFT_TIMEOUT: int = 180  # Мягкий таймаут — предложить продолжить/отменить (сек)
