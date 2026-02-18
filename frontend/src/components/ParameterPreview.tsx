@@ -66,34 +66,8 @@ export default function ParameterPreview({ param, paramKey, registerId, displayN
         </select>
       );
     }
-  } else if (min != null && max != null) {
-    if (isReadonly) {
-      // RO: текст
-      control = (
-        <span className="text-xs text-gray-600 font-mono bg-gray-100 rounded px-2 py-0.5">
-          {defaultValue ?? min} ({min}...{max})
-        </span>
-      );
-    } else {
-      // RW: range slider
-      const val = defaultValue != null ? Number(defaultValue) : min;
-      control = (
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <span className="text-[10px] text-gray-400">{min}</span>
-          <input
-            type="range"
-            className="w-20 h-1 accent-blue-500"
-            min={min}
-            max={max}
-            defaultValue={val}
-            readOnly
-          />
-          <span className="text-[10px] text-gray-400">{max}</span>
-          <span className="text-xs text-gray-600 font-mono w-8 text-right">{val}</span>
-        </div>
-      );
-    }
-  } else if (min != null || max != null) {
+  } else {
+    // Числовое поле (value) — с min/max если заданы
     if (isReadonly) {
       control = (
         <span className="text-xs text-gray-600 font-mono bg-gray-100 rounded px-2 py-0.5">
@@ -108,23 +82,6 @@ export default function ParameterPreview({ param, paramKey, registerId, displayN
           min={min}
           max={max}
           defaultValue={defaultValue != null ? Number(defaultValue) : min ?? 0}
-          onClick={(e) => e.stopPropagation()}
-        />
-      );
-    }
-  } else {
-    if (isReadonly) {
-      control = (
-        <span className="text-xs text-gray-600 font-mono bg-gray-100 rounded px-2 py-0.5">
-          {defaultValue != null ? String(defaultValue) : '--'}
-        </span>
-      );
-    } else {
-      control = (
-        <input
-          type="text"
-          className="border border-gray-300 rounded px-2 py-0.5 text-xs w-24 bg-white"
-          placeholder={defaultValue != null ? String(defaultValue) : '---'}
           onClick={(e) => e.stopPropagation()}
         />
       );

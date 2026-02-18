@@ -21,12 +21,12 @@ export const FORMAT_OPTIONS: { value: string; label: string; description: string
 
 /** Допустимые типы каналов */
 export const CHANNEL_TYPES = [
-  'value', 'switch', 'wo-switch', 'pushbutton', 'range', 'alarm', 'rgb', 'text',
+  'value', 'switch', 'wo-switch', 'pushbutton', 'range', 'rgb', 'text',
 ] as const;
 
 /** Допустимые типы каналов по типу регистра */
-const ALL_CHANNEL_TYPES = ['value', 'switch', 'wo-switch', 'pushbutton', 'range', 'alarm', 'rgb', 'text'] as const;
-const ALL_EXCEPT_WO_SWITCH = ['value', 'switch', 'pushbutton', 'range', 'alarm', 'rgb', 'text'] as const;
+const ALL_CHANNEL_TYPES = ['value', 'switch', 'wo-switch', 'pushbutton', 'range', 'rgb', 'text'] as const;
+const ALL_EXCEPT_WO_SWITCH = ['value', 'switch', 'pushbutton', 'range', 'rgb', 'text'] as const;
 
 const CHANNEL_TYPES_BY_REG_TYPE: Record<string, readonly string[]> = {
   coil: ['switch', 'wo-switch', 'pushbutton'],

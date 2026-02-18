@@ -103,7 +103,7 @@ null if not specified or single-word.
    - Measurements: temperature, voltage, current, power, humidity, counters, energy
    - Status indicators: device state, operating mode readback, error flags
    - Control outputs: relay on/off, setpoint, dimmer level
-   - Alarms: fault flags, over-limit warnings
+   - Alarms/errors: fault flags, over-limit warnings (use switch or value+enum)
    - In short: anything the user READS regularly or CONTROLS during normal operation
 
    **Parameters** (`is_parameter: true`) — one-time setup during device commissioning:
@@ -120,10 +120,9 @@ or control it regularly?" → Channel. "Is this set once during installation?" �
 5. **Assign channel_type** (for channels, i.e. `is_parameter: false`) — ONLY these values:
    - `"value"` — numeric measurement or status value (temperature, voltage, counter...). \
 This is the most common type. Use with appropriate `units`.
-   - `"switch"` — simple on/off toggle (read-write boolean) ONLY when there are no named states. \
-If the register has named states like "0=Auto, 1=Manual", use `"value"` with enum instead.
-   - `"alarm"` — simple alarm flag (read-only boolean) ONLY when it's a plain 0/1 flag without named states. \
-If the register has named states like "0=Normal, 1=Fault, 2=Warning", use `"value"` with enum.
+   - `"switch"` — on/off toggle (boolean). Use for coil and discrete registers (relay control, status flags). \
+ONLY when there are no named states. If the register has named states like "0=Auto, 1=Manual", \
+use `"value"` with enum instead.
    - `"pushbutton"` — momentary action trigger (write 1 to activate, auto-resets)
    - `"range"` — bounded numeric control with min/max (must set `min` and `max` fields)
    - `"text"` — string value (must set `string_data_size` = number of registers for string)
@@ -171,7 +170,7 @@ create two registers with addresses `"0:0:1"` and `"0:1:1"`.
    - Any register where the document lists numeric values with descriptions
 
    **Rules:**
-   - For **channels** with enum: set `channel_type: "value"` (NOT "switch" or "alarm"). \
+   - For **channels** with enum: set `channel_type: "value"` (NOT "switch"). \
 The enum provides named labels in the UI instead of raw numbers.
    - For **parameters** with enum: creates a dropdown selector in the setup UI.
    - Set `default_value` for parameters with enums (the factory default from the document).
@@ -323,7 +322,8 @@ Important:
 - For u32/s32 registers (2 words), address is the first word address.
 - ALWAYS add `enum`/`enum_titles` when the document lists named values (e.g. "0=Off, 1=On"). \
 Use `enum_entries` with `translations` if you want to include enum translations.
-- For switch/alarm channels without named states: format "u16", scale 1.
+- For switch channels without named states: format "u16", scale 1.
+- For coil and discrete registers: use channel_type "switch" (not "value").
 - Pay attention to scale factors: "×0.1", "/100", "LSB=0.01" → specific scale values.
 - If the document describes bits within a status/control register, split them into separate entries \
 with bitwise address format "reg:bit:width".
