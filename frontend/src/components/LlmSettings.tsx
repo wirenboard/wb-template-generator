@@ -72,7 +72,7 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
             list="llm-model-list"
             value={llmConfig.model ?? ''}
             onChange={(e) => setLlmConfig({ model: e.target.value || undefined })}
-            placeholder="gpt-5-mini"
+            placeholder="gpt-4o"
             className={inputClass}
           />
           <datalist id="llm-model-list">

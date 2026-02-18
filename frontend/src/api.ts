@@ -113,34 +113,39 @@ export async function analyzeFiles(
     }
     const decoder = new TextDecoder();
     let buffer = '';
+    let eventType = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      // SSE-события разделяются двойным \n (\n\n)
+      // Разбиваем по \n\n чтобы не терять event+data связку
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
 
-      let eventType = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          eventType = line.slice(7).trim();
-        } else if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            // Извлекаем request_id из любого SSE-события
-            if (data.request_id && callbacks.onRequestId) {
-              callbacks.onRequestId(data.request_id);
+      for (const event of events) {
+        const lines = event.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              // Извлекаем request_id из любого SSE-события
+              if (data.request_id && callbacks.onRequestId) {
+                callbacks.onRequestId(data.request_id);
+              }
+              if (eventType === 'progress') callbacks.onProgress(data);
+              else if (eventType === 'result') callbacks.onResult(data);
+              else if (eventType === 'error') callbacks.onError(data.message, data.request_id);
+              else if (eventType === 'done') callbacks.onDone(data.request_id);
+            } catch (e) {
+              console.warn('SSE parse error:', e, 'line length:', line.length);
             }
-            if (eventType === 'progress') callbacks.onProgress(data);
-            else if (eventType === 'result') callbacks.onResult(data);
-            else if (eventType === 'error') callbacks.onError(data.message, data.request_id);
-            else if (eventType === 'done') callbacks.onDone(data.request_id);
-          } catch {
-            // Пропускаем битые SSE-события
+            eventType = '';
           }
-          eventType = '';
         }
       }
     }

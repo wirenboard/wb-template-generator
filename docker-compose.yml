@@ -6,8 +6,8 @@ services:
     environment:
       - LLM_API_URL=${LLM_API_URL:-}
       - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_MODEL=${LLM_MODEL:-gpt-5-mini}
-      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-16384}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-0}
       - LLM_LEGACY_MAX_TOKENS=${LLM_LEGACY_MAX_TOKENS:-false}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-600}
       - LLM_SOFT_TIMEOUT=${LLM_SOFT_TIMEOUT:-180}

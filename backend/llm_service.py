@@ -14,6 +14,7 @@ from PIL import Image
 
 from config import Settings
 from file_converter import (
+    excel_to_text,
     image_to_base64,
     is_excel_file,
     is_image_file,
@@ -173,9 +174,11 @@ async def _call_llm(
     kwargs: dict = {
         "model": model,
         "messages": messages,
-        primary_key: max_tokens,
         "timeout": timeout,
     }
+    # max_tokens=0 означает «не ограничивать» — не передаём параметр
+    if max_tokens and max_tokens > 0:
+        kwargs[primary_key] = max_tokens
     if temperature is not None:
         kwargs["temperature"] = temperature
 
@@ -183,14 +186,21 @@ async def _call_llm(
     for attempt in range(3):
         try:
             response = await client.chat.completions.create(**kwargs)
-            # Логируем расход токенов
+            # Логируем расход токенов и finish_reason
             usage = response.usage
+            finish_reason = response.choices[0].finish_reason if response.choices else None
             if usage:
                 logger.info(
-                    "Токены: prompt=%d, completion=%d, total=%d",
+                    "Токены: prompt=%d, completion=%d, total=%d, finish_reason=%s",
                     usage.prompt_tokens or 0,
                     usage.completion_tokens or 0,
                     usage.total_tokens or 0,
+                    finish_reason,
+                )
+            if finish_reason == "length":
+                logger.warning(
+                    "Ответ LLM обрезан по лимиту токенов (finish_reason=length). "
+                    "Увеличьте LLM_MAX_TOKENS или уберите ограничение (0)."
                 )
             text = response.choices[0].message.content or ""
             return text, usage
@@ -210,7 +220,7 @@ async def _call_llm(
                 primary_key = fallback_key  # Запоминаем, чтобы не циклить
                 fixed = True
 
-            # Фолбек temperature: некоторые модели (o1, gpt-5-mini) не поддерживают
+            # Фолбек temperature: некоторые модели (o1, gpt-4o) не поддерживают
             if "temperature" in err_str and "temperature" in kwargs:
                 logger.warning(
                     "Модель %s не поддерживает temperature=0.1, убираем параметр.",
@@ -324,7 +334,8 @@ async def analyze_document(
         )
 
         all_images: list[Image.Image] = []
-        direct_files: list[tuple[str, bytes]] = []  # PDF/Excel — отправляем файлом
+        direct_files: list[tuple[str, bytes]] = []  # PDF — отправляем файлом
+        text_parts: list[str] = []  # Excel — конвертируем в текст
 
         for idx, (filename, content_bytes) in enumerate(files):
             if is_pdf_file(filename):
@@ -339,15 +350,15 @@ async def analyze_document(
                 direct_files.append((filename, content_bytes))
 
             elif is_excel_file(filename):
-                # Excel — отправляем файлом напрямую (без предварительной конвертации)
+                # Excel — конвертируем в текст (LLM API не поддерживает Excel как файл)
                 yield sse_progress(
-                    "uploading",
-                    f"Загрузка: {filename}...",
+                    "converting",
+                    f"Конвертация Excel: {filename}...",
                     current=idx + 1,
                     total=len(files),
                     request_id=request_id,
                 )
-                direct_files.append((filename, content_bytes))
+                text_parts.append(f"--- {filename} ---\n{excel_to_text(content_bytes)}")
 
             elif is_image_file(filename):
                 # Изображение -> PIL.Image
@@ -368,16 +379,23 @@ async def analyze_document(
         if settings.LLM_PROXY:
             import httpx
             http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
-        client = AsyncOpenAI(base_url=effective_url, api_key=effective_key, http_client=http_client)
+        client = AsyncOpenAI(base_url=effective_url, api_key=effective_key, http_client=http_client, max_retries=2)
 
         batch_results: list[tuple[DeviceInfo, list[Register]]] = []
         last_parse_error: str | None = None  # фрагмент ответа LLM при неудаче парсинга
 
         # --- Этап 3: отправка всех файлов в LLM одним запросом ---
-        # Формируем единый content: файлы (PDF/Excel) + изображения (PNG/JPG)
+        # Формируем единый content: текст (Excel) + файлы (PDF) + изображения (PNG/JPG)
         llm_content: list[dict] = []
 
-        # Файлы как file-content (PDF, Excel)
+        # Excel-данные как текст
+        if text_parts:
+            llm_content.append({
+                "type": "text",
+                "text": "\n\n".join(text_parts),
+            })
+
+        # PDF как file-content
         for filename, file_bytes in direct_files:
             mime = _get_file_mime(filename)
             b64_data = base64.b64encode(file_bytes).decode("ascii")
@@ -554,8 +572,15 @@ async def _analyze_single_batch(
 
     # Проверяем пустой ответ
     if not raw_response or not raw_response.strip():
-        reason = "LLM вернул пустой ответ"
-        logger.warning("Пустой ответ от LLM, повторная попытка")
+        completion_tokens = _usage.completion_tokens if _usage else 0
+        if completion_tokens and completion_tokens > 1000:
+            reason = (
+                f"LLM потратил {completion_tokens} токенов на reasoning, но не выдал текст. "
+                f"Уберите ограничение LLM_MAX_TOKENS (установите 0)."
+            )
+        else:
+            reason = "LLM вернул пустой ответ"
+        logger.warning("Пустой ответ от LLM (completion_tokens=%d), повторная попытка", completion_tokens)
     else:
         try:
             raw_data = _extract_json_from_response(raw_response)
