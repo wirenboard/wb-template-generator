@@ -1,0 +1,32 @@
+services:
+  backend:
+    build: ./backend
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000"]
+    env_file: .env
+    environment:
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${PORT:-80}:80"
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+
+networks:
+  app:
+    driver: bridge
