@@ -30,7 +30,7 @@ const ALL_EXCEPT_WO_SWITCH = ['value', 'switch', 'pushbutton', 'range', 'rgb', '
 
 const CHANNEL_TYPES_BY_REG_TYPE: Record<string, readonly string[]> = {
   coil: ['switch', 'wo-switch', 'pushbutton'],
-  discrete: ['switch'],
+  discrete: ['switch', 'value'],
   holding: ALL_CHANNEL_TYPES,
   holding_single: ALL_CHANNEL_TYPES,
   holding_multi: ALL_CHANNEL_TYPES,

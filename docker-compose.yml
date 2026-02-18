@@ -18,6 +18,7 @@ services:
       - QUEUE_ACTIVATION_DELAY=${QUEUE_ACTIVATION_DELAY:-1.0}
       - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-10}
       - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9000/api/health"]

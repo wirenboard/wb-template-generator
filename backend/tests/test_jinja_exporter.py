@@ -7,14 +7,13 @@ import jinja2
 import pytest
 
 from jinja_exporter import (
-    build_jinja_template,
     _detect_channel_patterns,
     _detect_group_patterns,
     _detect_param_patterns,
-    _detect_translation_patterns,
     _detect_string_channel_patterns,
+    _detect_translation_patterns,
+    build_jinja_template,
 )
-
 
 # Путь к директории с фикстурами
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -1296,7 +1295,7 @@ class TestMCM8EndToEnd:
         )
 
         assert set(result_params.keys()) == set(original_params.keys()), (
-            f"Ключи параметров не совпадают"
+            "Ключи параметров не совпадают"
         )
 
 

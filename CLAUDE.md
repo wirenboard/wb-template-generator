@@ -237,10 +237,10 @@ Condition парсится regex: `(?:^|[^a-zA-Z0-9_])([a-zA-Z_][a-zA-Z0-9_]*?)(
 ```bash
 LLM_API_URL=           # URL OpenAI-совместимого API
 LLM_API_KEY=           # API-ключ (необязательно для локальных LLM)
-LLM_MODEL=gpt-5-mini   # Модель
+LLM_MODEL=gpt-4o       # Модель
 LLM_MAX_TOKENS=16384
 LLM_LEGACY_MAX_TOKENS=false  # true = max_tokens (старые API), false = max_completion_tokens
-LLM_TEMPERATURE=       # пусто = дефолт модели, 0.0-2.0
+LLM_TEMPERATURE=0      # 0 = детерминированный вывод, пусто/None = дефолт модели
 LLM_PROXY=             # HTTP/SOCKS5 прокси для запросов к LLM API
 LLM_TIMEOUT=600        # Жёсткий таймаут HTTP-запроса к LLM (сек)
 LLM_SOFT_TIMEOUT=180   # Мягкий таймаут — предложить продолжить/отменить (сек)

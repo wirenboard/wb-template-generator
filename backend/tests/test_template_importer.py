@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from template_importer import detect_and_import, import_jinja_template, import_template
+from template_importer import detect_and_import, import_template
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -22,7 +22,7 @@ from file_converter import (
 )
 from models import AnalyzeResponse, DeviceInfo, Register
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
-from sse import sse_done, sse_error, sse_keepalive, sse_progress, sse_result
+from sse import sse_done, sse_error, sse_progress, sse_result
 
 # Интервал SSE keepalive (сек) — поддерживает соединение через nginx
 _KEEPALIVE_INTERVAL = 15
@@ -185,6 +185,7 @@ async def _call_llm(
     # До 3 попыток: каждая убирает/заменяет один неподдерживаемый параметр
     for attempt in range(3):
         try:
+            llm_start = time.monotonic()
             response = await client.chat.completions.create(**kwargs)
             # Логируем расход токенов и finish_reason
             usage = response.usage
@@ -202,6 +203,8 @@ async def _call_llm(
                     "Ответ LLM обрезан по лимиту токенов (finish_reason=length). "
                     "Увеличьте LLM_MAX_TOKENS или уберите ограничение (0)."
                 )
+            llm_duration = time.monotonic() - llm_start
+            logger.info("LLM-запрос: %.1f сек", llm_duration)
             text = response.choices[0].message.content or ""
             return text, usage
         except Exception as e:
@@ -337,6 +340,7 @@ async def analyze_document(
         direct_files: list[tuple[str, bytes]] = []  # PDF — отправляем файлом
         text_parts: list[str] = []  # Excel — конвертируем в текст
 
+        convert_start = time.monotonic()
         for idx, (filename, content_bytes) in enumerate(files):
             if is_pdf_file(filename):
                 # PDF — отправляем файлом напрямую
@@ -367,6 +371,9 @@ async def analyze_document(
 
             else:
                 logger.warning("Неподдерживаемый формат файла: %s", filename)
+
+        convert_duration = time.monotonic() - convert_start
+        logger.info("[%s] Конвертация файлов: %.1f сек", request_id, convert_duration)
 
         # --- Этап 2: подготовка LLM-клиента ---
         if custom_system_prompt:

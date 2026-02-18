@@ -82,7 +82,7 @@ def _build_channel(reg: Register, group_id: str, channel_id: str) -> dict:
         "group": group_id,
     }
 
-    # type: не выводим дефолтное значение "value"
+    # channel type: не выводим дефолтное значение "value"
     if reg.channel_type and reg.channel_type != "value":
         ch["type"] = reg.channel_type
 
@@ -140,11 +140,13 @@ def _build_channel(reg: Register, group_id: str, channel_id: str) -> dict:
     if reg.off_value is not None:
         ch["off_value"] = reg.off_value
 
-    enum_values, enum_titles = _get_enum_data(reg)
-    if enum_values is not None:
-        ch["enum"] = enum_values
-        if enum_titles is not None:
-            ch["enum_titles"] = enum_titles
+    # enum: не выводим для switch/wo-switch (switch — всегда toggle без enum)
+    if reg.channel_type not in ("switch", "wo-switch"):
+        enum_values, enum_titles = _get_enum_data(reg)
+        if enum_values is not None:
+            ch["enum"] = enum_values
+            if enum_titles is not None:
+                ch["enum_titles"] = enum_titles
 
     if reg.channel_type == "range":
         if reg.min is not None:
@@ -328,25 +330,25 @@ def _build_translations(
     # Каналы и параметры
     for reg in registers:
         # EN: добавляем имя только если есть EN override (key != value)
-        en_tr = reg.translations.get("en") if reg.translations else None
-        if en_tr and en_tr.name:
-            result["en"][reg.name] = en_tr.name
+        reg_en_tr = reg.translations.get("en") if reg.translations else None
+        if reg_en_tr and reg_en_tr.name:
+            result["en"][reg.name] = reg_en_tr.name
 
         # Другие языки
         for lang in all_langs:
-            tr = reg.translations.get(lang) if reg.translations else None
-            if tr and tr.name:
-                _set_translation(lang, reg.name, tr.name)
+            reg_tr = reg.translations.get(lang) if reg.translations else None
+            if reg_tr and reg_tr.name:
+                _set_translation(lang, reg.name, reg_tr.name)
 
         # Description (только для параметров)
         if reg.description and reg.is_parameter:
             # EN: добавляем description ключ → EN текст (если есть)
-            if en_tr and en_tr.description:
-                result["en"][reg.description] = en_tr.description
+            if reg_en_tr and reg_en_tr.description:
+                result["en"][reg.description] = reg_en_tr.description
             for lang in all_langs:
-                tr = reg.translations.get(lang) if reg.translations else None
-                if tr and tr.description:
-                    _set_translation(lang, reg.description, tr.description)
+                reg_tr = reg.translations.get(lang) if reg.translations else None
+                if reg_tr and reg_tr.description:
+                    _set_translation(lang, reg.description, reg_tr.description)
 
         # Enum titles
         if reg.enum_entries:
