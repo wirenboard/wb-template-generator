@@ -425,7 +425,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
         const updatedRegisters = s.registers.map((reg) => {
           let changed = false;
           let translations = { ...(reg.translations ?? {}) };
-          let langTr = { ...(translations[targetLang] ?? {}) };
+          const langTr = { ...(translations[targetLang] ?? {}) };
 
           // Имя
           const nameKey = `reg_name_${reg.id}`;
@@ -468,8 +468,8 @@ export const useStore = create<TemplateStore>((set, get) => ({
 
         const updatedGroups = s.groups.map((group) => {
           let changed = false;
-          let translations = { ...(group.translations ?? {}) };
-          let langTr = { ...(translations[targetLang] ?? {}) };
+          const translations = { ...(group.translations ?? {}) };
+          const langTr = { ...(translations[targetLang] ?? {}) };
 
           const titleKey = `group_title_${group.id}`;
           if (result[titleKey] && !langTr.title) {
@@ -577,7 +577,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
           if (!hasNewName && !hasNewDesc && !reg.enum_entries) return reg;
 
           let translations = { ...(reg.translations ?? {}) };
-          let ruTr = { ...(translations.ru ?? {}) };
+          const ruTr = { ...(translations.ru ?? {}) };
           let newName = reg.name;
           let newDescription = reg.description;
 
@@ -625,7 +625,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
           if (!hasNewTitle && !hasNewDesc) return group;
 
           let translations = { ...(group.translations ?? {}) };
-          let ruTr = { ...(translations.ru ?? {}) };
+          const ruTr = { ...(translations.ru ?? {}) };
           let newTitle = group.title;
           let newDescription = group.description;
 

@@ -103,7 +103,6 @@ export default function EnumEditor({ entries, onChange, availableLanguages = [] 
 }
 
 function EnumRow({
-  index: _index,
   entry,
   availableLanguages,
   isExpanded,
