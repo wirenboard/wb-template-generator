@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS: int = 10  # Максимум запросов за окно
     RATE_LIMIT_WINDOW: int = 60    # Окно в секундах
 
+    # Логирование
+    LOG_FORMAT: str = "text"  # text или json
+
+    # CORS
+    CORS_ORIGINS: str = "*"  # Через запятую: "http://localhost:9080,https://app.example.com"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
