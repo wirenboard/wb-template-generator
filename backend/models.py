@@ -176,6 +176,9 @@ class TranslateRequest(BaseModel):
     llm_api_url: str | None = None
     llm_api_key: str | None = None
     llm_model: str | None = None
+    llm_temperature: float | None = None
+    llm_timeout: int | None = None
+    llm_legacy_max_tokens: bool | None = None
 
 
 class TranslateResponse(BaseModel):

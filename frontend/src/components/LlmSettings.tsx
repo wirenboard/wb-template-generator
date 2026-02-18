@@ -62,6 +62,9 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
           placeholder="sk-..."
           className={inputClass}
         />
+        <p className="text-[10px] text-gray-400 mt-0.5">
+          Ключ хранится в localStorage браузера. При запросах к LLM передаётся через бэкенд только на указанный выше URL провайдера.
+        </p>
       </div>
 
       <div>

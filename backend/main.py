@@ -255,8 +255,14 @@ async def list_models(
 ):
     """Получение списка доступных моделей от LLM API провайдера."""
     settings = get_settings()
-    effective_url = llm_api_url or settings.LLM_API_URL
-    effective_key = llm_api_key or settings.LLM_API_KEY
+
+    # Изоляция ключей: если указан пользовательский URL — НЕ фолбечим на серверный ключ
+    if llm_api_url:
+        effective_url = llm_api_url
+        effective_key = llm_api_key  # может быть None — это нормально
+    else:
+        effective_url = settings.LLM_API_URL
+        effective_key = settings.LLM_API_KEY
 
     if not effective_url:
         return JSONResponse(
@@ -274,7 +280,7 @@ async def list_models(
     try:
         import httpx
         http_kwargs: dict = {"timeout": 15.0}
-        if settings.LLM_PROXY:
+        if not llm_api_url and settings.LLM_PROXY:
             http_kwargs["proxy"] = settings.LLM_PROXY
         headers = {}
         if effective_key:
@@ -521,9 +527,26 @@ async def translate(request: TranslateRequest):
     settings = get_settings()
     request_id = get_request_id()
 
-    effective_url = request.llm_api_url or settings.LLM_API_URL
-    effective_key = request.llm_api_key or settings.LLM_API_KEY
-    effective_model = request.llm_model or settings.LLM_MODEL
+    is_custom_llm = bool(request.llm_api_url)
+
+    # Изоляция: при пользовательском URL — только пользовательские настройки
+    if is_custom_llm:
+        effective_url = request.llm_api_url
+        effective_key = request.llm_api_key
+        effective_model = request.llm_model or settings.LLM_MODEL
+        effective_legacy = (
+            request.llm_legacy_max_tokens if request.llm_legacy_max_tokens is not None
+            else settings.LLM_LEGACY_MAX_TOKENS
+        )
+        effective_temperature = request.llm_temperature  # None = дефолт модели
+        effective_timeout = request.llm_timeout or settings.LLM_TIMEOUT
+    else:
+        effective_url = settings.LLM_API_URL
+        effective_key = settings.LLM_API_KEY
+        effective_model = settings.LLM_MODEL
+        effective_legacy = settings.LLM_LEGACY_MAX_TOKENS
+        effective_temperature = settings.LLM_TEMPERATURE
+        effective_timeout = settings.LLM_TIMEOUT
 
     if not effective_url:
         return JSONResponse(
@@ -541,15 +564,20 @@ async def translate(request: TranslateRequest):
     strings_json = json.dumps(request.strings, ensure_ascii=False)
 
     http_client = None
-    if settings.LLM_PROXY:
+    if not is_custom_llm and settings.LLM_PROXY:
         import httpx
         http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
-    client = AsyncOpenAI(base_url=effective_url, api_key=effective_key, http_client=http_client)
+    # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
+    client = AsyncOpenAI(
+        base_url=effective_url,
+        api_key=effective_key or "no-key-provided",
+        http_client=http_client,
+    )
 
     try:
         # Выбираем параметр токенов в зависимости от настройки
-        token_key = "max_tokens" if settings.LLM_LEGACY_MAX_TOKENS else "max_completion_tokens"
-        fallback_key = "max_completion_tokens" if settings.LLM_LEGACY_MAX_TOKENS else "max_tokens"
+        token_key = "max_tokens" if effective_legacy else "max_completion_tokens"
+        fallback_key = "max_completion_tokens" if effective_legacy else "max_tokens"
         translate_kwargs: dict = {
             "model": effective_model,
             "messages": [
@@ -557,10 +585,10 @@ async def translate(request: TranslateRequest):
                 {"role": "user", "content": strings_json},
             ],
             token_key: 4096,
-            "timeout": settings.LLM_TIMEOUT,
+            "timeout": effective_timeout,
         }
-        if settings.LLM_TEMPERATURE is not None:
-            translate_kwargs["temperature"] = settings.LLM_TEMPERATURE
+        if effective_temperature is not None:
+            translate_kwargs["temperature"] = effective_temperature
         # До 3 попыток с автоудалением неподдерживаемых параметров
         for _attempt in range(3):
             try:

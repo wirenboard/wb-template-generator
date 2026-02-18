@@ -317,9 +317,13 @@ async def analyze_document(
         if not is_custom_llm:
             custom_system_prompt = None
 
-        # Параметры подключения
-        effective_url = api_url or settings.LLM_API_URL
-        effective_key = api_key or settings.LLM_API_KEY
+        # Изоляция ключей: при пользовательском LLM НЕ фолбечим на серверный ключ
+        if is_custom_llm:
+            effective_url = api_url  # всегда truthy (is_custom_llm = bool(api_url))
+            effective_key = api_key  # может быть None — не подставляем серверный
+        else:
+            effective_url = settings.LLM_API_URL
+            effective_key = settings.LLM_API_KEY
         effective_model = model or settings.LLM_MODEL
         effective_max_tokens = max_tokens or settings.LLM_MAX_TOKENS
         effective_timeout = timeout or settings.LLM_TIMEOUT
@@ -383,10 +387,16 @@ async def analyze_document(
         else:
             system_prompt = get_analyze_prompt(template_type, translation_languages)
         http_client = None
-        if settings.LLM_PROXY:
+        if not is_custom_llm and settings.LLM_PROXY:
             import httpx
             http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
-        client = AsyncOpenAI(base_url=effective_url, api_key=effective_key, http_client=http_client, max_retries=2)
+        # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
+        client = AsyncOpenAI(
+            base_url=effective_url,
+            api_key=effective_key or "no-key-provided",
+            http_client=http_client,
+            max_retries=2,
+        )
 
         batch_results: list[tuple[DeviceInfo, list[Register]]] = []
         last_parse_error: str | None = None  # фрагмент ответа LLM при неудаче парсинга
