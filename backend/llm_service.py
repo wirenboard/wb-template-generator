@@ -30,6 +30,15 @@ _KEEPALIVE_INTERVAL = 15
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_error(error: Exception, settings: Settings) -> str:
+    """Убирает API-ключ из текста ошибки."""
+    msg = str(error)
+    key = settings.LLM_API_KEY
+    if key and key in msg:
+        msg = msg.replace(key, "***")
+    return msg
+
+
 class LLMApiError(Exception):
     """Ошибка при обращении к LLM API (сеть, авторизация, модель не найдена)."""
 
@@ -319,7 +328,8 @@ async def analyze_document(
 
         # Параметры подключения
         effective_url = api_url or settings.LLM_API_URL
-        effective_key = api_key or settings.LLM_API_KEY
+        # Если URL пользовательский — используем ТОЛЬКО пользовательский ключ, не серверный
+        effective_key = api_key if api_url else (api_key or settings.LLM_API_KEY)
         effective_model = model or settings.LLM_MODEL
         effective_max_tokens = max_tokens or settings.LLM_MAX_TOKENS
         effective_timeout = timeout or settings.LLM_TIMEOUT
@@ -492,7 +502,7 @@ async def analyze_document(
                     request_id=request_id,
                 )
             else:
-                yield sse_error(f"Ошибка LLM API: {e}", request_id=request_id)
+                yield sse_error(f"Ошибка LLM API: {_sanitize_error(e, settings)}", request_id=request_id)
             return
 
         # --- Этап 5: мерж результатов ---
@@ -531,7 +541,7 @@ async def analyze_document(
 
     except Exception as e:
         logger.exception("Ошибка при анализе документа")
-        yield sse_error(f"Ошибка анализа: {e!s}", request_id=request_id)
+        yield sse_error(f"Ошибка анализа: {_sanitize_error(e, settings)}", request_id=request_id)
 
 
 async def _analyze_single_batch(

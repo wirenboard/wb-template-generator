@@ -28,6 +28,15 @@ from template_importer import detect_and_import
 # Допустимые расширения загружаемых файлов
 _ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".webp"}
 
+
+def _sanitize_error(error: Exception, settings) -> str:
+    """Убирает API-ключ из текста ошибки."""
+    msg = str(error)
+    key = settings.LLM_API_KEY
+    if key and key in msg:
+        msg = msg.replace(key, "***")
+    return msg
+
 # Структурированное логирование с request_id
 class RequestIdFilter(logging.Filter):
     def filter(self, record):
@@ -256,7 +265,8 @@ async def list_models(
     """Получение списка доступных моделей от LLM API провайдера."""
     settings = get_settings()
     effective_url = llm_api_url or settings.LLM_API_URL
-    effective_key = llm_api_key or settings.LLM_API_KEY
+    # Если URL пользовательский — используем ТОЛЬКО пользовательский ключ, не серверный
+    effective_key = llm_api_key if llm_api_url else (llm_api_key or settings.LLM_API_KEY)
 
     if not effective_url:
         return JSONResponse(
@@ -289,7 +299,7 @@ async def list_models(
         logger.exception("Ошибка получения списка моделей")
         return JSONResponse(
             status_code=502,
-            content={"detail": f"Не удалось получить список моделей: {e!s}"},
+            content={"detail": f"Не удалось получить список моделей: {_sanitize_error(e, settings)}"},
         )
 
 
@@ -522,7 +532,8 @@ async def translate(request: TranslateRequest):
     request_id = get_request_id()
 
     effective_url = request.llm_api_url or settings.LLM_API_URL
-    effective_key = request.llm_api_key or settings.LLM_API_KEY
+    # Если URL пользовательский — используем ТОЛЬКО пользовательский ключ, не серверный
+    effective_key = request.llm_api_key if request.llm_api_url else (request.llm_api_key or settings.LLM_API_KEY)
     effective_model = request.llm_model or settings.LLM_MODEL
 
     if not effective_url:
@@ -601,7 +612,7 @@ async def translate(request: TranslateRequest):
         return JSONResponse(
             status_code=500,
             content={
-                "detail": f"Ошибка перевода: {e!s}",
+                "detail": f"Ошибка перевода: {_sanitize_error(e, settings)}",
                 "request_id": request_id,
             },
         )
