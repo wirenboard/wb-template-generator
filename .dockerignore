@@ -1,0 +1,18 @@
+# Git
+.git
+.github
+
+# Node modules
+frontend/node_modules
+
+# Python cache
+**/__pycache__
+**/*.pyc
+
+# IDE
+.vscode
+.idea
+
+# Misc
+*.md
+!CHANGELOG.md

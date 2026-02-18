@@ -23,6 +23,7 @@ export default function App() {
   const deviceInfo = useStore((s) => s.deviceInfo);
   const setDeviceInfo = useStore((s) => s.setDeviceInfo);
   const resetAll = useStore((s) => s.resetAll);
+  const appVersion = useStore((s) => s.appVersion);
   const importTemplate = useStore((s) => s.importTemplate);
   const importing = useStore((s) => s.importing);
   const importError = useStore((s) => s.importError);
@@ -148,6 +149,11 @@ export default function App() {
           <h1 className="text-xl font-bold text-gray-900">
             WB Template Generator
           </h1>
+          {appVersion && (
+            <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+              v{appVersion}
+            </span>
+          )}
           <div className="ml-auto flex items-center gap-2">
             <input
               ref={importInputRef}

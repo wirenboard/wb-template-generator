@@ -78,6 +78,7 @@ interface TemplateStore {
   llmAvailable: boolean | null;
   serverModel: string | null;
   maxFileSizeMb: number;
+  appVersion: string | null;
   previewLang: string;
 
   // Действия
@@ -190,6 +191,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
   llmAvailable: null,
   serverModel: null,
   maxFileSizeMb: 1,
+  appVersion: null,
   previewLang: 'en',
   languages: loadLanguages(),
   collapsedGroups: new Set(),
@@ -796,15 +798,31 @@ export const useStore = create<TemplateStore>((set, get) => ({
   },
 
   checkLlmStatus: () => {
-    // Если пользователь задал свой URL — LLM доступен без проверки сервера
     const { llmConfig } = get();
-    if (llmConfig.apiUrl) {
-      set({ llmAvailable: true });
-      return;
-    }
+    // Всегда запрашиваем статус сервера (для версии и лимитов)
     fetchStatus()
-      .then((s) => set({ llmAvailable: s.llm_available, maxFileSizeMb: s.max_file_size_mb ?? 1, serverModel: s.server_model ?? null }))
-      .catch(() => set({ llmAvailable: null }));
+      .then((s) => {
+        const patch: Record<string, unknown> = {
+          maxFileSizeMb: s.max_file_size_mb ?? 1,
+          serverModel: s.server_model ?? null,
+          appVersion: s.version ?? null,
+        };
+        // Если пользователь задал свой URL — LLM доступен без проверки сервера
+        if (llmConfig.apiUrl) {
+          patch.llmAvailable = true;
+        } else {
+          patch.llmAvailable = s.llm_available;
+        }
+        set(patch as Partial<TemplateStore>);
+      })
+      .catch(() => {
+        // Сервер недоступен, но кастомный LLM всё равно работает
+        if (llmConfig.apiUrl) {
+          set({ llmAvailable: true });
+        } else {
+          set({ llmAvailable: null });
+        }
+      });
   },
 
   cancelAnalyze: () => {

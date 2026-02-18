@@ -7,6 +7,7 @@ import re
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -24,6 +25,21 @@ from request_context import generate_request_id, get_request_id, set_request_id
 from sse import sse_error, sse_progress
 from template_builder import build_template
 from template_importer import detect_and_import
+
+
+def get_version() -> str:
+    """Парсит последнюю released-версию из CHANGELOG.md (единственный источник истины)."""
+    _version_re = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
+    for candidate in (Path(__file__).resolve().parent / "../CHANGELOG.md", Path("CHANGELOG.md")):
+        try:
+            text = Path(candidate).resolve().read_text(encoding="utf-8")
+            m = _version_re.search(text)
+            if m:
+                return m.group(1)
+        except OSError:
+            continue
+    return "dev"
+
 
 # Допустимые расширения загружаемых файлов
 _ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".webp"}
@@ -130,7 +146,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title="WB Template Generator",
     description="Генератор JSON-шаблонов Modbus-устройств для wb-mqtt-serial",
-    version="0.2.0",
+    version=get_version(),
     lifespan=lifespan,
 )
 
@@ -208,6 +224,7 @@ async def status():
     result: dict = {
         "llm_available": bool(settings.LLM_API_URL),
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+        "version": app.version,
     }
     if settings.LLM_API_URL:
         result["server_model"] = settings.LLM_MODEL
