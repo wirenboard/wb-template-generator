@@ -1214,7 +1214,7 @@ function RegisterRow({
   const renderColumnInput = (col: ColumnConfig): ((ref: React.RefCallback<HTMLElement>) => React.ReactNode) => {
     // Формат — используем FormatSelect
     if (col.type === 'format') {
-      return (_ref) => (
+      return () => (
         <FormatSelect
           value={String(getDefaultValue(reg, col.field))}
           onChange={(val) => { onChange(reg.id, col.field, val); onStopEdit(); }}

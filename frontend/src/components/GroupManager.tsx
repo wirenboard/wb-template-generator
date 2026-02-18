@@ -44,7 +44,7 @@ export default function GroupManager({ isOpen, onClose }: GroupManagerProps) {
     if (newGroups.length > 0) {
       state.setGroups([...currentGroups, ...newGroups]);
     }
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const [newId, setNewId] = useState('');
   const [newTitle, setNewTitle] = useState('');
