@@ -15,15 +15,18 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
 
 from config import get_settings
-from llm_service import analyze_document
-from models import BuildRequest, TranslateRequest, TranslateResponse
-from prompts import get_raw_prompts, get_translate_prompt
 from jinja_exporter import build_jinja_template
-from queue_manager import AnalyzeQueue, QueueItem, init_queues, server_queue, custom_queue
+from llm_service import analyze_document
+from models import BuildRequest, TranslateRequest
+from prompts import get_raw_prompts, get_translate_prompt
+from queue_manager import QueueItem, custom_queue, init_queues, server_queue
 from request_context import generate_request_id, get_request_id, set_request_id
 from sse import sse_error, sse_progress
 from template_builder import build_template
 from template_importer import detect_and_import
+
+# Допустимые расширения загружаемых файлов
+_ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".webp"}
 
 # Структурированное логирование с request_id
 class RequestIdFilter(logging.Filter):
@@ -31,15 +34,28 @@ class RequestIdFilter(logging.Filter):
         record.request_id = get_request_id() or "-"
         return True
 
-# Настраиваем root logger с кастомным форматом и фильтром
-_handler = logging.StreamHandler()
-_handler.setFormatter(logging.Formatter(
-    "%(asctime)s %(levelname)s [%(request_id)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-))
-_handler.addFilter(RequestIdFilter())
-logging.root.handlers = [_handler]
-logging.root.setLevel(logging.INFO)
+def _setup_logging() -> None:
+    """Настройка логирования: text (dev) или json (prod)."""
+    settings = get_settings()
+    handler = logging.StreamHandler()
+    handler.addFilter(RequestIdFilter())
+
+    if settings.LOG_FORMAT == "json":
+        from pythonjsonlogger.json import JsonFormatter
+        handler.setFormatter(JsonFormatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s",
+            rename_fields={"asctime": "timestamp", "levelname": "level"},
+        ))
+    else:
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s [%(request_id)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+
+    logging.root.handlers = [handler]
+    logging.root.setLevel(logging.INFO)
+
+_setup_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Приложение запущено")
     yield
     # Graceful shutdown
-    from queue_manager import server_queue, custom_queue
+
     cancelled = 0
     if server_queue:
         cancelled += server_queue.cancel_all()
@@ -118,10 +134,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — разрешаем всё для разработки
+# CORS — origins из переменной окружения
+_cors_origins = [o.strip() for o in get_settings().CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -172,7 +189,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/api/health")
 async def health():
     """Health check — статус сервера, uptime, очереди."""
-    from queue_manager import server_queue, custom_queue
+
     uptime = int(time.monotonic() - _start_time)
     return {
         "status": "ok",
@@ -200,7 +217,7 @@ async def status():
 @app.get("/api/queue-status")
 async def queue_status():
     """Текущее состояние очередей."""
-    from queue_manager import server_queue, custom_queue
+
     return {
         "server": server_queue.get_status() if server_queue else None,
         "custom": custom_queue.get_status() if custom_queue else None,
@@ -295,8 +312,6 @@ async def analyze(
 
     Требует настроенный LLM (серверный LLM_API_URL или клиентский llm_api_url).
     """
-    from queue_manager import server_queue, custom_queue
-
     settings = get_settings()
     request_id = get_request_id()
     is_custom_llm = bool(llm_api_url)
@@ -305,12 +320,13 @@ async def analyze(
     client_ip = request.client.host if request.client else "unknown"
     if _check_rate_limit(client_ip, settings.RATE_LIMIT_REQUESTS, settings.RATE_LIMIT_WINDOW):
         _metrics["rate_limit_hits"] += 1
+        limit_msg = (
+            f"Превышен лимит запросов ({settings.RATE_LIMIT_REQUESTS} "
+            f"за {settings.RATE_LIMIT_WINDOW} сек). Попробуйте позже."
+        )
         return JSONResponse(
             status_code=429,
-            content={
-                "detail": f"Превышен лимит запросов ({settings.RATE_LIMIT_REQUESTS} за {settings.RATE_LIMIT_WINDOW} сек). Попробуйте позже.",
-                "request_id": request_id,
-            },
+            content={"detail": limit_msg, "request_id": request_id},
         )
 
     _metrics["analyze_requests"] += 1
@@ -324,6 +340,21 @@ async def analyze(
                 "request_id": request_id,
             },
         )
+
+    # Проверка допустимых расширений файлов
+    for f in files:
+        ext = ("." + f.filename.rsplit(".", 1)[-1].lower()) if f.filename and "." in f.filename else ""
+        if ext not in _ALLOWED_EXTENSIONS:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": (
+                        f"Неподдерживаемый формат файла: \u00ab{f.filename}\u00bb. "
+                        f"Допустимые форматы: PDF, Excel (xlsx), изображения (PNG, JPG, WebP)."
+                    ),
+                    "request_id": request_id,
+                },
+            )
 
     # Читаем содержимое файлов и проверяем размер
     max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
@@ -347,7 +378,7 @@ async def analyze(
     # Парсим языки переводов из comma-separated строки
     langs: list[str] | None = None
     if translation_languages:
-        langs = [l.strip() for l in translation_languages.split(",") if l.strip()]
+        langs = [lang.strip() for lang in translation_languages.split(",") if lang.strip()]
 
     # Выбираем очередь
     queue = custom_queue if is_custom_llm else server_queue
@@ -395,7 +426,8 @@ async def analyze(
                                 new_eta = queue.get_eta(new_pos)
                                 yield sse_progress(
                                     "queued",
-                                    f"Ваш запрос в очереди. Позиция: {new_pos}. Примерное ожидание: ~{max(1, new_eta // 60)} мин.",
+                                    f"Ваш запрос в очереди. Позиция: {new_pos}. "
+                                    f"Примерное ожидание: ~{max(1, new_eta // 60)} мин.",
                                     request_id=request_id,
                                     extra={"queue_position": new_pos, "queue_eta": new_eta},
                                 )
@@ -454,8 +486,6 @@ async def analyze(
 @app.post("/api/cancel-analyze")
 async def cancel_analyze(request: Request):
     """Отмена ожидающего запроса в очереди по request_id."""
-    from queue_manager import server_queue, custom_queue
-
     body = await request.json()
     rid = body.get("request_id")
     if not rid:
@@ -490,7 +520,6 @@ async def translate(request: TranslateRequest):
     """Перевод строк через LLM."""
     settings = get_settings()
     request_id = get_request_id()
-    is_custom_llm = bool(request.llm_api_url)
 
     effective_url = request.llm_api_url or settings.LLM_API_URL
     effective_key = request.llm_api_key or settings.LLM_API_KEY

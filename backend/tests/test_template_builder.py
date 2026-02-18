@@ -9,9 +9,8 @@ import pytest
 # Добавляем backend/ в sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models import BuildRequest, DeviceInfo, Register, RegisterGroup, EnumEntry
-from template_builder import build_template, _make_group_id, _make_param_id
-
+from models import BuildRequest, DeviceInfo, EnumEntry, Register, RegisterGroup
+from template_builder import _make_group_id, _make_param_id, build_template
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

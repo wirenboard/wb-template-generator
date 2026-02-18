@@ -69,7 +69,9 @@ def mock_registers() -> list[Register]:
 
             enum=[0, 1, 2, 5],
             enum_titles=["2400", "4800", "9600", "1200"],
-            translations={"ru": {"name": "Скорость обмена", "description": "Скорость порта: 0=2400, 1=4800, 2=9600, 5=1200"}},
+            translations={
+                "ru": {"name": "Скорость обмена", "description": "Скорость порта: 0=2400, 1=4800, 2=9600, 5=1200"}
+            },
         ),
     ]
 

@@ -2,7 +2,6 @@
 
 import json
 import re
-import re
 
 import jinja2
 
@@ -281,7 +280,8 @@ def import_template(raw: dict) -> dict:
     elif isinstance(raw_params, list):
         # parameters как list (некоторые шаблоны используют массив)
         for param in raw_params:
-            param_id = param.get("id") or re.sub(r"[^a-z0-9]+", "_", param.get("title", param.get("name", "param")).lower()).strip("_")
+            raw_title = param.get("title", param.get("name", "param")).lower()
+            param_id = param.get("id") or re.sub(r"[^a-z0-9]+", "_", raw_title).strip("_")
             registers.append(_parameter_to_register(param_id, param, translations))
 
     return {

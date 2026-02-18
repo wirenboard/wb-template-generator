@@ -81,7 +81,7 @@ def _detect_templated_fields(items: list[tuple[Any, int, dict]],
 
     Возвращает dict: имя_поля -> шаблон (с placeholder вместо числа).
     """
-    result = {}
+    result: dict[str, str] = {}
     if not items:
         return result
 
@@ -298,7 +298,7 @@ def _try_detect_variants(
 
 def _detect_patterns_generic(
     items: list[tuple[Any, dict]],
-    key_extractor: callable,
+    key_extractor: Any,
     skip_fields: set[str],
     templated_fields_candidates: set[str],
     require_address_progression: bool = True,
@@ -833,17 +833,18 @@ def _detect_translation_patterns(
                 continue
 
             # Собираем шаблоны значений (заменяем num на placeholder)
-            tpl_set = set()
+            tpl_set_tmp: set[str] = set()
+            tpl_valid = True
             for key, num in keys_and_nums:
                 val = lang_data[key]
                 if isinstance(val, str) and str(num) in val:
-                    tpl_set.add(val.replace(str(num), _PLACEHOLDER))
+                    tpl_set_tmp.add(val.replace(str(num), _PLACEHOLDER))
                 else:
                     # Значение не содержит число -- не шаблонизируем
-                    tpl_set = None
+                    tpl_valid = False
                     break
-            if tpl_set is not None and len(tpl_set) == 1:
-                value_tpls[lang] = tpl_set.pop()
+            if tpl_valid and len(tpl_set_tmp) == 1:
+                value_tpls[lang] = tpl_set_tmp.pop()
             else:
                 value_tpls[lang] = None
 
@@ -1013,7 +1014,7 @@ def _render_channel_jinja(
 
     if variants_data:
         # Сохраняем ссылку на внешний loop для условных запятых
-        lines.append(f'{{% set outer_loop = loop -%}}')
+        lines.append('{% set outer_loop = loop -%}')
         # Вложенный цикл по вариантам
         # Строим список кортежей для внутреннего for
         variant_field_names = sorted(variant_fields)
@@ -1045,7 +1046,7 @@ def _render_channel_jinja(
                     # Пример: "cond_a\x00" -> "cond_a"~i|string
                     # Пример: "\x00_mode" -> i|string~"_mode"
                     parts = raw_val.split(_PLACEHOLDER)
-                    segments = []
+                    segments: list[str] = []
                     for pi, part in enumerate(parts):
                         if pi > 0:
                             # Между частями вставляем i
@@ -1130,12 +1131,12 @@ def _render_channel_jinja(
             lines.append(f"{indent}}},")
 
         # Закрываем внутренний цикл (по вариантам)
-        lines.append(f"{{% endfor -%}}")
+        lines.append("{% endfor -%}")
         # Закрываем внешний цикл (по номерам)
-        lines.append(f"{{% endfor -%}}")
+        lines.append("{% endfor -%}")
     else:
         # Простой случай: без вариантов
-        ch_fields: list[str] = []
+        ch_fields = []
         name_tpl = f'{pattern["name_prefix"]}{{{{ i }}}}{pattern["name_suffix"]}'
         ch_fields.append(f'"name": "{name_tpl}"')
 
@@ -1161,7 +1162,7 @@ def _render_channel_jinja(
         else:
             # Не последний -- всегда ставим запятую (включая последнюю итерацию)
             lines.append(f"{indent}}},")
-        lines.append(f"{{% endfor -%}}")
+        lines.append("{% endfor -%}")
 
     return "\n".join(
         f"{indent}{line}" if not line.startswith(indent) else line
@@ -1263,7 +1264,7 @@ def _render_string_channel_jinja(
         lines.append(f"{indent}}}{{% if not loop.last %}},{{% endif %}}")
     else:
         lines.append(f"{indent}}},")
-    lines.append(f"{{% endfor -%}}")
+    lines.append("{% endfor -%}")
 
     return "\n".join(
         f"{indent}{line}" if not line.startswith(indent) else line
