@@ -5,6 +5,7 @@ export interface ServerStatus {
   llm_available: boolean;
   max_file_size_mb: number;
   server_model?: string;
+  version?: string;
 }
 
 export async function fetchStatus(): Promise<ServerStatus> {
