@@ -35,8 +35,11 @@ some devices split registers across tables (e.g. "Input Registers" and "Holding 
    - 3xxxx (e.g. 30001) → input register, address = xxxx - 1 (30001 → 0)
    - 0xxxx (e.g. 00001) → coil, address = xxxx - 1 (00001 → 0)
    - 1xxxx (e.g. 10001) → discrete input, address = xxxx - 1 (10001 → 0)
-   - If addresses are already zero-based (0, 1, 2...), keep them as-is.
-   - If addresses are given as hex (0x0000), convert to decimal.
+   - ONLY apply the -1 conversion for legacy 5-digit addresses (4xxxx, 3xxxx, 0xxxx, 1xxxx). \
+For all other addresses, use them EXACTLY as given in the document — do NOT subtract 1. \
+If a table shows address 100, use 100. If it shows address 1, use 1. \
+Do NOT assume addresses are 1-based unless they use the 5-digit legacy format.
+   - If addresses are given as hex (0x0000, 0x64, etc.), convert to decimal.
    - **Bitwise access**: if the document describes individual bits within a register \
 (e.g. "bit 0 = relay 1 status, bit 1 = relay 2 status"), use address format `"register:bit_offset:bit_width"`:
      - `"109:0:1"` — register 109, bit 0, width 1 bit (single flag)
