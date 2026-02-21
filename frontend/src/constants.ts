@@ -103,7 +103,7 @@ export const LANGUAGE_NAMES: Record<string, string> = {
 };
 
 /** Текст содержит не-латинские символы (нужна нормализация → EN) */
-export const HAS_NON_LATIN = /[^\u0000-\u007F\u00C0-\u024F\u1E00-\u1EFF]/;
+export const HAS_NON_LATIN = /[^\u0020-\u007F\u00C0-\u024F\u1E00-\u1EFF]/;
 
 /** Допустимые единицы измерения (пустая строка = без единиц) */
 export const UNITS = [
