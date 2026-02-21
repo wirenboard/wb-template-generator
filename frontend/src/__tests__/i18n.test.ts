@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from '../store';
 import translations, { LOCALES } from '../i18n/translations';
-import type { Locale } from '../i18n/translations';
 import { getT, getHasTranslations } from '../i18n';
 import { resetMocks } from './setup';
 

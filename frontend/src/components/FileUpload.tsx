@@ -41,7 +41,7 @@ export default function FileUpload() {
   );
 
   const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
+    (e: React.DragEvent<HTMLElement>) => {
       e.preventDefault();
       setDragging(false);
       handleFiles(e.dataTransfer.files);
@@ -49,12 +49,12 @@ export default function FileUpload() {
     [handleFiles],
   );
 
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setDragging(false);
   }, []);
@@ -96,13 +96,12 @@ export default function FileUpload() {
 
   return (
     <div>
-      {/* Зона drag-n-drop */}
-      <div
+      {/* Зона drag-n-drop — label нативно открывает file dialog при клике */}
+      <label
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+        className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
           pasteFlash
             ? 'border-green-500 bg-green-50'
             : dragging
@@ -131,7 +130,7 @@ export default function FileUpload() {
           }}
           className="hidden"
         />
-      </div>
+      </label>
 
       {/* Ошибка размера файла */}
       {sizeError && (

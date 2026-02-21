@@ -14,7 +14,6 @@ import { LlmSettingsModal } from './LlmSettings';
 
 /** Props из App.tsx — файловые операции, перенесённые в тулбар */
 interface RegisterTableProps {
-  importInputRef: React.RefObject<HTMLInputElement>;
   onDownloadJson: () => void;
   onDownloadJinja: () => Promise<void>;
   downloadOpen: boolean;
@@ -90,7 +89,6 @@ function enumTranslationsToString(entries: Array<{ value: number; translations?:
 
 /** Таблица регистров устройства */
 export default function RegisterTable({
-  importInputRef,
   onDownloadJson,
   onDownloadJinja,
   downloadOpen,
@@ -124,6 +122,7 @@ export default function RegisterTable({
   const translateError = useStore((s) => s.translateError);
   const translateAll = useStore((s) => s.translateAll);
   const normalizeToEnglish = useStore((s) => s.normalizeToEnglish);
+  const importTemplateAction = useStore((s) => s.importTemplate);
 
   // Нормализация имени: "Show modes as range" → "show_modes_as_range"
   // Условия в wb-mqtt-serial ссылаются по ключу параметра (snake_case),
@@ -1184,9 +1183,8 @@ export default function RegisterTable({
                 <span className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">{t('hero.aiButton')}</span>
               </button>
 
-              {/* Импорт шаблона */}
-              <button
-                onClick={() => importInputRef.current?.click()}
+              {/* Импорт шаблона — label нативно открывает file dialog */}
+              <label
                 className="flex flex-col items-center text-center border border-gray-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
               >
                 <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -1195,7 +1193,13 @@ export default function RegisterTable({
                 <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.importTitle')}</h3>
                 <p className="text-xs text-gray-500 mb-3">{t('hero.importDesc')}</p>
                 <span className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">{t('hero.importButton')}</span>
-              </button>
+                <input
+                  type="file"
+                  accept=".json,.json.jinja"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) importTemplateAction(f); e.target.value = ''; }}
+                  className="hidden"
+                />
+              </label>
 
               {/* Вручную / CSV */}
               <button
