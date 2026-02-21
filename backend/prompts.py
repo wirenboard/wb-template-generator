@@ -385,12 +385,12 @@ Return ONLY the JSON, no markdown code blocks, no explanation.
 def _build_translation_languages_text(languages: list[str] | None) -> str:
     """Формирует текст инструкции по языкам переводов для промпта."""
     if not languages:
-        languages = ["ru"]
+        return "   - Do NOT include translations. Set `translations` to null for all registers."
 
     # Убираем en — базовый язык, всегда имена на английском
     langs = [lang for lang in languages if lang != "en"]
     if not langs:
-        langs = ["ru"]
+        return "   - Do NOT include translations. Set `translations` to null for all registers."
 
     lang_list = ", ".join(f'"{lang}"' for lang in langs)
     if len(langs) == 1:

@@ -899,7 +899,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
         llmTemperature: llmConfig.temperature,
         // Системный промпт передаём только при кастомном LLM
         systemPrompt: isCustomLlm ? (customSystemPrompt ?? undefined) : undefined,
-        translationLanguages: languages.map((l) => l.code),
+        translationLanguages: getHasTranslations() ? languages.map((l) => l.code) : [],
       },
       {
         onProgress: (progress) => {
