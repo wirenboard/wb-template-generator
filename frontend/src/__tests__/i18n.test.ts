@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from '../store';
-import translations from '../i18n/translations';
+import translations, { LOCALES } from '../i18n/translations';
 import type { Locale } from '../i18n/translations';
 import { getT, getHasTranslations } from '../i18n';
 import { resetMocks } from './setup';
+
+/** Все коды локалей из LOCALES (автоматически обновляется при добавлении новых) */
+const ALL_LOCALE_CODES = LOCALES.map((l) => l.code);
+const NON_RU_LOCALES = ALL_LOCALE_CODES.filter((c) => c !== 'ru');
 
 function getState() {
   return useStore.getState();
@@ -20,7 +24,7 @@ beforeEach(() => {
 describe('translations completeness', () => {
   const ruKeys = Object.keys(translations.ru).sort();
 
-  for (const locale of ['en', 'kk', 'it'] as const) {
+  for (const locale of NON_RU_LOCALES) {
     it(`${locale} содержит все ключи из ru`, () => {
       const localeKeys = Object.keys(translations[locale]);
       const missing = ruKeys.filter((k) => !localeKeys.includes(k));
@@ -29,14 +33,14 @@ describe('translations completeness', () => {
   }
 
   it('все локали содержат одинаковое количество ключей', () => {
-    const counts = (['ru', 'en', 'kk', 'it'] as const).map(
+    const counts = ALL_LOCALE_CODES.map(
       (l) => Object.keys(translations[l]).length,
     );
     expect(new Set(counts).size).toBe(1);
   });
 
-  it('нет лишних ключей в en/kk/it (которых нет в ru)', () => {
-    for (const locale of ['en', 'kk', 'it'] as const) {
+  it('нет лишних ключей в остальных локалях (которых нет в ru)', () => {
+    for (const locale of NON_RU_LOCALES) {
       const extra = Object.keys(translations[locale]).filter(
         (k) => !ruKeys.includes(k),
       );
@@ -72,6 +76,14 @@ describe('interpolate (через getT)', () => {
     expect(result).toContain('20');
     expect(result).not.toContain('{done}');
     expect(result).not.toContain('{total}');
+  });
+
+  it('корректно подставляет 0 (falsy value)', () => {
+    useStore.setState({ uiLocale: 'ru' });
+    const t = getT();
+    const result = t('toolbar.regCount', { count: 0 });
+    expect(result).toContain('0');
+    expect(result).not.toContain('{count}');
   });
 
   it('оставляет нераспознанные плейсхолдеры', () => {
@@ -190,7 +202,7 @@ describe('translations параметры согласованы', () => {
   }
 
   it('все локали имеют одинаковые плейсхолдеры для каждого ключа', () => {
-    const locales: Locale[] = ['ru', 'en', 'kk', 'it'];
+    const locales = ALL_LOCALE_CODES;
     const ruKeys = Object.keys(translations.ru);
     const mismatches: string[] = [];
 

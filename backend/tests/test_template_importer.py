@@ -311,6 +311,27 @@ class TestImportValidation:
         })
         assert result["device_info"]["id"] == "my-device"
 
+    def test_parameters_as_list_passes(self):
+        """Параметры как list (альтернативный формат) — допускается."""
+        result = import_template({
+            "device": {
+                "name": "Test",
+                "id": "test",
+                "parameters": [
+                    {
+                        "title": "Baud rate",
+                        "address": 110,
+                        "reg_type": "holding",
+                        "format": "u16",
+                        "default": 9600,
+                    },
+                ],
+            }
+        })
+        assert len(result["registers"]) == 1
+        assert result["registers"][0]["is_parameter"] is True
+        assert result["registers"][0]["name"] == "Baud rate"
+
 
 class TestRoundtrip:
     """Тест roundtrip: import → build → проверка ключевых полей."""
