@@ -279,6 +279,38 @@ class TestImportValidation:
         })
         assert len(result["registers"]) == 1
 
+    def test_parameters_only_passes(self):
+        """Шаблон только с параметрами (без каналов) — допускается."""
+        result = import_template({
+            "device": {
+                "name": "Test",
+                "id": "test",
+                "parameters": {
+                    "baud_rate": {
+                        "title": "Baud rate",
+                        "address": 110,
+                        "reg_type": "holding",
+                        "format": "u16",
+                        "enum": [1200, 2400, 9600],
+                        "enum_titles": ["1200", "2400", "9600"],
+                        "default": 9600,
+                    },
+                },
+            }
+        })
+        assert len(result["registers"]) == 1
+        assert result["registers"][0]["is_parameter"] is True
+
+    def test_device_id_without_device_type_passes(self):
+        """Шаблон с device.id, но без device_type — допускается."""
+        result = import_template({
+            "device": {
+                "id": "my-device",
+                "channels": [{"name": "Ch", "address": 0, "reg_type": "holding", "type": "value", "format": "u16"}],
+            }
+        })
+        assert result["device_info"]["id"] == "my-device"
+
 
 class TestRoundtrip:
     """Тест roundtrip: import → build → проверка ключевых полей."""
