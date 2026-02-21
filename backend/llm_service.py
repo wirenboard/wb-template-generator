@@ -526,6 +526,7 @@ async def analyze_document(
         if not _allowed:
             for reg in registers:
                 reg.translations = None
+                reg.group_title_translations = None
                 if reg.enum_entries:
                     for entry in reg.enum_entries:
                         entry.translations = None
@@ -535,6 +536,11 @@ async def analyze_document(
                 if reg.translations:
                     reg.translations = {
                         k: v for k, v in reg.translations.items()
+                        if k in _allowed
+                    } or None
+                if reg.group_title_translations:
+                    reg.group_title_translations = {
+                        k: v for k, v in reg.group_title_translations.items()
                         if k in _allowed
                     } or None
                 if reg.enum_entries:

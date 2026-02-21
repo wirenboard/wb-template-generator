@@ -913,16 +913,22 @@ export const useStore = create<TemplateStore>((set, get) => ({
           set((s) => ({ deviceInfo: { ...s.deviceInfo, ...data.device_info } }));
           // Автогенерация groups из регистров (если groups пустые)
           if (get().groups.length === 0 && data.registers.length > 0) {
-            const seen = new Map<string, string>();
+            const seen = new Map<string, { title: string; translations: Record<string, { title?: string }> }>();
             for (const reg of data.registers) {
               if (reg.group && !seen.has(reg.group)) {
-                seen.set(reg.group, reg.group_title || reg.group);
+                const groupTr: Record<string, { title?: string }> = {};
+                if (reg.group_title_translations) {
+                  for (const [lang, trTitle] of Object.entries(reg.group_title_translations)) {
+                    groupTr[lang] = { title: trTitle };
+                  }
+                }
+                seen.set(reg.group, { title: reg.group_title || reg.group, translations: groupTr });
               }
             }
             const autoGroups: RegisterGroup[] = [];
             let order = 0;
-            for (const [id, title] of seen) {
-              autoGroups.push({ id, title, order: order++, translations: {} });
+            for (const [id, info] of seen) {
+              autoGroups.push({ id, title: info.title, order: order++, translations: info.translations });
             }
             if (autoGroups.length > 0) {
               set({ groups: autoGroups });

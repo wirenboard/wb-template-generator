@@ -121,6 +121,7 @@ class Register(BaseModel):
     off_value: int | None = None
     default_value: int | float | None = None
     translations: dict[str, RegisterTranslation] | None = None
+    group_title_translations: dict[str, str] | None = None
     # Поля для roundtrip
     sporadic: bool | None = None
     read_only: bool | None = None

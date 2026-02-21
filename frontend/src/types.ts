@@ -52,6 +52,7 @@ export interface Register {
   channel_type: string;
   group: string;
   group_title?: string;
+  group_title_translations?: Record<string, string>;
   is_parameter: boolean;
 
   condition?: string;

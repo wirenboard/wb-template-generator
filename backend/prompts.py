@@ -142,6 +142,9 @@ Always use "value" with appropriate `units` instead.
    - `group` — snake_case group id (e.g. "power_meters", "hw_info", "general"). \
 MUST be valid snake_case: lowercase letters, digits, underscores only.
    - `group_title` — human-readable English title (e.g. "Power Meters", "Hardware Info")
+   - `group_title_translations` — translations of group_title to other languages \
+(same languages as register translations). Example: `{{"ru": "Счётчики мощности"}}`. \
+Set to null if no translations are needed.
    - Common groups: power_meters, environment, io_control, hw_info, general, communication, alarms, counters
    - Group together related registers: all power measurements in "power_meters", \
 all temperature/humidity in "environment", all communication settings in "communication", etc.
@@ -243,6 +246,7 @@ Return ONLY valid JSON (no markdown, no explanation) with this exact structure:
       "channel_type": "value",
       "group": "power_meters",
       "group_title": "Power Meters",
+      "group_title_translations": {{"ru": "Счётчики мощности"}},
       "is_parameter": false,
       "condition": null,
       "enum": null,
@@ -272,6 +276,7 @@ Return ONLY valid JSON (no markdown, no explanation) with this exact structure:
       "channel_type": "value",
       "group": "io_control",
       "group_title": "IO Control",
+      "group_title_translations": {{"ru": "Управление вводами/выводами"}},
       "is_parameter": false,
       "condition": null,
       "enum": [0, 1],
@@ -301,6 +306,7 @@ Return ONLY valid JSON (no markdown, no explanation) with this exact structure:
       "channel_type": "value",
       "group": "communication",
       "group_title": "Communication",
+      "group_title_translations": {{"ru": "Связь"}},
       "is_parameter": true,
       "condition": null,
       "enum": [0, 1, 2, 3],
@@ -370,7 +376,7 @@ Return ONLY a valid JSON object with this structure:
     {"address": 0, "name": "...", "reg_type": "holding", \
 "format": "u16", "scale": 1, "offset": 0, "units": null, "access": "read", \
 "description": null, "channel_type": "value", "group": "general", \
-"group_title": "General", "is_parameter": false, \
+"group_title": "General", "group_title_translations": null, "is_parameter": false, \
 "condition": null, "enum": null, "enum_titles": null, \
 "enum_entries": null, "on_value": null, "off_value": null, "default_value": null, \
 "string_data_size": null, "word_order": null, "error_value": null, "readonly": null, \
