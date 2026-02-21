@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store';
-import { useT } from '../i18n';
+import { useT, useHasTranslations } from '../i18n';
 import type { RegisterGroup } from '../types';
 import { translateStrings } from '../api';
 
@@ -197,6 +197,7 @@ function GroupRow({
   onMove: (dir: -1 | 1) => void;
 }) {
   const t = useT();
+  const hasTranslations = useHasTranslations();
   const [showTranslations, setShowTranslations] = useState(false);
   const [showLangAdd, setShowLangAdd] = useState(false);
 
@@ -265,15 +266,17 @@ function GroupRow({
           className={`${inputClass} flex-1`}
           placeholder="Description (EN)"
         />
-        <button
-          onClick={() => setShowTranslations(!showTranslations)}
-          className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
-            langs.length > 0 ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-blue-500'
-          }`}
-          title={t('detail.translations')}
-        >
-          {langs.length > 0 ? langs.map((l) => l.toUpperCase()).join(', ') : 'i18n'}
-        </button>
+        {hasTranslations && (
+          <button
+            onClick={() => setShowTranslations(!showTranslations)}
+            className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+              langs.length > 0 ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-blue-500'
+            }`}
+            title={t('detail.translations')}
+          >
+            {langs.length > 0 ? langs.map((l) => l.toUpperCase()).join(', ') : 'i18n'}
+          </button>
+        )}
         <button
           onClick={onRemove}
           className="text-red-400 hover:text-red-600 text-xs font-bold flex-shrink-0"
@@ -283,7 +286,7 @@ function GroupRow({
         </button>
       </div>
 
-      {showTranslations && (
+      {hasTranslations && showTranslations && (
         <div className="mt-2 ml-8 space-y-1.5">
           {langs.map((lang) => (
             <GroupTranslationRow

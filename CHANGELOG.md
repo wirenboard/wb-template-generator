@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-02-21
+
+### Исправлено
+- **UI**: заголовки групп в таблице регистров отображаются на русском при RU-интерфейсе (из `group.translations.ru.title`)
+- **UI**: кнопка i18n и блок переводов в GroupManager скрыты для EN/KZ/IT — аналогично остальным компонентам
+
 ## [0.5.2] - 2026-02-21
 
 ### Добавлено
@@ -103,7 +109,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.4.0...v0.5.0

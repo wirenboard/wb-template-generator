@@ -4,7 +4,7 @@ import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { translateStrings } from '../api';
-import { useT, useHasTranslations } from '../i18n';
+import { useT, useHasTranslations, useLocale } from '../i18n';
 import FormatSelect from './FormatSelect';
 import RegisterDetailPanel from './RegisterDetailPanel';
 import GroupManager from './GroupManager';
@@ -115,6 +115,7 @@ export default function RegisterTable({
   const moveRegistersToGroup = useStore((s) => s.moveRegistersToGroup);
   const reorderRegister = useStore((s) => s.reorderRegister);
   const languages = useStore((s) => s.languages);
+  const [uiLocale] = useLocale();
   const llmAvailable = useStore((s) => s.llmAvailable);
   const llmConfig = useStore((s) => s.llmConfig);
   const translating = useStore((s) => s.translating);
@@ -373,6 +374,12 @@ export default function RegisterTable({
       groups.filter((g) => g.parent_group === parentId)
         .sort((a, b) => a.order - b.order);
 
+    // Переведённый title группы: ru-перевод при ru-интерфейсе, иначе — EN title
+    const localizedTitle = (g: { title: string; translations?: Record<string, { title?: string }> }): string => {
+      if (uiLocale === 'ru' && g.translations?.ru?.title) return g.translations.ru.title;
+      return g.title;
+    };
+
     type GroupEntry = { id: string; title: string; registers: Register[]; level: number };
     const result: GroupEntry[] = [];
 
@@ -382,14 +389,14 @@ export default function RegisterTable({
         result.push({ id: gid, title, registers: regs, level });
       }
       for (const child of childrenOf(gid)) {
-        addGroup(child.id, child.title, level + 1);
+        addGroup(child.id, localizedTitle(child), level + 1);
       }
     };
 
     // Сначала top-level группы по order
     const sortedTop = [...topLevel].sort((a, b) => a.order - b.order);
     for (const g of sortedTop) {
-      addGroup(g.id, g.title, 0);
+      addGroup(g.id, localizedTitle(g), 0);
     }
 
     // Группы не в дереве (не связаны ни с каким parent и не top-level)
@@ -403,16 +410,17 @@ export default function RegisterTable({
         return a.localeCompare(b);
       });
     for (const gid of remaining) {
+      const foundGroup = groups.find((g) => g.id === gid);
       result.push({
         id: gid,
-        title: groups.find((g) => g.id === gid)?.title ?? gid,
+        title: foundGroup ? localizedTitle(foundGroup) : gid,
         registers: byGroup.get(gid)!,
         level: 0,
       });
     }
 
     return result;
-  }, [registers, groups, sortField, hasMultipleGroups]);
+  }, [registers, groups, sortField, hasMultipleGroups, uiLocale]);
 
   const handleSort = useCallback((field: SortField) => {
     setSortField((prev) => {
