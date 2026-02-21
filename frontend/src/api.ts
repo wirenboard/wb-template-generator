@@ -182,10 +182,18 @@ export async function importTemplate(
   formData.append('file', file);
   const res = await fetch('/api/import-template', { method: 'POST', body: formData });
   if (!res.ok) {
-    let detail = getT()('api.importError', { code: res.status });
+    const t = getT();
+    let detail = t('api.importError', { code: res.status });
     try {
       const errData = await res.json();
-      if (errData.detail) detail = errData.detail;
+      if (errData.detail) {
+        // Известные ошибки бэкенда — переводим на фронте
+        if (errData.detail.includes('Not a wb-mqtt-serial template')) {
+          detail = t('api.importNotTemplate');
+        } else {
+          detail = errData.detail;
+        }
+      }
     } catch { /* текст ошибки недоступен */ }
     throw new Error(detail);
   }

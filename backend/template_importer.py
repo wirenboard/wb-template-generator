@@ -207,8 +207,8 @@ def import_template(raw: dict) -> dict:
     has_device_type = bool(raw.get("device_type") or device.get("id"))
     if not has_channels and not has_parameters and not has_device_type:
         raise ValueError(
-            "Файл не является шаблоном wb-mqtt-serial: "
-            "не найдены channels, parameters или device_type"
+            "Not a wb-mqtt-serial template: "
+            "no channels, parameters or device_type found"
         )
 
     translations = device.get("translations", {})

@@ -255,12 +255,12 @@ class TestImportValidation:
 
     def test_invalid_json_raises(self):
         """Невалидный JSON (не wb-mqtt-serial) должен выбросить ValueError."""
-        with pytest.raises(ValueError, match="не является шаблоном wb-mqtt-serial"):
+        with pytest.raises(ValueError, match="Not a wb-mqtt-serial template"):
             import_template({"name": "package.json", "version": "1.0.0"})
 
     def test_empty_dict_raises(self):
         """Пустой dict — не шаблон."""
-        with pytest.raises(ValueError, match="не является шаблоном wb-mqtt-serial"):
+        with pytest.raises(ValueError, match="Not a wb-mqtt-serial template"):
             import_template({})
 
     def test_device_type_only_passes(self):
