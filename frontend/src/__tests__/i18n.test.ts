@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from '../store';
 import translations from '../i18n/translations';
 import type { Locale } from '../i18n/translations';
@@ -9,6 +9,7 @@ function getState() {
   return useStore.getState();
 }
 
+// Для i18n-тестов достаточно сбрасывать uiLocale — остальной state store не влияет
 beforeEach(() => {
   resetMocks();
   useStore.setState({ uiLocale: 'ru' });
@@ -169,32 +170,8 @@ describe('setUiLocale', () => {
   });
 });
 
-describe('detectLocale (через пересоздание store)', () => {
-  it('читает сохранённую локаль из localStorage', () => {
-    localStorage.setItem('wb-ui-locale', 'it');
-    // detectLocale вызывается при инициализации store;
-    // имитируем через setState + getState
-    // Прямой тест: setUiLocale сохраняет, и при следующем запуске detectLocale читает
-    expect(localStorage.getItem('wb-ui-locale')).toBe('it');
-  });
-
-  it('игнорирует невалидное значение из localStorage', () => {
-    localStorage.setItem('wb-ui-locale', 'xx');
-    // detectLocale должен пропустить невалидное и вернуть по navigator или en
-    // Проверяем что store принимает только валидные локали
-    const validLocales: Locale[] = ['ru', 'en', 'kk', 'it'];
-    expect(validLocales).not.toContain('xx');
-  });
-
-  it('navigator.language kz → kk маппинг отражён в store', () => {
-    // Проверяем через setUiLocale что kk — валидная локаль
-    getState().setUiLocale('kk');
-    expect(getState().uiLocale).toBe('kk');
-    const t = getT();
-    // KZ-перевод должен отличаться от EN
-    expect(t('toolbar.add')).toBe(translations.kk['toolbar.add']);
-  });
-});
+// NB: detectLocale() вызывается при инициализации Zustand store (один раз при загрузке модуля).
+// Полноценный unit-тест требует рефакторинга (export функции). Покрытие через интеграционные тесты.
 
 // --- 6. Согласованность ключей с параметрами ---
 
