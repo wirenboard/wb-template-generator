@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress, Language } from './types';
 import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi } from './api';
-import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY } from './constants';
+import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN } from './constants';
 import { generateId } from './utils';
+import type { Locale } from './i18n';
+import { getT, getHasTranslations } from './i18n';
 
 // Debounce-хелпер
 let buildTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -10,6 +12,24 @@ let buildTimeout: ReturnType<typeof setTimeout> | null = null;
 // Ключи localStorage
 const STATE_STORAGE_KEY = 'wb-template-state';
 const CUSTOM_PROMPT_STORAGE_KEY = 'wb-template-custom-prompt';
+const UI_LOCALE_STORAGE_KEY = 'wb-ui-locale';
+
+// Автодетект локали из navigator.language
+function detectLocale(): Locale {
+  try {
+    const stored = localStorage.getItem(UI_LOCALE_STORAGE_KEY);
+    if (stored && ['ru', 'en', 'kk', 'it'].includes(stored)) return stored as Locale;
+  } catch { /* игнорируем */ }
+  try {
+    const lang = navigator.language?.toLowerCase() ?? '';
+    if (lang.startsWith('kk') || lang.startsWith('kz')) return 'kk';
+    if (lang.startsWith('it')) return 'it';
+    if (lang.startsWith('ru') || lang.startsWith('uk') || lang.startsWith('be')) return 'ru';
+    return 'en';
+  } catch {
+    return 'en';
+  }
+}
 
 // Загрузка языков из localStorage
 function loadLanguages(): Language[] {
@@ -155,6 +175,10 @@ interface TemplateStore {
   toggleGroupCollapsed: (groupId: string) => void;
   collapseAllGroups: () => void;
   expandAllGroups: () => void;
+
+  // Локаль UI
+  uiLocale: Locale;
+  setUiLocale: (locale: Locale) => void;
 }
 
 // Загружаем сохранённое состояние при инициализации
@@ -202,6 +226,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
       return localStorage.getItem(CUSTOM_PROMPT_STORAGE_KEY);
     } catch { return null; }
   })(),
+  uiLocale: detectLocale(),
   translating: false,
   translateError: null,
   translateResult: null,
@@ -377,6 +402,11 @@ export const useStore = create<TemplateStore>((set, get) => ({
     set({ collapsedGroups: new Set() });
   },
 
+  setUiLocale: (locale) => {
+    set({ uiLocale: locale });
+    try { localStorage.setItem(UI_LOCALE_STORAGE_KEY, locale); } catch { /* игнорируем */ }
+  },
+
   translateAll: async (targetLang) => {
     const { registers, groups, llmConfig } = get();
     // Собираем все уникальные переводимые строки без перевода на targetLang
@@ -413,7 +443,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
 
     const totalStrings = Object.keys(strings).length;
     if (totalStrings === 0) {
-      set({ translateResult: 'Все строки уже переведены', translateError: null });
+      set({ translateResult: getT()('store.allTranslated'), translateError: null });
       setTimeout(() => set({ translateResult: null }), 3000);
       return;
     }
@@ -493,10 +523,10 @@ export const useStore = create<TemplateStore>((set, get) => ({
         return { registers: updatedRegisters, groups: updatedGroups };
       });
       buildAndSave(get);
-      set({ translateResult: `Переведено: ${translated} из ${totalStrings}` });
+      set({ translateResult: getT()('store.translated', { done: translated, total: totalStrings }) });
       setTimeout(() => set({ translateResult: null }), 4000);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Ошибка перевода';
+      const msg = e instanceof Error ? e.message : getT()('store.translateError');
       set({ translateError: msg });
     } finally {
       set({ translating: false });
@@ -504,12 +534,11 @@ export const useStore = create<TemplateStore>((set, get) => ({
   },
 
   normalizeToEnglish: async () => {
-    const hasCyrillic = (s: string) => /[а-яёА-ЯЁ]/.test(s);
+    const hasNonLatin = (s: string) => HAS_NON_LATIN.test(s);
     const { registers, groups, llmConfig } = get();
 
-    // Собираем строки с кириллицей для перевода на EN
+    // Собираем не-латинские строки для перевода на EN
     const strings: Record<string, string> = {};
-    // Запоминаем какие поля откуда взяты (для обратной записи)
     const regNameKeys: string[] = [];
     const regDescKeys: string[] = [];
     const groupTitleKeys: string[] = [];
@@ -518,20 +547,19 @@ export const useStore = create<TemplateStore>((set, get) => ({
 
     for (const reg of registers) {
       if (!reg.enabled) continue;
-      if (hasCyrillic(reg.name)) {
+      if (hasNonLatin(reg.name)) {
         const key = `reg_name_${reg.id}`;
         strings[key] = reg.name;
         regNameKeys.push(key);
       }
-      if (reg.description && hasCyrillic(reg.description)) {
+      if (reg.description && hasNonLatin(reg.description)) {
         const key = `reg_desc_${reg.id}`;
         strings[key] = reg.description;
         regDescKeys.push(key);
       }
-      // Enum titles с кириллицей
       if (reg.enum_entries) {
         for (const entry of reg.enum_entries) {
-          if (hasCyrillic(entry.title)) {
+          if (hasNonLatin(entry.title)) {
             const key = `enum_${reg.id}_${entry.value}`;
             strings[key] = entry.title;
             enumKeys.push(key);
@@ -540,12 +568,12 @@ export const useStore = create<TemplateStore>((set, get) => ({
       }
     }
     for (const group of groups) {
-      if (hasCyrillic(group.title)) {
+      if (hasNonLatin(group.title)) {
         const key = `group_title_${group.id}`;
         strings[key] = group.title;
         groupTitleKeys.push(key);
       }
-      if (group.description && hasCyrillic(group.description)) {
+      if (group.description && hasNonLatin(group.description)) {
         const key = `group_desc_${group.id}`;
         strings[key] = group.description;
         groupDescKeys.push(key);
@@ -554,20 +582,24 @@ export const useStore = create<TemplateStore>((set, get) => ({
 
     const totalStrings = Object.keys(strings).length;
     if (totalStrings === 0) {
-      set({ translateResult: 'Нет строк с кириллицей для перевода', translateError: null });
+      set({ translateResult: getT()('store.noCyrillic'), translateError: null });
       setTimeout(() => set({ translateResult: null }), 3000);
       return;
     }
+
+    // Сохранять в translations.ru только если текущая локаль поддерживает переводы
+    const saveTranslations = getHasTranslations();
 
     set({ translating: true, translateError: null, translateResult: null });
     try {
       const result = await translateStrings(strings, 'en', llmConfig);
       const translated = Object.keys(result).length;
 
-      // Обеспечиваем наличие языка 'ru' в store
-      const store = useStore.getState();
-      if (!store.languages.some((l) => l.code === 'ru')) {
-        store.addLanguage({ code: 'ru', label: 'Русский' });
+      if (saveTranslations) {
+        const store = useStore.getState();
+        if (!store.languages.some((l) => l.code === 'ru')) {
+          store.addLanguage({ code: 'ru', label: 'Русский' });
+        }
       }
 
       set((s) => {
@@ -580,22 +612,19 @@ export const useStore = create<TemplateStore>((set, get) => ({
           if (!hasNewName && !hasNewDesc && !reg.enum_entries) return reg;
 
           let translations = { ...(reg.translations ?? {}) };
-          const ruTr = { ...(translations.ru ?? {}) };
           let newName = reg.name;
           let newDescription = reg.description;
 
-          // Сохраняем русский в translations.ru, заменяем на английский
-          if (hasNewName) {
-            ruTr.name = reg.name;
-            newName = result[nameKey];
+          if (saveTranslations) {
+            const ruTr = { ...(translations.ru ?? {}) };
+            if (hasNewName) { ruTr.name = reg.name; }
+            if (hasNewDesc) { ruTr.description = reg.description!; }
+            translations = { ...translations, ru: ruTr };
           }
-          if (hasNewDesc) {
-            ruTr.description = reg.description!;
-            newDescription = result[descKey];
-          }
-          translations = { ...translations, ru: ruTr };
 
-          // Enum: сохраняем русский в translations, заменяем title на английский
+          if (hasNewName) { newName = result[nameKey]; }
+          if (hasNewDesc) { newDescription = result[descKey]; }
+
           let newEntries = reg.enum_entries;
           if (reg.enum_entries) {
             let changed = false;
@@ -603,7 +632,9 @@ export const useStore = create<TemplateStore>((set, get) => ({
               const eKey = `enum_${reg.id}_${entry.value}`;
               if (enumKeys.includes(eKey) && result[eKey]) {
                 changed = true;
-                const tr = { ...(entry.translations ?? {}), ru: entry.title };
+                const tr = saveTranslations
+                  ? { ...(entry.translations ?? {}), ru: entry.title }
+                  : entry.translations;
                 return { ...entry, title: result[eKey], translations: tr };
               }
               return entry;
@@ -628,19 +659,18 @@ export const useStore = create<TemplateStore>((set, get) => ({
           if (!hasNewTitle && !hasNewDesc) return group;
 
           let translations = { ...(group.translations ?? {}) };
-          const ruTr = { ...(translations.ru ?? {}) };
           let newTitle = group.title;
           let newDescription = group.description;
 
-          if (hasNewTitle) {
-            ruTr.title = group.title;
-            newTitle = result[titleKey];
+          if (saveTranslations) {
+            const ruTr = { ...(translations.ru ?? {}) };
+            if (hasNewTitle) { ruTr.title = group.title; }
+            if (hasNewDesc) { ruTr.description = group.description!; }
+            translations = { ...translations, ru: ruTr };
           }
-          if (hasNewDesc) {
-            ruTr.description = group.description!;
-            newDescription = result[descKey];
-          }
-          translations = { ...translations, ru: ruTr };
+
+          if (hasNewTitle) { newTitle = result[titleKey]; }
+          if (hasNewDesc) { newDescription = result[descKey]; }
 
           return { ...group, title: newTitle, description: newDescription, translations };
         });
@@ -649,10 +679,10 @@ export const useStore = create<TemplateStore>((set, get) => ({
       });
 
       buildAndSave(get);
-      set({ translateResult: `Нормализовано → EN: ${translated} из ${totalStrings}` });
+      set({ translateResult: getT()('store.normalized', { done: translated, total: totalStrings }) });
       setTimeout(() => set({ translateResult: null }), 4000);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Ошибка перевода';
+      const msg = e instanceof Error ? e.message : getT()('store.translateError');
       set({ translateError: msg });
     } finally {
       set({ translating: false });
@@ -671,10 +701,10 @@ export const useStore = create<TemplateStore>((set, get) => ({
       });
       buildAndSave(get);
       if (include && data.registers.length === 0) {
-        set({ importError: `Шаблон-обёртка: регистры находятся в ${include}. Загрузите этот файл для получения регистров.` });
+        set({ importError: getT()('store.importWrapperError', { include }) });
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Ошибка импорта';
+      const msg = e instanceof Error ? e.message : getT()('store.importError');
       set({ importError: msg });
     } finally {
       set({ importing: false });
@@ -791,8 +821,8 @@ export const useStore = create<TemplateStore>((set, get) => ({
         const template = await buildTemplate({ device_info: deviceInfo, registers, groups });
         set({ template, buildError: null });
       } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Неизвестная ошибка';
-        set({ buildError: `Ошибка сборки шаблона: ${msg}` });
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        set({ buildError: getT()('store.buildError', { msg }) });
       }
     }, 300);
   },
@@ -832,7 +862,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
       analyzeStatus: 'idle',
       analyzeProgress: null,
       analyzeAbortController: null,
-      analyzeLog: [...s.analyzeLog, `[${new Date().toLocaleTimeString()}] Анализ отменён пользователем`],
+      analyzeLog: [...s.analyzeLog, `[${new Date().toLocaleTimeString()}] ${getT()('log.cancelled')}`],
     }));
   },
 
@@ -853,8 +883,8 @@ export const useStore = create<TemplateStore>((set, get) => ({
       analyzeLog: [],
     });
 
-    log(`Начало анализа: ${files.length} файл(ов), тип=${templateType}, модель=${llmConfig.model || '(сервер)'}`);
-    log(`Файлы: ${files.map((f) => `${f.name} (${(f.size / 1024).toFixed(0)} КБ)`).join(', ')}`);
+    log(getT()('log.start', { count: files.length, type: templateType, model: llmConfig.model || '(server)' }));
+    log(getT()('log.files', { list: files.map((f) => `${f.name} (${(f.size / 1024).toFixed(0)} KB)`).join(', ') }));
 
     analyzeFiles(
       files,
@@ -877,7 +907,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
           set({ analyzeProgress: progress });
         },
         onResult: (data) => {
-          log(`Результат: ${data.registers.length} регистров, устройство="${data.device_info.name}"`);
+          log(getT()('log.result', { count: data.registers.length, name: data.device_info.name }));
 
           set({ registers: data.registers });
           set((s) => ({ deviceInfo: { ...s.deviceInfo, ...data.device_info } }));
@@ -901,11 +931,11 @@ export const useStore = create<TemplateStore>((set, get) => ({
           buildAndSave(get);
         },
         onError: (error, requestId) => {
-          log(`ОШИБКА: ${error}`);
+          log(getT()('log.error', { msg: error }));
           set({ analyzeError: error, analyzeStatus: 'error', analyzeRequestId: requestId ?? null });
         },
         onDone: () => {
-          log('Анализ завершён успешно');
+          log(getT()('log.done'));
           set({ analyzeStatus: 'idle', analyzeAbortController: null });
         },
         onRequestId: (requestId) => {

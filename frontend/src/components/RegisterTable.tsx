@@ -1,15 +1,28 @@
 import { useState, useCallback, useRef, useMemo, useEffect, Fragment } from 'react';
 import { useStore } from '../store';
 import type { Register } from '../types';
-import { REG_TYPES, UNITS, CHANNEL_TYPES, getChannelTypesForRegType } from '../constants';
+import { REG_TYPES, UNITS, CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { translateStrings } from '../api';
+import { useT, useHasTranslations } from '../i18n';
 import FormatSelect from './FormatSelect';
 import RegisterDetailPanel from './RegisterDetailPanel';
 import GroupManager from './GroupManager';
 import LanguageManager from './LanguageManager';
 import LlmImportModal from './LlmImportModal';
 import { LlmSettingsModal } from './LlmSettings';
+
+/** Props из App.tsx — файловые операции, перенесённые в тулбар */
+interface RegisterTableProps {
+  importInputRef: React.RefObject<HTMLInputElement>;
+  onDownloadJson: () => void;
+  onDownloadJinja: () => Promise<void>;
+  downloadOpen: boolean;
+  setDownloadOpen: (open: boolean) => void;
+  downloadRef: React.RefObject<HTMLDivElement>;
+  importing: boolean;
+  onResetAll: () => void;
+}
 
 /** Состояние undo-удаления */
 interface UndoState {
@@ -77,7 +90,18 @@ function enumTranslationsToString(entries: Array<{ value: number; translations?:
 }
 
 /** Таблица регистров устройства */
-export default function RegisterTable() {
+export default function RegisterTable({
+  importInputRef,
+  onDownloadJson,
+  onDownloadJinja,
+  downloadOpen,
+  setDownloadOpen,
+  downloadRef,
+  importing,
+  onResetAll,
+}: RegisterTableProps) {
+  const t = useT();
+  const hasTranslations = useHasTranslations();
   const registers = useStore((s) => s.registers);
   const groups = useStore((s) => s.groups);
   const updateRegister = useStore((s) => s.updateRegister);
@@ -229,6 +253,11 @@ export default function RegisterTable() {
   const csvInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Hero drop zone — приём файлов при пустой таблице (роутинг по расширению)
+  const [heroDragging, setHeroDragging] = useState(false);
+  const addFiles = useStore((s) => s.addFiles);
+  const importTemplateStore = useStore((s) => s.importTemplate);
+
   // Закрываем dropdown при клике снаружи
   useEffect(() => {
     if (!openMenu) return;
@@ -257,13 +286,13 @@ export default function RegisterTable() {
     clearUndoTimer();
     const count = deleted.length;
     const message = count === 1
-      ? `Регистр «${deleted[0].name}» удалён`
-      : `Удалено регистров: ${count}`;
+      ? t('undo.deletedOne', { name: deleted[0].name })
+      : t('undo.deletedMany', { count });
     setUndoState({ deletedRegisters: deleted, message });
     undoTimerRef.current = setTimeout(() => {
       setUndoState(null);
     }, 5000);
-  }, [clearUndoTimer]);
+  }, [clearUndoTimer, t]);
 
   const handleUndo = useCallback(() => {
     if (!undoState) return;
@@ -723,6 +752,37 @@ export default function RegisterTable() {
     reader.readAsText(file);
   }, []);
 
+  // Hero drop zone — роутинг по расширению файла
+  const handleHeroDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setHeroDragging(false);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
+
+    const templateFiles: File[] = [];
+    const csvFiles: File[] = [];
+    const docFiles: File[] = [];
+    for (const f of droppedFiles) {
+      const name = f.name.toLowerCase();
+      if (name.endsWith('.json.jinja') || name.endsWith('.json')) {
+        templateFiles.push(f);
+      } else if (name.endsWith('.csv')) {
+        csvFiles.push(f);
+      } else {
+        docFiles.push(f);
+      }
+    }
+
+    if (templateFiles.length > 0) {
+      importTemplateStore(templateFiles[0]);
+    } else if (csvFiles.length > 0) {
+      importCsv(csvFiles[0]);
+    } else if (docFiles.length > 0) {
+      addFiles(docFiles);
+      setLlmImportOpen(true);
+    }
+  }, [addFiles, importTemplateStore, importCsv]);
+
   const sortIcon = (field: SortField) => {
     if (sortField !== field) return <span className="text-gray-300 ml-0.5">{'\u2195'}</span>;
     return <span className="text-blue-500 ml-0.5">{sortDir === 'asc' ? '\u25B2' : '\u25BC'}</span>;
@@ -743,11 +803,12 @@ export default function RegisterTable() {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-3" ref={menuRef}>
+        {/* Редактирование */}
         <button onClick={addRegister} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-          + Добавить
+          {t('toolbar.add')}
         </button>
         <button onClick={deleteSelected} disabled={selected.size === 0} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          Удалить ({selected.size})
+          {t('toolbar.delete')} ({selected.size})
         </button>
 
         {/* CSV dropdown */}
@@ -756,20 +817,30 @@ export default function RegisterTable() {
             onClick={() => setOpenMenu(openMenu === 'csv' ? null : 'csv')}
             className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors inline-flex items-center gap-1"
           >
-            CSV <span className="text-[10px]">▾</span>
+            {t('toolbar.csv')} <span className="text-[10px]">▾</span>
           </button>
           {openMenu === 'csv' && (
             <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-44 left-0">
-              <button onClick={() => { exportCsv(); setOpenMenu(null); }} disabled={registers.length === 0} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50">Экспорт</button>
-              <button onClick={() => { csvInputRef.current?.click(); setOpenMenu(null); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">Импорт</button>
-              <button onClick={() => { downloadCsvTemplate(); setOpenMenu(null); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">Скачать шаблон</button>
+              <button onClick={() => { exportCsv(); setOpenMenu(null); }} disabled={registers.length === 0} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50">{t('toolbar.csvExport')}</button>
+              <button onClick={() => { csvInputRef.current?.click(); setOpenMenu(null); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">{t('toolbar.csvImport')}</button>
+              <button onClick={() => { downloadCsvTemplate(); setOpenMenu(null); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">{t('toolbar.csvTemplate')}</button>
             </div>
           )}
         </div>
 
+        {/* Импорт шаблона */}
+        <button
+          onClick={() => importInputRef.current?.click()}
+          disabled={importing}
+          className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 transition-colors"
+        >
+          {importing ? t('toolbar.importing') : t('toolbar.importTemplate')}
+        </button>
+
+        {/* Организация */}
         <div className="inline-flex rounded overflow-hidden">
           <button onClick={() => setGroupManagerOpen(true)} className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-l hover:bg-gray-300 transition-colors">
-            Группы
+            {t('toolbar.groups')}
           </button>
           {hasMultipleGroups && !sortField && (() => {
             const allCollapsed = groups.every((g) => collapsedGroups.has(g.id));
@@ -777,7 +848,7 @@ export default function RegisterTable() {
               <button
                 onClick={allCollapsed ? expandAllGroups : collapseAllGroups}
                 className="px-1.5 py-1 bg-gray-200 text-gray-500 hover:bg-gray-300 transition-colors rounded-r border-l border-gray-300"
-                title={allCollapsed ? 'Развернуть все группы' : 'Свернуть все группы'}
+                title={allCollapsed ? t('misc.expandAll') : t('misc.collapseAll')}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   {allCollapsed
@@ -793,66 +864,79 @@ export default function RegisterTable() {
           <button
             onClick={() => { setSortField(null); setSortDir('asc'); }}
             className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full hover:bg-amber-100 transition-colors"
-            title="Нажмите, чтобы сбросить сортировку и вернуть группировку"
+            title={t('toolbar.sortResetTitle')}
           >
-            <span>Сортировка</span>
+            <span>{t('toolbar.sortReset')}</span>
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         )}
-        <button onClick={() => setLanguageManagerOpen(true)} className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
-          Языки
+        {hasTranslations && (
+          <button onClick={() => setLanguageManagerOpen(true)} className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
+            {t('toolbar.languages')}
+          </button>
+        )}
+
+        {/* AI: кнопка Анализ + dropdown AI */}
+        <button
+          onClick={() => setLlmImportOpen(true)}
+          className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors inline-flex items-center gap-1"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+          </svg>
+          {t('toolbar.analyze')}
         </button>
 
-        {/* LLM dropdown */}
         <div className="relative">
           <button
-            onClick={() => setOpenMenu(openMenu === 'llm' ? null : 'llm')}
+            onClick={() => setOpenMenu(openMenu === 'ai' ? null : 'ai')}
             className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors inline-flex items-center gap-1"
           >
-            LLM <span className="text-[10px]">▾</span>
+            {t('toolbar.ai')} <span className="text-[10px]">▾</span>
           </button>
-          {openMenu === 'llm' && (
+          {openMenu === 'ai' && (
             <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-52 left-0">
-              <button onClick={() => { setLlmImportOpen(true); setOpenMenu(null); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">Анализ документа</button>
-              {/* Автоперевод — подменю с выбором языка */}
-              <div className="relative">
-                <button
-                  onClick={() => setTranslateMenuOpen((v) => !v)}
-                  className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 flex items-center justify-between"
-                  disabled={!(llmAvailable || llmConfig.apiUrl) || languages.length === 0}
-                  title={!(llmAvailable || llmConfig.apiUrl) ? 'LLM не настроен' : languages.length === 0 ? 'Добавьте языки' : 'Автоперевод через LLM'}
-                >
-                  <span>Автоперевод</span>
-                  <span className="text-[10px] text-gray-400">{translateMenuOpen ? '▴' : '▸'}</span>
-                </button>
-                {translateMenuOpen && (
-                  <div className="border-t border-gray-100">
-                    {languages.map((lang) => (
-                      <button
-                        key={lang.code}
-                        onClick={() => { translateAll(lang.code); setTranslateMenuOpen(false); setOpenMenu(null); }}
-                        disabled={translating}
-                        className="block w-full text-left px-5 py-1.5 text-sm hover:bg-purple-50 disabled:opacity-50 flex items-center gap-2"
-                      >
-                        <span className="text-[10px] font-mono text-gray-400 uppercase w-6">{lang.code}</span>
-                        <span className="truncate">{lang.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Автоперевод — только если поддержка переводов для текущей локали */}
+              {hasTranslations && (
+                <div className="relative">
+                  <button
+                    onClick={() => setTranslateMenuOpen((v) => !v)}
+                    className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 flex items-center justify-between"
+                    disabled={!(llmAvailable || llmConfig.apiUrl) || languages.length === 0}
+                    title={!(llmAvailable || llmConfig.apiUrl) ? t('misc.llmNotConfigured') : languages.length === 0 ? t('misc.addLanguages') : t('misc.autoTranslateTitle')}
+                  >
+                    <span>{t('toolbar.autoTranslate')}</span>
+                    <span className="text-[10px] text-gray-400">{translateMenuOpen ? '▴' : '▸'}</span>
+                  </button>
+                  {translateMenuOpen && (
+                    <div className="border-t border-gray-100">
+                      {languages.map((lang) => (
+                        <button
+                          key={lang.code}
+                          onClick={() => { translateAll(lang.code); setTranslateMenuOpen(false); setOpenMenu(null); }}
+                          disabled={translating}
+                          className="block w-full text-left px-5 py-1.5 text-sm hover:bg-purple-50 disabled:opacity-50 flex items-center gap-2"
+                        >
+                          <span className="text-[10px] font-mono text-gray-400 uppercase w-6">{lang.code}</span>
+                          <span className="truncate">{lang.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 onClick={() => { normalizeToEnglish(); setOpenMenu(null); }}
                 disabled={translating || !(llmAvailable || llmConfig.apiUrl)}
                 className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
-                title="Кириллица в name/description → RU-перевод, замена на английский"
+                title={t('toolbar.normalizeEnTitle')}
               >
-                Нормализовать → EN
+                {t('toolbar.normalizeEn')}
               </button>
               <div className="border-t border-gray-100 my-0.5" />
-              <button onClick={() => { setLlmSettingsOpen(true); setOpenMenu(null); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">Настройки</button>
+              <button onClick={() => { setLlmSettingsOpen(true); setOpenMenu(null); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">{t('toolbar.llmSettings')}</button>
             </div>
           )}
         </div>
@@ -861,7 +945,7 @@ export default function RegisterTable() {
         {translating && (
           <span className="inline-flex items-center gap-1.5 text-xs text-purple-600">
             <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" /></svg>
-            Перевод...
+            {t('toolbar.translating')}
           </span>
         )}
         {translateResult && !translating && (
@@ -870,7 +954,32 @@ export default function RegisterTable() {
         {translateError && !translating && (
           <span className="text-xs text-red-600 truncate max-w-48" title={translateError}>{translateError}</span>
         )}
-        <span className="ml-auto text-sm text-gray-500">{registers.length} рег.</span>
+
+        {/* Экспорт (правая сторона) */}
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative" ref={downloadRef}>
+            <button
+              onClick={() => setDownloadOpen(!downloadOpen)}
+              disabled={registers.length === 0}
+              className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors inline-flex items-center gap-1"
+            >
+              {t('toolbar.download')} <span className="text-[10px]">▾</span>
+            </button>
+            {downloadOpen && (
+              <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-48 right-0">
+                <button onClick={() => { onDownloadJson(); setDownloadOpen(false); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">{t('toolbar.downloadJson')}</button>
+                <button onClick={() => { onDownloadJinja(); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">{t('toolbar.downloadJinja')}</button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onResetAll}
+            className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+          >
+            {t('toolbar.newTemplate')}
+          </button>
+          <span className="text-sm text-gray-500">{t('toolbar.regCount', { count: registers.length })}</span>
+        </div>
       </div>
 
       {registers.length > 0 ? (
@@ -891,21 +1000,21 @@ export default function RegisterTable() {
                       }
                     }}
                     className="rounded"
-                    title="Выделить все / снять выделение"
+                    title={t('table.selectAll')}
                   />
                 </th>
-                <SortTh field="enabled" className="w-8"><span title="Включить/выключить регистр в шаблоне">Вкл</span></SortTh>
-                <SortTh field="address" className="w-16"><span title="Адрес Modbus-регистра. Число или побитовый формат reg:shift:width (напр. 109:1:2)">Адр.</span></SortTh>
-                <SortTh field="name"><span title="Имя канала/параметра на английском. Используется как ключ в translations">Имя</span></SortTh>
-                <SortTh field="reg_type" className="w-24"><span title="Тип Modbus-регистра: holding, input, coil, discrete">Тип</span></SortTh>
-                <SortTh field="format" className="w-16"><span title="Формат данных в регистре: u16, s16, u32, float, string и др. Определяет количество регистров">Формат</span></SortTh>
-                <SortTh field="units" className="w-16"><span title="Единицы измерения: V, A, W, kWh, deg C, %, Ohm и др.">Ед.</span></SortTh>
-                <SortTh field="channel_type" className="w-20"><span title="Тип контрола: value — число, switch — переключатель, range — ползунок, text — строка. Остальные deprecated — используйте value + единицы">Канал</span></SortTh>
-                <SortTh field="group"><span title="Группа для объединения каналов/параметров в UI. Задаёт логическую секцию (напр. power_meters, settings)">Группа</span></SortTh>
-                <SortTh field="readonly" className="w-8 text-center"><span title="Только чтение — драйвер не будет записывать в регистр">R/O</span></SortTh>
-                <SortTh field="is_parameter" className="w-8 text-center"><span title="Параметр — настройка устройства (вкладка Настройки). Канал — данные/управление (основная вкладка)">П</span></SortTh>
-                <th className="px-1 py-2 font-medium text-gray-400 w-7 text-center" title="Удалить регистр"></th>
-                <th className="px-1 py-2 font-medium text-gray-400 w-9 text-center" title="Развернуть: описание, переводы, enum, масштаб, условия"></th>
+                <SortTh field="enabled" className="w-8"><span title={t('table.enabledTip')}>{t('table.enabled')}</span></SortTh>
+                <SortTh field="address" className="w-16"><span title={t('table.addressTip')}>{t('table.address')}</span></SortTh>
+                <SortTh field="name"><span title={t('table.nameTip')}>{t('table.name')}</span></SortTh>
+                <SortTh field="reg_type" className="w-24"><span title={t('table.regTypeTip')}>{t('table.regType')}</span></SortTh>
+                <SortTh field="format" className="w-16"><span title={t('table.formatTip')}>{t('table.format')}</span></SortTh>
+                <SortTh field="units" className="w-16"><span title={t('table.unitsTip')}>{t('table.units')}</span></SortTh>
+                <SortTh field="channel_type" className="w-20"><span title={t('table.channelTypeTip')}>{t('table.channelType')}</span></SortTh>
+                <SortTh field="group"><span title={t('table.groupTip')}>{t('table.group')}</span></SortTh>
+                <SortTh field="readonly" className="w-8 text-center"><span title={t('table.readonlyTip')}>{t('table.readonly')}</span></SortTh>
+                <SortTh field="is_parameter" className="w-8 text-center"><span title={t('table.isParameterTip')}>{t('table.isParameter')}</span></SortTh>
+                <th className="px-1 py-2 font-medium text-gray-400 w-7 text-center"></th>
+                <th className="px-1 py-2 font-medium text-gray-400 w-9 text-center"></th>
               </tr>
             </thead>
             <tbody>
@@ -958,7 +1067,7 @@ export default function RegisterTable() {
                             <span className={`text-xs ${group.level > 0 ? 'text-gray-500' : 'font-semibold text-gray-700'}`}>{group.title}</span>
                             <span className="text-[10px] text-gray-400">{group.registers.length}</span>
                             {dragOverGroupId === group.id && (
-                              <span className="text-[10px] text-blue-500 font-medium ml-1">← сюда</span>
+                              <span className="text-[10px] text-blue-500 font-medium ml-1">{t('row.dropHere')}</span>
                             )}
                           </div>
                         </td>
@@ -1060,9 +1169,64 @@ export default function RegisterTable() {
           </table>
         </div>
       ) : (
-        <p className="text-center text-gray-400 text-sm py-6">
-          Загрузите файл, импортируйте CSV или добавьте регистры вручную
-        </p>
+        <div
+          onDrop={handleHeroDrop}
+          onDragOver={(e) => { e.preventDefault(); setHeroDragging(true); }}
+          onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setHeroDragging(false); }}
+          className={`rounded-xl border-2 border-dashed transition-colors py-6 ${
+            heroDragging ? 'border-blue-400 bg-blue-50/40' : 'border-transparent'
+          }`}
+        >
+          {heroDragging ? (
+            <div className="flex flex-col items-center justify-center py-12 text-blue-500">
+              <svg className="w-12 h-12 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <p className="text-sm font-medium">{t('hero.dropHint')}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Из документа (AI) — основной путь */}
+              <button
+                onClick={() => setLlmImportOpen(true)}
+                className="flex flex-col items-center text-center border border-blue-200 bg-blue-50/30 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition cursor-pointer"
+              >
+                <svg className="w-8 h-8 text-blue-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                </svg>
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.aiTitle')}</h3>
+                <p className="text-xs text-gray-500 mb-3">{t('hero.aiDesc')}</p>
+                <span className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">{t('hero.aiButton')}</span>
+              </button>
+
+              {/* Импорт шаблона */}
+              <button
+                onClick={() => importInputRef.current?.click()}
+                className="flex flex-col items-center text-center border border-gray-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
+              >
+                <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.importTitle')}</h3>
+                <p className="text-xs text-gray-500 mb-3">{t('hero.importDesc')}</p>
+                <span className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">{t('hero.importButton')}</span>
+              </button>
+
+              {/* Вручную / CSV */}
+              <button
+                onClick={addRegister}
+                className="flex flex-col items-center text-center border border-gray-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
+              >
+                <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v1.5" />
+                </svg>
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.manualTitle')}</h3>
+                <p className="text-xs text-gray-500 mb-3">{t('hero.manualDesc')}</p>
+                <span className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">{t('hero.manualButton')}</span>
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       <GroupManager isOpen={groupManagerOpen} onClose={() => setGroupManagerOpen(false)} />
@@ -1078,7 +1242,7 @@ export default function RegisterTable() {
             onClick={handleUndo}
             className="px-2 py-0.5 text-sm font-medium bg-blue-600 hover:bg-blue-500 rounded transition-colors"
           >
-            Отменить
+            {t('undo.button')}
           </button>
           <button
             onClick={() => { clearUndoTimer(); setUndoState(null); }}
@@ -1189,6 +1353,7 @@ function RegisterRow({
   onChange,
   onToggleExpand,
 }: RegisterRowProps) {
+  const t = useT();
   const updateRegister = useStore((s) => s.updateRegister);
   const setHighlightedRegister = useStore((s) => s.setHighlightedRegister);
 
@@ -1232,7 +1397,7 @@ function RegisterRow({
           defaultValue={getDefaultValue(reg, col.field)}
           onBlur={(e) => {
             if (e.target.value === '__new__') {
-              const name = prompt('ID новой группы (snake_case):');
+              const name = prompt(t('row.newGroupPrompt'));
               if (name) {
                 onChange(reg.id, col.field, name.trim());
               }
@@ -1251,7 +1416,7 @@ function RegisterRow({
           {groupOptions.map((g) => (
             <option key={g} value={g}>{g}</option>
           ))}
-          <option value="__new__">+ новая...</option>
+          <option value="__new__">{t('row.newGroupOption')}</option>
         </select>
       );
     }
@@ -1274,7 +1439,7 @@ function RegisterRow({
           className={inputClass}
         >
           {allOptions.map((opt) => (
-            <option key={opt} value={opt}>{opt || '(нет)'}</option>
+            <option key={opt} value={opt}>{opt || t('row.none')}</option>
           ))}
         </select>
       );
@@ -1296,7 +1461,7 @@ function RegisterRow({
           onStopEdit();
         }}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') onStopEdit(); }}
-        placeholder={col.field === 'address' ? '0 или 109:1:2' : col.placeholder}
+        placeholder={col.field === 'address' ? t('row.addressPlaceholder') : col.placeholder}
         className={inputClass}
       />
     );
@@ -1344,7 +1509,7 @@ function RegisterRow({
               <span
                 draggable
                 className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 select-none flex-shrink-0"
-                title="Перетащить"
+                title={t('row.drag')}
               >
                 <svg width="6" height="10" viewBox="0 0 6 10" fill="currentColor">
                   <circle cx="1" cy="1" r="1"/><circle cx="5" cy="1" r="1"/>
@@ -1380,7 +1545,7 @@ function RegisterRow({
                 {conditionDependentsCount > 0 && (
                   <span
                     className="flex-shrink-0 inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-medium bg-purple-100 text-purple-700 rounded cursor-help"
-                    title={`Этот параметр используется в condition ${conditionDependentsCount} ${conditionDependentsCount === 1 ? 'канала' : 'каналов'} — влияет на их отображение`}
+                    title={t('row.conditionBadge', { count: conditionDependentsCount })}
                   >
                     <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
@@ -1393,7 +1558,7 @@ function RegisterRow({
                 {reg.condition && (
                   <span
                     className="flex-shrink-0 inline-flex items-center px-1 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded cursor-help"
-                    title={`Условие: ${reg.condition}`}
+                    title={t('preview.conditionLabel', { cond: reg.condition })}
                   >
                     ?=
                   </span>
@@ -1413,16 +1578,16 @@ function RegisterRow({
 
         {/* R/O */}
         <td className="px-1 py-1 text-center">
-          <input type="checkbox" checked={reg.readonly ?? false} onChange={(e) => updateRegister(reg.id, { readonly: e.target.checked })} className="rounded" title="Только чтение" />
+          <input type="checkbox" checked={reg.readonly ?? false} onChange={(e) => updateRegister(reg.id, { readonly: e.target.checked })} className="rounded" title={t('row.readonlyTip')} />
         </td>
 
         {/* Параметр */}
         <td className="px-1 py-1 text-center">
-          <input type="checkbox" checked={reg.is_parameter} onChange={(e) => updateRegister(reg.id, { is_parameter: e.target.checked })} className="rounded" title={reg.is_parameter ? 'Параметр' : 'Канал'} />
+          <input type="checkbox" checked={reg.is_parameter} onChange={(e) => updateRegister(reg.id, { is_parameter: e.target.checked })} className="rounded" title={reg.is_parameter ? t('row.parameterTip') : t('row.channelTip')} />
         </td>
 
         <td className="px-1 py-1">
-          <button onClick={onRemove} className="text-red-400 hover:text-red-600 font-bold text-xs" title="Удалить регистр">x</button>
+          <button onClick={onRemove} className="text-red-400 hover:text-red-600 font-bold text-xs" title={t('row.deleteRegister')}>x</button>
         </td>
 
         {/* Раскрыть/свернуть — в самом конце строки */}
@@ -1430,7 +1595,7 @@ function RegisterRow({
           <button
             onClick={onToggleExpand}
             className={`px-1.5 py-1 rounded transition-colors text-xs font-medium ${isExpanded ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'}`}
-            title={isExpanded ? 'Свернуть' : 'Развернуть детали'}
+            title={isExpanded ? t('row.collapse') : t('row.expand')}
           >
             <svg className={`w-4 h-4 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -1462,6 +1627,7 @@ interface EditableCellProps {
 }
 
 function EditableCell({ isEditing, displayValue, placeholder, onStartEdit, renderInput }: EditableCellProps) {
+  const t = useT();
   const focusRef: React.RefCallback<HTMLElement> = (el) => {
     if (el) {
       el.focus();
@@ -1482,7 +1648,7 @@ function EditableCell({ isEditing, displayValue, placeholder, onStartEdit, rende
   }
 
   return (
-    <span onClick={onStartEdit} className="cursor-pointer block truncate min-h-[1.25rem] text-xs" title="Нажмите для редактирования">
+    <span onClick={onStartEdit} className="cursor-pointer block truncate min-h-[1.25rem] text-xs" title={t('row.clickToEdit')}>
       {displayValue || <span className="text-gray-300">{placeholder ?? ''}</span>}
     </span>
   );
@@ -1492,9 +1658,10 @@ function EditableCell({ isEditing, displayValue, placeholder, onStartEdit, rende
 
 // --- Кнопка нормализации имени →EN в строке таблицы ---
 
-const HAS_CYRILLIC = /[а-яёА-ЯЁ]/;
 
 function NameNormalizeButton({ reg }: { reg: Register }) {
+  const t = useT();
+  const hasTranslations = useHasTranslations();
   const llmAvailable = useStore((s) => s.llmAvailable);
   const llmConfig = useStore((s) => s.llmConfig);
   const updateRegister = useStore((s) => s.updateRegister);
@@ -1502,7 +1669,7 @@ function NameNormalizeButton({ reg }: { reg: Register }) {
   const languages = useStore((s) => s.languages);
   const [loading, setLoading] = useState(false);
 
-  if (!llmAvailable || !reg.name || !HAS_CYRILLIC.test(reg.name)) return null;
+  if (!llmAvailable || !reg.name || !HAS_NON_LATIN.test(reg.name)) return null;
 
   return (
     <button
@@ -1512,19 +1679,23 @@ function NameNormalizeButton({ reg }: { reg: Register }) {
         try {
           const result = await translateStrings({ _: reg.name }, 'en', llmConfig);
           if (result._) {
-            if (!languages.some((l) => l.code === 'ru')) {
-              addLanguage({ code: 'ru', label: 'Русский' });
+            if (hasTranslations) {
+              if (!languages.some((l) => l.code === 'ru')) {
+                addLanguage({ code: 'ru', label: 'Русский' });
+              }
+              const translations = { ...(reg.translations ?? {}) };
+              translations.ru = { ...(translations.ru ?? {}), name: reg.name };
+              updateRegister(reg.id, { name: result._, translations });
+            } else {
+              updateRegister(reg.id, { name: result._ });
             }
-            const translations = { ...(reg.translations ?? {}) };
-            translations.ru = { ...(translations.ru ?? {}), name: reg.name };
-            updateRegister(reg.id, { name: result._, translations });
           }
         } catch { /* игнорируем */ }
         setLoading(false);
       }}
       disabled={loading}
       className="flex-shrink-0 text-orange-400 hover:text-orange-600 disabled:opacity-50"
-      title="Перевести на English (русский сохранится в переводах)"
+      title={t('row.normalizeToEn')}
     >
       {loading ? (
         <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" /></svg>

@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { getT } from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -27,14 +28,15 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const t = getT();
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
           <div className="max-w-md w-full bg-white rounded-lg shadow-sm p-6 text-center">
             <h2 className="text-lg font-semibold text-red-800 mb-2">
-              Ошибка приложения
+              {t('errorBoundary.title')}
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Произошла непредвиденная ошибка в интерфейсе.
+              {t('errorBoundary.message')}
             </p>
             {this.state.error && (
               <p className="text-xs text-red-600 font-mono bg-red-50 rounded p-2 mb-4 break-words">
@@ -45,7 +47,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               onClick={this.handleReset}
               className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
             >
-              Перезагрузить
+              {t('errorBoundary.reload')}
             </button>
           </div>
         </div>

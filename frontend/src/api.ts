@@ -1,5 +1,6 @@
 import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress } from './types';
 import { LANGUAGE_NAMES } from './constants';
+import { getT } from './i18n';
 
 export interface ServerStatus {
   llm_available: boolean;
@@ -10,7 +11,7 @@ export interface ServerStatus {
 
 export async function fetchStatus(): Promise<ServerStatus> {
   const res = await fetch('/api/status');
-  if (!res.ok) throw new Error(`Ошибка статуса: ${res.status}`);
+  if (!res.ok) throw new Error(getT()('api.statusError', { code: res.status }));
   return res.json();
 }
 
@@ -26,7 +27,7 @@ export async function buildTemplate(request: BuildRequest): Promise<WBTemplate> 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(`Ошибка сборки: ${res.status}`);
+  if (!res.ok) throw new Error(getT()('api.buildError', { code: res.status }));
   return res.json();
 }
 
@@ -49,7 +50,7 @@ export async function fetchPrompts(): Promise<{
   template_type_instructions: Record<string, string>;
 }> {
   const res = await fetch('/api/prompts');
-  if (!res.ok) throw new Error(`Ошибка получения промптов: ${res.status}`);
+  if (!res.ok) throw new Error(getT()('api.promptsError', { code: res.status }));
   return res.json();
 }
 
@@ -62,7 +63,7 @@ export async function fetchModels(
   if (config?.apiKey) formData.append('llm_api_key', config.apiKey);
   const res = await fetch('/api/models', { method: 'POST', body: formData });
   if (!res.ok) {
-    let detail = `Ошибка: ${res.status}`;
+    let detail = getT()('api.modelsError', { code: res.status });
     try {
       const errData = await res.json();
       if (errData.detail) detail = errData.detail;
@@ -104,12 +105,12 @@ export async function analyzeFiles(
     const response = await fetch('/api/analyze', { method: 'POST', body: formData, signal });
 
     if (!response.ok) {
-      callbacks.onError(`Ошибка сервера: ${response.status}`);
+      callbacks.onError(getT()('api.serverError', { code: response.status }));
       return;
     }
     const reader = response.body?.getReader();
     if (!reader) {
-      callbacks.onError('Нет потока данных');
+      callbacks.onError(getT()('api.noStream'));
       return;
     }
     const decoder = new TextDecoder();
@@ -154,13 +155,9 @@ export async function analyzeFiles(
     if (err instanceof Error && err.name === 'AbortError') return;
     let message: string;
     if (err instanceof TypeError || (err instanceof Error && /input stream|network|fetch|failed/i.test(err.message))) {
-      message = 'Соединение с сервером прервано.\n'
-        + 'Возможные причины:\n'
-        + '- Таймаут ожидания ответа от LLM (для больших PDF может потребоваться 5-10 мин)\n'
-        + '- Проблемы с сетью или перезагрузка сервера\n'
-        + 'Попробуйте разбить документ на части или загрузить меньше страниц.';
+      message = getT()('api.connectionLost');
     } else {
-      message = err instanceof Error ? err.message : 'Неизвестная ошибка соединения';
+      message = err instanceof Error ? err.message : getT()('api.unknownError');
     }
     callbacks.onError(message);
   }
@@ -173,7 +170,7 @@ export async function buildJinjaTemplate(request: BuildRequest): Promise<string>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(`Ошибка сборки Jinja: ${res.status}`);
+  if (!res.ok) throw new Error(getT()('api.buildJinjaError', { code: res.status }));
   return res.text();
 }
 
@@ -185,10 +182,18 @@ export async function importTemplate(
   formData.append('file', file);
   const res = await fetch('/api/import-template', { method: 'POST', body: formData });
   if (!res.ok) {
-    let detail = `Ошибка импорта: ${res.status}`;
+    const t = getT();
+    let detail = t('api.importError', { code: res.status });
     try {
       const errData = await res.json();
-      if (errData.detail) detail = errData.detail;
+      if (errData.detail) {
+        // Известные ошибки бэкенда — переводим на фронте
+        if (errData.detail.includes('Not a wb-mqtt-serial template')) {
+          detail = t('api.importNotTemplate');
+        } else {
+          detail = errData.detail;
+        }
+      }
     } catch { /* текст ошибки недоступен */ }
     throw new Error(detail);
   }
@@ -218,7 +223,7 @@ export async function translateStrings(
     }),
   });
   if (!res.ok) {
-    let detail = `Ошибка перевода: ${res.status}`;
+    let detail = getT()('api.translateError', { code: res.status });
     try {
       const errData = await res.json();
       if (errData.detail) detail = errData.detail;

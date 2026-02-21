@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
+import { useT } from '../i18n';
 
 const ACCEPTED = '.pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.bmp';
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp'];
 
 /** Компонент загрузки файлов с drag-n-drop и вставкой из буфера */
 export default function FileUpload() {
+  const t = useT();
   const files = useStore((s) => s.files);
   const addFiles = useStore((s) => s.addFiles);
   const removeFile = useStore((s) => s.removeFile);
@@ -22,10 +24,11 @@ export default function FileUpload() {
       const maxBytes = maxFileSizeMb * 1024 * 1024;
       const oversized = arr.filter((f) => f.size > maxBytes);
       if (oversized.length > 0) {
-        const names = oversized.map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} МБ)`).join(', ');
+        const names = oversized.map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`).join(', ');
         setSizeError(
-          `Файл${oversized.length > 1 ? 'ы' : ''} превыша${oversized.length > 1 ? 'ют' : 'ет'} лимит ${maxFileSizeMb} МБ: ${names}. ` +
-          `Попробуйте разделить документ на части или конвертировать в изображения.`
+          oversized.length > 1
+            ? t('upload.sizeErrorMulti', { size: maxFileSizeMb, names })
+            : t('upload.sizeError', { size: maxFileSizeMb, names })
         );
         const valid = arr.filter((f) => f.size <= maxBytes);
         if (valid.length > 0) addFiles(valid);
@@ -34,7 +37,7 @@ export default function FileUpload() {
       setSizeError(null);
       addFiles(arr);
     },
-    [addFiles, maxFileSizeMb],
+    [addFiles, maxFileSizeMb, t],
   );
 
   const handleDrop = useCallback(
@@ -109,13 +112,13 @@ export default function FileUpload() {
       >
         <div className="text-4xl mb-2">📎</div>
         <p className="text-gray-600 font-medium">
-          Перетащите файлы сюда или нажмите для выбора
+          {t('upload.dropzone')}
         </p>
         <p className="text-gray-400 text-sm mt-1">
-          PDF, Excel, изображения (PNG, JPG, WebP, BMP) — до {maxFileSizeMb} МБ
+          {t('upload.formats', { size: maxFileSizeMb })}
         </p>
         <p className="text-gray-400 text-xs mt-0.5">
-          Ctrl+V — вставка изображения из буфера
+          {t('upload.paste')}
         </p>
         <input
           ref={inputRef}
@@ -149,13 +152,13 @@ export default function FileUpload() {
               <span className="text-gray-700 truncate mr-2">
                 📎 {file.name}
                 <span className="text-gray-400 ml-2">
-                  ({(file.size / 1024).toFixed(1)} КБ)
+                  ({t('upload.sizeKb', { size: (file.size / 1024).toFixed(1) })})
                 </span>
               </span>
               <button
                 onClick={() => removeFile(index)}
                 className="text-red-400 hover:text-red-600 flex-shrink-0 font-bold"
-                title="Удалить файл"
+                title={t('upload.removeFile')}
               >
                 ✕
               </button>

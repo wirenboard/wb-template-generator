@@ -250,6 +250,36 @@ class TestJinjaImport:
         assert result["registers"][1]["name"] == "Ch 2"
 
 
+class TestImportValidation:
+    """Тесты валидации входного JSON."""
+
+    def test_invalid_json_raises(self):
+        """Невалидный JSON (не wb-mqtt-serial) должен выбросить ValueError."""
+        with pytest.raises(ValueError, match="Not a wb-mqtt-serial template"):
+            import_template({"name": "package.json", "version": "1.0.0"})
+
+    def test_empty_dict_raises(self):
+        """Пустой dict — не шаблон."""
+        with pytest.raises(ValueError, match="Not a wb-mqtt-serial template"):
+            import_template({})
+
+    def test_device_type_only_passes(self):
+        """Шаблон с device_type, но без channels/parameters — допускается."""
+        result = import_template({"device_type": "test-device", "device": {}})
+        assert result["device_info"]["id"] == "test-device"
+
+    def test_channels_only_passes(self):
+        """Шаблон только с каналами — допускается."""
+        result = import_template({
+            "device": {
+                "name": "Test",
+                "id": "test",
+                "channels": [{"name": "Ch", "address": 0, "reg_type": "holding", "type": "value", "format": "u16"}],
+            }
+        })
+        assert len(result["registers"]) == 1
+
+
 class TestRoundtrip:
     """Тест roundtrip: import → build → проверка ключевых полей."""
 

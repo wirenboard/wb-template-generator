@@ -1,4 +1,5 @@
 import { useStore } from '../store';
+import { useT } from '../i18n';
 import type { WBParameter } from '../types';
 
 interface ParameterPreviewProps {
@@ -12,6 +13,7 @@ interface ParameterPreviewProps {
 
 /** Превью параметра в стиле WB (настройки устройства) */
 export default function ParameterPreview({ param, paramKey, registerId, displayName, displayDescription, onValueChange }: ParameterPreviewProps) {
+  const t = useT();
   const setHighlightedRegister = useStore((s) => s.setHighlightedRegister);
   const highlightedRegisterId = useStore((s) => s.highlightedRegisterId);
 
@@ -104,9 +106,9 @@ export default function ParameterPreview({ param, paramKey, registerId, displayN
           {condition && (
             <span
               className="text-[10px] bg-yellow-100 text-yellow-700 rounded px-1 flex-shrink-0 cursor-help"
-              title={`Условие: ${condition}`}
+              title={t('preview.conditionLabel', { cond: condition })}
             >
-              условный
+              {t('preview.conditional')}
             </span>
           )}
         </div>

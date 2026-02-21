@@ -7,6 +7,28 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-02-21
+
+### Добавлено
+- **i18n**: мультиязычный интерфейс — 4 языка (RU, EN, KZ, IT) с автодетектом из браузера
+- **i18n**: переключатель языка в шапке — dropdown-меню с выбором из 4 языков
+- **i18n**: лёгкая система переводов без внешних зависимостей (`useT()` хук + `getT()` для non-React)
+- **UX**: hero-блок при пустой таблице — 3 карточки с drag-n-drop: AI-анализ, импорт шаблона, CSV/ручной ввод
+- **UX**: hero drop zone с роутингом по расширению файла (.json→импорт шаблона, .csv→CSV, остальное→AI)
+- **UX**: кнопка «Анализ» с иконкой sparkle в тулбаре — прямой доступ к AI-анализу
+- **UX**: dropdown «AI» — автоперевод, нормализация, настройки LLM
+- Валидация JSON при импорте шаблона — отклоняет файлы без channels/parameters/device_type
+- Конфигурация `LOCALE_TRANSLATION_LANGUAGES` — управление доступностью переводов по локалям
+
+### Изменено
+- Тулбар реструктурирован: файловые операции перенесены из шапки в тулбар таблицы
+- Шапка компактная: заголовок + версия + поля устройства + язык — в одну строку
+- Все UI-строки (~250 ключей) переведены на 4 языка
+- FORMAT_OPTIONS: `description` → `descriptionKey` для совместимости с i18n
+- Нормализация → EN работает для любого нелатинского текста (не только кириллица)
+- Переводы (языки, автоперевод) скрыты для EN/KZ/IT — контроллер пока поддерживает только RU+EN
+- Язык интерфейса по умолчанию — EN
+
 ## [0.4.0] - 2026-02-19
 
 ### Добавлено
@@ -63,7 +85,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.1.0...v0.2.0

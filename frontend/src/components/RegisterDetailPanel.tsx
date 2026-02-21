@@ -1,7 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useStore } from '../store';
+import { useT, useHasTranslations } from '../i18n';
 import type { Register, EnumEntry } from '../types';
 import { translateStrings } from '../api';
+import { HAS_NON_LATIN } from '../constants';
 import EnumEditor from './EnumEditor';
 
 interface Props {
@@ -103,7 +105,6 @@ function getVisibility(reg: Register): FieldVisibility {
   };
 }
 
-const HAS_CYRILLIC = /[а-яёА-ЯЁ]/;
 
 /** Спиннер для кнопок LLM */
 function LlmSpinner() {
@@ -112,6 +113,7 @@ function LlmSpinner() {
 
 /** Кнопка перевода одного поля через LLM */
 function TranslateButton({ text, lang, onResult }: { text: string; lang: string; onResult: (v: string) => void }) {
+  const t = useT();
   const llmAvailable = useStore((s) => s.llmAvailable);
   const llmConfig = useStore((s) => s.llmConfig);
   const [loading, setLoading] = useState(false);
@@ -126,7 +128,7 @@ function TranslateButton({ text, lang, onResult }: { text: string; lang: string;
       const result = await translateStrings({ _: text }, lang, llmConfig);
       if (result._) onResult(result._);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Ошибка';
+      const msg = e instanceof Error ? e.message : t('detail.translateError');
       setError(msg);
       setTimeout(() => setError(null), 4000);
     }
@@ -138,36 +140,41 @@ function TranslateButton({ text, lang, onResult }: { text: string; lang: string;
       onClick={handleClick}
       disabled={loading}
       className={`flex-shrink-0 ${error ? 'text-red-500' : 'text-purple-400 hover:text-purple-600'} disabled:opacity-50`}
-      title={error ?? `Перевести на ${lang}`}
+      title={error ?? t('misc.translateTo', { lang })}
     >
       {loading ? <LlmSpinner /> : error ? <span className="text-[9px] font-bold">!</span> : <span className="text-[10px] font-bold uppercase">{lang}</span>}
     </button>
   );
 }
 
-/** Кнопка нормализации → EN: переводит кириллицу на английский, сохраняет русский в translations */
+/** Кнопка нормализации → EN: переводит не-латинский текст на английский.
+ *  Сохраняет оригинал в translations.ru только если у текущей UI-локали есть поддержка переводов. */
 function NormalizeToEnButton({ text, onTranslated, onSaveRussian }: {
   text: string;
   onTranslated: (en: string) => void;
   onSaveRussian: (ru: string) => void;
 }) {
+  const t = useT();
+  const hasTranslations = useHasTranslations();
   const llmAvailable = useStore((s) => s.llmAvailable);
   const llmConfig = useStore((s) => s.llmConfig);
   const addLanguage = useStore((s) => s.addLanguage);
   const languages = useStore((s) => s.languages);
   const [loading, setLoading] = useState(false);
 
-  if (!llmAvailable || !text || !HAS_CYRILLIC.test(text)) return null;
+  if (!llmAvailable || !text || !HAS_NON_LATIN.test(text)) return null;
 
   const handleClick = async () => {
     setLoading(true);
     try {
       const result = await translateStrings({ _: text }, 'en', llmConfig);
       if (result._) {
-        if (!languages.some((l) => l.code === 'ru')) {
-          addLanguage({ code: 'ru', label: 'Русский' });
+        if (hasTranslations) {
+          if (!languages.some((l) => l.code === 'ru')) {
+            addLanguage({ code: 'ru', label: 'Русский' });
+          }
+          onSaveRussian(text);
         }
-        onSaveRussian(text);
         onTranslated(result._);
       }
     } catch { /* игнорируем */ }
@@ -179,7 +186,7 @@ function NormalizeToEnButton({ text, onTranslated, onSaveRussian }: {
       onClick={handleClick}
       disabled={loading}
       className="flex-shrink-0 text-orange-400 hover:text-orange-600 disabled:opacity-50"
-      title="Перевести на English (русский сохранится в переводах)"
+      title={t('detail.normalizeToEnTip')}
     >
       {loading ? <LlmSpinner /> : <span className="text-[10px] font-bold">→EN</span>}
     </button>
@@ -187,18 +194,20 @@ function NormalizeToEnButton({ text, onTranslated, onSaveRussian }: {
 }
 
 /** Кнопки-операторы для поля condition */
-const CONDITION_OPERATORS = [
-  { label: '==', value: '==', title: 'Равно' },
-  { label: '!=', value: '!=', title: 'Не равно' },
-  { label: '>', value: '>', title: 'Больше' },
-  { label: '<', value: '<', title: 'Меньше' },
-  { label: '>=', value: '>=', title: 'Больше или равно' },
-  { label: '<=', value: '<=', title: 'Меньше или равно' },
-  { label: '&&', value: '&&', title: 'И (логическое)' },
-  { label: '||', value: '||', title: 'ИЛИ (логическое)' },
-  { label: '( )', value: '(', title: 'Скобки группировки', insert: '()' },
-  { label: 'isDefined', value: 'isDefined()', title: 'Проверка: задан ли параметр в конфиге' },
-];
+function getConditionOperators(t: (key: string) => string) {
+  return [
+    { label: '==', value: '==', title: t('condition.equal') },
+    { label: '!=', value: '!=', title: t('condition.notEqual') },
+    { label: '>', value: '>', title: t('condition.greater') },
+    { label: '<', value: '<', title: t('condition.less') },
+    { label: '>=', value: '>=', title: t('condition.greaterEq') },
+    { label: '<=', value: '<=', title: t('condition.lessEq') },
+    { label: '&&', value: '&&', title: t('condition.and') },
+    { label: '||', value: '||', title: t('condition.or') },
+    { label: '( )', value: '(', title: t('condition.parens'), insert: '()' },
+    { label: 'isDefined', value: 'isDefined()', title: t('condition.isDefined') },
+  ];
+}
 
 /** Поле условия с кнопками операторов и вставкой в позицию курсора */
 function ConditionField({
@@ -212,7 +221,9 @@ function ConditionField({
   availableParams: Array<{ id: string; name: string }>;
   inputClass: string;
 }) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
+  const operators = useMemo(() => getConditionOperators(t), [t]);
 
   /** Вставить текст в позицию курсора */
   const insertAtCursor = (text: string, cursorOffset?: number) => {
@@ -237,7 +248,7 @@ function ConditionField({
 
   return (
     <div>
-      <SectionTitle>Условие <Tip text="Condition — канал/параметр виден только когда условие истинно. Операторы: ==, !=, >, <, >=, <=, &&, ||, isDefined()" /></SectionTitle>
+      <SectionTitle>{t('condition.title')} <Tip text={t('condition.tip')} /></SectionTitle>
       <input
         ref={inputRef}
         type="text"
@@ -248,7 +259,7 @@ function ConditionField({
       />
       <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
         {/* Операторы */}
-        {CONDITION_OPERATORS.map((op) => (
+        {operators.map((op) => (
           <button
             key={op.label}
             type="button"
@@ -285,6 +296,8 @@ function ConditionField({
 
 /** Панель деталей регистра (раскрывается под строкой таблицы) */
 export default function RegisterDetailPanel({ register: reg }: Props) {
+  const t = useT();
+  const hasTranslations = useHasTranslations();
   const updateRegister = useStore((s) => s.updateRegister);
   const registers = useStore((s) => s.registers);
 
@@ -343,8 +356,6 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
   // Если для данного типа канала вообще нечего показывать кроме condition
   const hasAnySection = vis.description || vis.scaling || vis.limits || vis.enum || vis.onOff || vis.stringSize;
 
-  // (Языки берутся из store.languages — см. выше)
-
   return (
     <div className="bg-slate-50 border-t-2 border-blue-200 px-4 py-3">
 
@@ -354,7 +365,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
         {/* Левая колонка: имя, описание, переводы */}
         <div className="flex-1 min-w-[280px] max-w-xl space-y-2">
           <div>
-            <SectionTitle>Имя (EN) <Tip text="Английское имя канала/параметра. Используется как ключ и отображается в UI" /></SectionTitle>
+            <SectionTitle>{t('detail.nameEn')} <Tip text={t('detail.nameEnTip')} /></SectionTitle>
             <div className="flex items-center gap-1.5">
               <input type="text" value={reg.name} onChange={(e) => update({ name: e.target.value })} className={`${inputClass} flex-1`} />
               <NormalizeToEnButton
@@ -366,9 +377,9 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
           </div>
           {vis.description && (
             <div>
-              <SectionTitle>Описание <Tip text="Подсказка к полю параметра — отображается в UI устройства" /></SectionTitle>
+              <SectionTitle>{t('detail.description')} <Tip text={t('detail.descTip')} /></SectionTitle>
               <div className="flex items-center gap-1.5">
-                <input type="text" value={reg.description ?? ''} onChange={(e) => update({ description: e.target.value || undefined })} placeholder="Подсказка к полю, напр. 'Скорость обмена по Modbus'" className={`${inputClass} flex-1`} />
+                <input type="text" value={reg.description ?? ''} onChange={(e) => update({ description: e.target.value || undefined })} placeholder={t('detail.descPlaceholderText')} className={`${inputClass} flex-1`} />
                 <NormalizeToEnButton
                   text={reg.description ?? ''}
                   onTranslated={(en) => update({ description: en })}
@@ -378,15 +389,16 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
             </div>
           )}
 
+          {hasTranslations && (
           <div>
-            <SectionTitle>Переводы <Tip text="Переводы имени (и описания для параметров) на другие языки" /></SectionTitle>
+            <SectionTitle>{t('detail.translations')} <Tip text={t('detail.translationsTip')} /></SectionTitle>
             {langs.length > 0 ? (
               <div className="space-y-1.5">
                 {langs.map((lang) => (
                   <div key={lang} className="flex items-center gap-1.5">
                     <span className="text-[10px] font-mono text-gray-400 w-5 text-center uppercase flex-shrink-0">{lang}</span>
                     <div className="flex-1 min-w-0">
-                      <label className="text-[9px] text-gray-400">имя</label>
+                      <label className="text-[9px] text-gray-400">{t('detail.translationName')}</label>
                       <input
                         type="text"
                         value={translations[lang]?.name ?? ''}
@@ -401,7 +413,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
                         <button
                           onClick={() => updateTranslation(lang, 'name', '')}
                           className="text-gray-300 hover:text-red-500 transition-colors"
-                          title="Удалить"
+                          title={t('enum.delete')}
                         >
                           <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -412,7 +424,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
                     {reg.is_parameter && reg.description && (
                       <>
                         <div className="flex-1 min-w-0">
-                          <label className="text-[9px] text-gray-400">описание</label>
+                          <label className="text-[9px] text-gray-400">{t('detail.translationDesc')}</label>
                           <input
                             type="text"
                             value={translations[lang]?.description ?? ''}
@@ -427,7 +439,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
                             <button
                               onClick={() => updateTranslation(lang, 'description', '')}
                               className="text-gray-300 hover:text-red-500 transition-colors"
-                              title="Удалить"
+                              title={t('enum.delete')}
                             >
                               <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -441,14 +453,15 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
                 ))}
               </div>
             ) : (
-              <p className="text-[10px] text-gray-400">Добавьте языки через кнопку «Языки»</p>
+              <p className="text-[10px] text-gray-400">{t('detail.addLanguagesHint')}</p>
             )}
           </div>
+          )}
 
           {/* Enum — под переводами в левой колонке */}
           {vis.enum && (
             <div>
-              <SectionTitle>Enum <Tip text="Именованные значения: 0=Off, 1=On и т.д." /></SectionTitle>
+              <SectionTitle>Enum <Tip text={t('detail.enumTip')} /></SectionTitle>
               <EnumEditor entries={enumEntries} onChange={handleEnumChange} availableLanguages={langs} />
 
             </div>
@@ -471,7 +484,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {vis.scaling && (
                 <div>
-                  <SectionTitle>Масштаб <Tip text="MQTT = REG × scale + offset. Примеры: значение в 0.1°C → scale=0.1; OpenTherm давление → scale=0.1, offset=-100; инверсия NC-реле → scale=-1, offset=1" /></SectionTitle>
+                  <SectionTitle>{t('detail.scaling')} <Tip text={t('detail.scalingTip')} /></SectionTitle>
                   <div className="flex gap-1.5">
                     <div>
                       <label className={labelClass}>Scale</label>
@@ -491,9 +504,9 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
               {vis.limits && (
                 <div>
                   <SectionTitle>
-                    Пределы
-                    {reg.channel_type === 'range' && <span className="ml-1 text-orange-500 text-[10px] normal-case tracking-normal font-normal">обяз.</span>}
-                    <Tip text="Допустимый диапазон значений" />
+                    {t('detail.limits')}
+                    {reg.channel_type === 'range' && <span className="ml-1 text-orange-500 text-[10px] normal-case tracking-normal font-normal">{t('detail.limitsRequired')}</span>}
+                    <Tip text={t('detail.limitsTip')} />
                   </SectionTitle>
                   <div className="flex gap-1.5">
                     <div>
@@ -512,7 +525,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
 
           {vis.onOff && (
             <div>
-              <SectionTitle>Переключатель <Tip text="Значения вкл/выкл. Для coil не нужны (0/1 по умолчанию)" /></SectionTitle>
+              <SectionTitle>{t('detail.onOff')} <Tip text={t('detail.onOffTip')} /></SectionTitle>
               <div className="flex gap-1.5">
                 <div>
                   <label className={labelClass}>On</label>
@@ -528,14 +541,14 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
 
           {vis.stringSize && (
             <div>
-              <SectionTitle>Размер строки <Tip text="Количество символов. Обязательно для format=string" /></SectionTitle>
+              <SectionTitle>{t('detail.stringSize')} <Tip text={t('detail.stringSizeTip')} /></SectionTitle>
               <input type="number" value={reg.string_data_size ?? ''} onChange={(e) => { const v = parseInt(e.target.value, 10); update({ string_data_size: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-24`} />
             </div>
           )}
 
           {(vis.wordOrder || vis.byteOrder || vis.errorValue || vis.defaultValue) && (
             <div>
-              <SectionTitle>Протокол <Tip text="Порядок байтов/слов, значение ошибки" /></SectionTitle>
+              <SectionTitle>{t('detail.protocol')} <Tip text={t('detail.protocolTip')} /></SectionTitle>
               <div className="flex flex-wrap gap-1.5">
                 {vis.wordOrder && (
                   <div>
@@ -576,7 +589,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
       </div>
 
       {!hasAnySection && (
-        <p className="text-xs text-gray-400">Для данного типа канала и регистра дополнительные настройки не требуются.</p>
+        <p className="text-xs text-gray-400">{t('detail.noExtraSettings')}</p>
       )}
     </div>
   );

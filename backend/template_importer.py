@@ -200,6 +200,17 @@ def import_template(raw: dict) -> dict:
     Возвращает {device_info, registers, groups} — тот же формат что /api/analyze.
     """
     device = raw.get("device", {})
+
+    # Валидация: проверяем что это шаблон wb-mqtt-serial
+    has_channels = bool(device.get("channels"))
+    has_parameters = bool(device.get("parameters"))
+    has_device_type = bool(raw.get("device_type") or device.get("id"))
+    if not has_channels and not has_parameters and not has_device_type:
+        raise ValueError(
+            "Not a wb-mqtt-serial template: "
+            "no channels, parameters or device_type found"
+        )
+
     translations = device.get("translations", {})
 
     # DeviceInfo

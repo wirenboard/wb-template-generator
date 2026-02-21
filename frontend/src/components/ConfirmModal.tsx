@@ -9,7 +9,7 @@ interface Props {
 }
 
 /** Модалка подтверждения — замена window.confirm */
-export default function ConfirmModal({ isOpen, title, message, confirmText = 'Да', cancelText = 'Отмена', onConfirm, onCancel }: Props) {
+export default function ConfirmModal({ isOpen, title, message, confirmText = 'OK', cancelText = 'Cancel', onConfirm, onCancel }: Props) {
   if (!isOpen) return null;
 
   return (

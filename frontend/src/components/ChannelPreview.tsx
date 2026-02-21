@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../store';
+import { useT } from '../i18n';
 import type { WBChannel } from '../types';
 
 /** Placeholder-значения по единицам измерения */
@@ -36,6 +37,7 @@ interface ChannelPreviewProps {
 
 /** Превью канала в стиле Wiren Board */
 export default function ChannelPreview({ channel, registerId, displayName, conditionalCount, conditions, onValueChange }: ChannelPreviewProps) {
+  const t = useT();
   const setHighlightedRegister = useStore((s) => s.setHighlightedRegister);
   const highlightedRegisterId = useStore((s) => s.highlightedRegisterId);
 
@@ -262,10 +264,10 @@ export default function ChannelPreview({ channel, registerId, displayName, condi
           <span
             className="text-[10px] bg-yellow-100 text-yellow-700 rounded px-1 flex-shrink-0 cursor-help"
             title={conditionalCount && conditionalCount > 1
-              ? `${conditionalCount} варианта:\n${conditions?.join('\n')}`
-              : `Условие: ${condition}`}
+              ? `${t('preview.variantsTitle', { count: conditionalCount })}:\n${conditions?.join('\n')}`
+              : t('preview.conditionLabel', { cond: condition })}
           >
-            {conditionalCount && conditionalCount > 1 ? `${conditionalCount} вар.` : 'условный'}
+            {conditionalCount && conditionalCount > 1 ? t('preview.variants', { count: conditionalCount }) : t('preview.conditional')}
           </span>
         )}
       </div>
