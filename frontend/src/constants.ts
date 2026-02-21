@@ -47,6 +47,19 @@ export const DEFAULT_LANGUAGES = [
   { code: 'ru', label: 'Русский (ru)' },
 ] as const;
 
+/**
+ * Конфиг переводов по UI-локалям.
+ * Определяет какие языки переводов шаблонов доступны для каждой UI-локали.
+ * Контроллер wb-mqtt-serial пока поддерживает только RU и EN.
+ * По мере добавления языков в контроллер — добавлять сюда.
+ */
+export const LOCALE_TRANSLATION_LANGUAGES: Record<string, { code: string; label: string }[]> = {
+  ru: [{ code: 'ru', label: 'Русский (ru)' }],
+  en: [],
+  kk: [],
+  it: [],
+};
+
 /** Ключ localStorage для пользовательских языков */
 export const LANGUAGES_STORAGE_KEY = 'wb-template-languages';
 

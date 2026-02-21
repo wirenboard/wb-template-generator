@@ -79,6 +79,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'hero.manualTitle': 'Вручную / CSV',
     'hero.manualDesc': 'Добавьте регистры вручную или импортируйте CSV',
     'hero.manualButton': 'Добавить регистр',
+    'hero.dropHint': 'Отпустите файл: .json — импорт шаблона, .csv — импорт регистров, PDF/Excel/изображение — AI-анализ',
 
     // --- Undo toast ---
     'undo.deletedOne': 'Регистр «{name}» удалён',
@@ -311,7 +312,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // --- Store messages ---
     'store.allTranslated': 'Все строки уже переведены',
     'store.translated': 'Переведено: {done} из {total}',
-    'store.noCyrillic': 'Нет строк с кириллицей для перевода',
+    'store.noCyrillic': 'Все строки уже на английском',
     'store.normalized': 'Нормализовано → EN: {done} из {total}',
     'store.translateError': 'Ошибка перевода',
     'store.importWrapperError': 'Шаблон-обёртка: регистры находятся в {include}. Загрузите этот файл для получения регистров.',
@@ -436,6 +437,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'hero.manualTitle': 'Manual / CSV',
     'hero.manualDesc': 'Add registers manually or import from CSV',
     'hero.manualButton': 'Add register',
+    'hero.dropHint': 'Drop file: .json — import template, .csv — import registers, PDF/Excel/image — AI analysis',
 
     'undo.deletedOne': 'Register "{name}" deleted',
     'undo.deletedMany': 'Deleted registers: {count}',
@@ -648,7 +650,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
     'store.allTranslated': 'All strings already translated',
     'store.translated': 'Translated: {done} of {total}',
-    'store.noCyrillic': 'No Cyrillic strings to translate',
+    'store.noCyrillic': 'All strings are already in English',
     'store.normalized': 'Normalized → EN: {done} of {total}',
     'store.translateError': 'Translation error',
     'store.importWrapperError': 'Wrapper template: registers are in {include}. Upload that file to get registers.',
@@ -767,6 +769,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'hero.manualTitle': 'Қолмен / CSV',
     'hero.manualDesc': 'Регистрлерді қолмен қосыңыз немесе CSV импорттаңыз',
     'hero.manualButton': 'Регистр қосу',
+    'hero.dropHint': 'Файлды тастаңыз: .json — шаблон импорты, .csv — регистр импорты, PDF/Excel/сурет — AI талдауы',
 
     'undo.deletedOne': '«{name}» регистрі жойылды',
     'undo.deletedMany': 'Жойылған регистрлер: {count}',
@@ -979,7 +982,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
     'store.allTranslated': 'Барлық жолдар аударылған',
     'store.translated': 'Аударылды: {done} / {total}',
-    'store.noCyrillic': 'Аудару үшін кириллицалық жолдар жоқ',
+    'store.noCyrillic': 'Барлық жолдар қазірдің өзінде ағылшын тілінде',
     'store.normalized': 'Нормализация → EN: {done} / {total}',
     'store.translateError': 'Аударма қатесі',
     'store.importWrapperError': 'Оратқыш үлгі: регистрлер {include} ішінде. Регистрлерді алу үшін сол файлды жүктеңіз.',
@@ -1098,6 +1101,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'hero.manualTitle': 'Manuale / CSV',
     'hero.manualDesc': 'Aggiungi registri manualmente o importa da CSV',
     'hero.manualButton': 'Aggiungi registro',
+    'hero.dropHint': 'Rilascia il file: .json — importa template, .csv — importa registri, PDF/Excel/immagine — analisi AI',
 
     'undo.deletedOne': 'Registro "{name}" eliminato',
     'undo.deletedMany': 'Registri eliminati: {count}',
@@ -1310,7 +1314,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
     'store.allTranslated': 'Tutte le stringhe già tradotte',
     'store.translated': 'Tradotte: {done} di {total}',
-    'store.noCyrillic': 'Nessuna stringa cirillica da tradurre',
+    'store.noCyrillic': 'Tutte le stringhe sono già in inglese',
     'store.normalized': 'Normalizzato → EN: {done} di {total}',
     'store.translateError': 'Errore di traduzione',
     'store.importWrapperError': 'Template wrapper: i registri sono in {include}. Carica quel file per ottenere i registri.',

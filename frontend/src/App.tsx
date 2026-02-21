@@ -80,12 +80,20 @@ export default function App() {
     e.target.value = '';
   }, [importTemplate]);
 
-  // Переключение локали по кругу
-  const cycleLocale = useCallback(() => {
-    const idx = LOCALES.findIndex((l) => l.code === locale);
-    const next = LOCALES[(idx + 1) % LOCALES.length];
-    setLocale(next.code);
-  }, [locale, setLocale]);
+  // Dropdown языка
+  const [langOpen, setLangOpen] = useState(false);
+  const langRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!langOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(e.target as Node)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [langOpen]);
 
   // Сплиттер: ширина правой панели
   const PREVIEW_MIN = 250;
@@ -153,13 +161,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-[1600px] mx-auto px-3 py-3">
-        {/* Шапка: заголовок + версия + языковой переключатель */}
-        <div className="flex items-center gap-4 mb-3">
-          <h1 className="text-xl font-bold text-gray-900">
+        {/* Компактная шапка: заголовок + поля устройства + язык */}
+        <div className="flex items-center gap-3 mb-2 flex-wrap">
+          <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">
             {t('app.title')}
           </h1>
           {appVersion && (
-            <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded leading-none">
               v{appVersion}
             </span>
           )}
@@ -170,54 +178,68 @@ export default function App() {
             onChange={handleImportFile}
             className="hidden"
           />
-          <div className="ml-auto flex items-center gap-2">
+          <div className="h-4 w-px bg-gray-300 hidden sm:block" />
+          <label className="flex items-center gap-1.5 text-xs text-gray-500">
+            {t('device.name')}
+            <input
+              type="text"
+              value={deviceInfo.name}
+              onChange={(e) => setDeviceInfo({ name: e.target.value })}
+              placeholder="My Device"
+              className="border border-gray-300 rounded px-1.5 py-0.5 text-xs text-gray-800 w-36 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500">
+            ID
+            <input
+              type="text"
+              value={deviceInfo.id}
+              onChange={(e) => setDeviceInfo({ id: e.target.value })}
+              placeholder="my-device"
+              className="border border-gray-300 rounded px-1.5 py-0.5 text-xs text-gray-800 w-32 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+            />
+          </label>
+          <div className="ml-auto relative" ref={langRef}>
             <button
-              onClick={cycleLocale}
-              className="text-xs font-medium bg-gray-100 px-2 py-0.5 rounded hover:bg-gray-200 transition-colors select-none"
-              title={LOCALES.map((l) => l.label).join(' → ')}
+              onClick={() => setLangOpen(!langOpen)}
+              className="text-xs font-medium bg-gray-100 px-2 py-0.5 rounded hover:bg-gray-200 transition-colors select-none inline-flex items-center gap-1"
             >
               {LOCALES.find((l) => l.code === locale)?.label ?? 'RU'}
+              <span className="text-[9px] text-gray-400">▾</span>
             </button>
+            {langOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 py-0.5 min-w-[80px]">
+                {LOCALES.map((l) => (
+                  <button
+                    key={l.code}
+                    onClick={() => { setLocale(l.code); setLangOpen(false); }}
+                    className={`block w-full text-left px-3 py-1 text-xs transition-colors ${
+                      locale === l.code
+                        ? 'bg-blue-50 text-blue-700 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         {importError && (
-          <div className="mb-3 bg-red-50 text-red-700 border border-red-200 rounded p-2 text-sm flex items-center justify-between">
+          <div className="mb-2 bg-red-50 text-red-700 border border-red-200 rounded p-1.5 text-xs flex items-center justify-between">
             <span>{importError}</span>
             <button onClick={() => useStore.setState({ importError: null })} className="ml-2 text-red-500 hover:text-red-700">&times;</button>
           </div>
         )}
 
         {downloadError && (
-          <div className="mb-3 bg-red-50 text-red-700 border border-red-200 rounded p-2 text-sm flex items-center justify-between">
+          <div className="mb-2 bg-red-50 text-red-700 border border-red-200 rounded p-1.5 text-xs flex items-center justify-between">
             <span>{downloadError}</span>
             <button onClick={() => setDownloadError(null)} className="ml-2 text-red-500 hover:text-red-700">&times;</button>
           </div>
         )}
-
-        {/* Поля устройства */}
-        <div className="flex flex-wrap items-center gap-4 mb-4">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            {t('device.name')}:
-            <input
-              type="text"
-              value={deviceInfo.name}
-              onChange={(e) => setDeviceInfo({ name: e.target.value })}
-              placeholder="My Device"
-              className="border border-gray-300 rounded px-2 py-1 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            {t('device.id')}:
-            <input
-              type="text"
-              value={deviceInfo.id}
-              onChange={(e) => setDeviceInfo({ id: e.target.value })}
-              placeholder="my-device"
-              className="border border-gray-300 rounded px-2 py-1 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </label>
-        </div>
 
         {/* Основной layout: таблица + превью */}
         {isXl ? (

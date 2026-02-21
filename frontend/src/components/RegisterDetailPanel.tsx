@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useStore } from '../store';
-import { useT } from '../i18n';
+import { useT, useHasTranslations } from '../i18n';
 import type { Register, EnumEntry } from '../types';
 import { translateStrings } from '../api';
 import EnumEditor from './EnumEditor';
@@ -104,7 +104,8 @@ function getVisibility(reg: Register): FieldVisibility {
   };
 }
 
-const HAS_CYRILLIC = /[а-яёА-ЯЁ]/;
+/** Текст не на латинице (нужна нормализация → EN) */
+const HAS_NON_LATIN = /[^\u0000-\u007F\u00C0-\u024F\u1E00-\u1EFF]/;
 
 /** Спиннер для кнопок LLM */
 function LlmSpinner() {
@@ -147,30 +148,34 @@ function TranslateButton({ text, lang, onResult }: { text: string; lang: string;
   );
 }
 
-/** Кнопка нормализации → EN: переводит кириллицу на английский, сохраняет русский в translations */
+/** Кнопка нормализации → EN: переводит не-латинский текст на английский.
+ *  Сохраняет оригинал в translations.ru только если у текущей UI-локали есть поддержка переводов. */
 function NormalizeToEnButton({ text, onTranslated, onSaveRussian }: {
   text: string;
   onTranslated: (en: string) => void;
   onSaveRussian: (ru: string) => void;
 }) {
   const t = useT();
+  const hasTranslations = useHasTranslations();
   const llmAvailable = useStore((s) => s.llmAvailable);
   const llmConfig = useStore((s) => s.llmConfig);
   const addLanguage = useStore((s) => s.addLanguage);
   const languages = useStore((s) => s.languages);
   const [loading, setLoading] = useState(false);
 
-  if (!llmAvailable || !text || !HAS_CYRILLIC.test(text)) return null;
+  if (!llmAvailable || !text || !HAS_NON_LATIN.test(text)) return null;
 
   const handleClick = async () => {
     setLoading(true);
     try {
       const result = await translateStrings({ _: text }, 'en', llmConfig);
       if (result._) {
-        if (!languages.some((l) => l.code === 'ru')) {
-          addLanguage({ code: 'ru', label: 'Русский' });
+        if (hasTranslations) {
+          if (!languages.some((l) => l.code === 'ru')) {
+            addLanguage({ code: 'ru', label: 'Русский' });
+          }
+          onSaveRussian(text);
         }
-        onSaveRussian(text);
         onTranslated(result._);
       }
     } catch { /* игнорируем */ }
@@ -293,6 +298,7 @@ function ConditionField({
 /** Панель деталей регистра (раскрывается под строкой таблицы) */
 export default function RegisterDetailPanel({ register: reg }: Props) {
   const t = useT();
+  const hasTranslations = useHasTranslations();
   const updateRegister = useStore((s) => s.updateRegister);
   const registers = useStore((s) => s.registers);
 
@@ -384,6 +390,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
             </div>
           )}
 
+          {hasTranslations && (
           <div>
             <SectionTitle>{t('detail.translations')} <Tip text={t('detail.translationsTip')} /></SectionTitle>
             {langs.length > 0 ? (
@@ -450,6 +457,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
               <p className="text-[10px] text-gray-400">{t('detail.addLanguagesHint')}</p>
             )}
           </div>
+          )}
 
           {/* Enum — под переводами в левой колонке */}
           {vis.enum && (

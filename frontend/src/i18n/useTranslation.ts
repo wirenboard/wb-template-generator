@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useStore } from '../store';
 import translations, { type Locale } from './translations';
+import { LOCALE_TRANSLATION_LANGUAGES } from '../constants';
 
 /** Подставляет параметры {key} в строку */
 function interpolate(str: string, params?: Record<string, string | number>): string {
@@ -40,4 +41,16 @@ export function useLocale(): [Locale, (l: Locale) => void] {
   const locale = useStore((s) => s.uiLocale);
   const setLocale = useStore((s) => s.setUiLocale);
   return [locale, setLocale];
+}
+
+/** Хук: есть ли поддержка переводов шаблонов для текущей UI-локали */
+export function useHasTranslations(): boolean {
+  const locale = useStore((s) => s.uiLocale);
+  return (LOCALE_TRANSLATION_LANGUAGES[locale]?.length ?? 0) > 0;
+}
+
+/** Не-React: есть ли поддержка переводов для текущей UI-локали */
+export function getHasTranslations(): boolean {
+  const locale = useStore.getState().uiLocale;
+  return (LOCALE_TRANSLATION_LANGUAGES[locale]?.length ?? 0) > 0;
 }

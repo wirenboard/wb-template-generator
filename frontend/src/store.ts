@@ -4,7 +4,7 @@ import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTempl
 import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY } from './constants';
 import { generateId } from './utils';
 import type { Locale } from './i18n';
-import { getT } from './i18n';
+import { getT, getHasTranslations } from './i18n';
 
 // Debounce-хелпер
 let buildTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -27,7 +27,7 @@ function detectLocale(): Locale {
     if (lang.startsWith('ru') || lang.startsWith('uk') || lang.startsWith('be')) return 'ru';
     return 'en';
   } catch {
-    return 'ru';
+    return 'en';
   }
 }
 
@@ -534,12 +534,11 @@ export const useStore = create<TemplateStore>((set, get) => ({
   },
 
   normalizeToEnglish: async () => {
-    const hasCyrillic = (s: string) => /[а-яёА-ЯЁ]/.test(s);
+    const hasNonLatin = (s: string) => /[^\u0000-\u007F\u00C0-\u024F\u1E00-\u1EFF]/.test(s);
     const { registers, groups, llmConfig } = get();
 
-    // Собираем строки с кириллицей для перевода на EN
+    // Собираем не-латинские строки для перевода на EN
     const strings: Record<string, string> = {};
-    // Запоминаем какие поля откуда взяты (для обратной записи)
     const regNameKeys: string[] = [];
     const regDescKeys: string[] = [];
     const groupTitleKeys: string[] = [];
@@ -548,20 +547,19 @@ export const useStore = create<TemplateStore>((set, get) => ({
 
     for (const reg of registers) {
       if (!reg.enabled) continue;
-      if (hasCyrillic(reg.name)) {
+      if (hasNonLatin(reg.name)) {
         const key = `reg_name_${reg.id}`;
         strings[key] = reg.name;
         regNameKeys.push(key);
       }
-      if (reg.description && hasCyrillic(reg.description)) {
+      if (reg.description && hasNonLatin(reg.description)) {
         const key = `reg_desc_${reg.id}`;
         strings[key] = reg.description;
         regDescKeys.push(key);
       }
-      // Enum titles с кириллицей
       if (reg.enum_entries) {
         for (const entry of reg.enum_entries) {
-          if (hasCyrillic(entry.title)) {
+          if (hasNonLatin(entry.title)) {
             const key = `enum_${reg.id}_${entry.value}`;
             strings[key] = entry.title;
             enumKeys.push(key);
@@ -570,12 +568,12 @@ export const useStore = create<TemplateStore>((set, get) => ({
       }
     }
     for (const group of groups) {
-      if (hasCyrillic(group.title)) {
+      if (hasNonLatin(group.title)) {
         const key = `group_title_${group.id}`;
         strings[key] = group.title;
         groupTitleKeys.push(key);
       }
-      if (group.description && hasCyrillic(group.description)) {
+      if (group.description && hasNonLatin(group.description)) {
         const key = `group_desc_${group.id}`;
         strings[key] = group.description;
         groupDescKeys.push(key);
@@ -589,15 +587,19 @@ export const useStore = create<TemplateStore>((set, get) => ({
       return;
     }
 
+    // Сохранять в translations.ru только если текущая локаль поддерживает переводы
+    const saveTranslations = getHasTranslations();
+
     set({ translating: true, translateError: null, translateResult: null });
     try {
       const result = await translateStrings(strings, 'en', llmConfig);
       const translated = Object.keys(result).length;
 
-      // Обеспечиваем наличие языка 'ru' в store
-      const store = useStore.getState();
-      if (!store.languages.some((l) => l.code === 'ru')) {
-        store.addLanguage({ code: 'ru', label: 'Русский' });
+      if (saveTranslations) {
+        const store = useStore.getState();
+        if (!store.languages.some((l) => l.code === 'ru')) {
+          store.addLanguage({ code: 'ru', label: 'Русский' });
+        }
       }
 
       set((s) => {
@@ -610,22 +612,19 @@ export const useStore = create<TemplateStore>((set, get) => ({
           if (!hasNewName && !hasNewDesc && !reg.enum_entries) return reg;
 
           let translations = { ...(reg.translations ?? {}) };
-          const ruTr = { ...(translations.ru ?? {}) };
           let newName = reg.name;
           let newDescription = reg.description;
 
-          // Сохраняем русский в translations.ru, заменяем на английский
-          if (hasNewName) {
-            ruTr.name = reg.name;
-            newName = result[nameKey];
+          if (saveTranslations) {
+            const ruTr = { ...(translations.ru ?? {}) };
+            if (hasNewName) { ruTr.name = reg.name; }
+            if (hasNewDesc) { ruTr.description = reg.description!; }
+            translations = { ...translations, ru: ruTr };
           }
-          if (hasNewDesc) {
-            ruTr.description = reg.description!;
-            newDescription = result[descKey];
-          }
-          translations = { ...translations, ru: ruTr };
 
-          // Enum: сохраняем русский в translations, заменяем title на английский
+          if (hasNewName) { newName = result[nameKey]; }
+          if (hasNewDesc) { newDescription = result[descKey]; }
+
           let newEntries = reg.enum_entries;
           if (reg.enum_entries) {
             let changed = false;
@@ -633,7 +632,9 @@ export const useStore = create<TemplateStore>((set, get) => ({
               const eKey = `enum_${reg.id}_${entry.value}`;
               if (enumKeys.includes(eKey) && result[eKey]) {
                 changed = true;
-                const tr = { ...(entry.translations ?? {}), ru: entry.title };
+                const tr = saveTranslations
+                  ? { ...(entry.translations ?? {}), ru: entry.title }
+                  : entry.translations;
                 return { ...entry, title: result[eKey], translations: tr };
               }
               return entry;
@@ -658,19 +659,18 @@ export const useStore = create<TemplateStore>((set, get) => ({
           if (!hasNewTitle && !hasNewDesc) return group;
 
           let translations = { ...(group.translations ?? {}) };
-          const ruTr = { ...(translations.ru ?? {}) };
           let newTitle = group.title;
           let newDescription = group.description;
 
-          if (hasNewTitle) {
-            ruTr.title = group.title;
-            newTitle = result[titleKey];
+          if (saveTranslations) {
+            const ruTr = { ...(translations.ru ?? {}) };
+            if (hasNewTitle) { ruTr.title = group.title; }
+            if (hasNewDesc) { ruTr.description = group.description!; }
+            translations = { ...translations, ru: ruTr };
           }
-          if (hasNewDesc) {
-            ruTr.description = group.description!;
-            newDescription = result[descKey];
-          }
-          translations = { ...translations, ru: ruTr };
+
+          if (hasNewTitle) { newTitle = result[titleKey]; }
+          if (hasNewDesc) { newDescription = result[descKey]; }
 
           return { ...group, title: newTitle, description: newDescription, translations };
         });
