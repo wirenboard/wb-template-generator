@@ -232,7 +232,6 @@ export default function App() {
             {/* Левая панель: таблица регистров */}
             <section className="bg-white rounded-lg shadow-sm p-4 min-w-[400px]" style={{ flex: '1 1 0' }}>
               <RegisterTable
-
                 onDownloadJson={handleDownloadJson}
                 onDownloadJinja={handleDownloadJinja}
                 downloadOpen={downloadOpen}
@@ -278,7 +277,6 @@ export default function App() {
             {/* Левая панель: таблица регистров */}
             <section className="bg-white rounded-lg shadow-sm p-4">
               <RegisterTable
-
                 onDownloadJson={handleDownloadJson}
                 onDownloadJinja={handleDownloadJinja}
                 downloadOpen={downloadOpen}
