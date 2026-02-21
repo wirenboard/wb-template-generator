@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-02-21
+
+### Исправлено
+- **Баг**: клик по drop zone (FileUpload) и кнопке «Импорт шаблона» (hero-блок) не открывал диалог выбора файла — `display:none` на `<input type="file">` блокировал programmatic `.click()`, заменено на нативный `<label>`
+
 ## [0.5.1] - 2026-02-21
 
 ### Изменено
@@ -92,7 +97,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.1...v0.5.3
 [0.5.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.3.0...v0.4.0

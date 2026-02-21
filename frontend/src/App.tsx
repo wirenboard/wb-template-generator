@@ -26,13 +26,11 @@ export default function App() {
   const setDeviceInfo = useStore((s) => s.setDeviceInfo);
   const resetAll = useStore((s) => s.resetAll);
   const appVersion = useStore((s) => s.appVersion);
-  const importTemplate = useStore((s) => s.importTemplate);
   const importError = useStore((s) => s.importError);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const downloadRef = useRef<HTMLDivElement>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
 
   // Закрытие dropdown при клике вне
   useEffect(() => {
@@ -72,12 +70,6 @@ export default function App() {
     }
     setDownloadOpen(false);
   }, [t]);
-
-  const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) importTemplate(file);
-    e.target.value = '';
-  }, [importTemplate]);
 
   // Dropdown языка
   const [langOpen, setLangOpen] = useState(false);
@@ -171,13 +163,6 @@ export default function App() {
               v{appVersion}
             </span>
           )}
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".json,.json.jinja"
-            onChange={handleImportFile}
-            className="hidden"
-          />
           <div className="h-4 w-px bg-gray-300 hidden sm:block" />
           <label className="flex items-center gap-1.5 text-xs text-gray-500">
             {t('device.name')}
@@ -247,7 +232,7 @@ export default function App() {
             {/* Левая панель: таблица регистров */}
             <section className="bg-white rounded-lg shadow-sm p-4 min-w-[400px]" style={{ flex: '1 1 0' }}>
               <RegisterTable
-                importInputRef={importInputRef}
+
                 onDownloadJson={handleDownloadJson}
                 onDownloadJinja={handleDownloadJinja}
                 downloadOpen={downloadOpen}
@@ -293,7 +278,7 @@ export default function App() {
             {/* Левая панель: таблица регистров */}
             <section className="bg-white rounded-lg shadow-sm p-4">
               <RegisterTable
-                importInputRef={importInputRef}
+
                 onDownloadJson={handleDownloadJson}
                 onDownloadJinja={handleDownloadJinja}
                 downloadOpen={downloadOpen}
