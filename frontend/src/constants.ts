@@ -4,19 +4,19 @@ export const REG_TYPES = ['holding', 'input', 'coil', 'discrete', 'holding_singl
 /** Допустимые форматы данных */
 export const FORMATS = ['u16', 's16', 'u32', 's32', 'u64', 's64', 'float', 'double', 'u8', 's8', 'string'] as const;
 
-/** Форматы с описаниями для dropdown */
-export const FORMAT_OPTIONS: { value: string; label: string; description: string }[] = [
-  { value: 'u16', label: 'u16', description: '16 бит без знака (1 регистр)' },
-  { value: 's16', label: 's16', description: '16 бит со знаком (1 регистр)' },
-  { value: 'u32', label: 'u32', description: '32 бит без знака (2 регистра)' },
-  { value: 's32', label: 's32', description: '32 бит со знаком (2 регистра)' },
-  { value: 'u64', label: 'u64', description: '64 бит без знака (4 регистра)' },
-  { value: 's64', label: 's64', description: '64 бит со знаком (4 регистра)' },
-  { value: 'float', label: 'float', description: 'IEEE 754, 32 бит (2 регистра)' },
-  { value: 'double', label: 'double', description: 'IEEE 754, 64 бит (4 регистра)' },
-  { value: 'u8', label: 'u8', description: '8 бит без знака' },
-  { value: 's8', label: 's8', description: '8 бит со знаком' },
-  { value: 'string', label: 'string', description: 'Строка (указать string_data_size)' },
+/** Форматы с i18n-ключами описаний для dropdown */
+export const FORMAT_OPTIONS: { value: string; label: string; descriptionKey: string }[] = [
+  { value: 'u16', label: 'u16', descriptionKey: 'format.u16' },
+  { value: 's16', label: 's16', descriptionKey: 'format.s16' },
+  { value: 'u32', label: 'u32', descriptionKey: 'format.u32' },
+  { value: 's32', label: 's32', descriptionKey: 'format.s32' },
+  { value: 'u64', label: 'u64', descriptionKey: 'format.u64' },
+  { value: 's64', label: 's64', descriptionKey: 'format.s64' },
+  { value: 'float', label: 'float', descriptionKey: 'format.float' },
+  { value: 'double', label: 'double', descriptionKey: 'format.double' },
+  { value: 'u8', label: 'u8', descriptionKey: 'format.u8' },
+  { value: 's8', label: 's8', descriptionKey: 'format.s8' },
+  { value: 'string', label: 'string', descriptionKey: 'format.string' },
 ];
 
 /** Допустимые типы каналов */

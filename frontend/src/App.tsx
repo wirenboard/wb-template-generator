@@ -4,6 +4,7 @@ import TemplatePreview from './components/TemplatePreview';
 import ConfirmModal from './components/ConfirmModal';
 import { useStore } from './store';
 import { buildJinjaTemplate } from './api';
+import { useT, useLocale, LOCALES } from './i18n';
 
 /** Скачивание Blob как файла */
 function downloadBlob(blob: Blob, filename: string) {
@@ -17,8 +18,9 @@ function downloadBlob(blob: Blob, filename: string) {
 
 /** Главная страница приложения WB Template Generator */
 export default function App() {
+  const t = useT();
+  const [locale, setLocale] = useLocale();
   const registers = useStore((s) => s.registers);
-  const template = useStore((s) => s.template);
   const buildError = useStore((s) => s.buildError);
   const deviceInfo = useStore((s) => s.deviceInfo);
   const setDeviceInfo = useStore((s) => s.setDeviceInfo);
@@ -65,18 +67,25 @@ export default function App() {
       });
       downloadBlob(new Blob([text], { type: 'text/plain' }), `${deviceInfo.id || 'template'}.json.jinja`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Ошибка скачивания Jinja';
+      const msg = e instanceof Error ? e.message : t('api.downloadJinjaError');
       setDownloadError(msg);
       setTimeout(() => setDownloadError(null), 5000);
     }
     setDownloadOpen(false);
-  }, []);
+  }, [t]);
 
   const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) importTemplate(file);
     e.target.value = '';
   }, [importTemplate]);
+
+  // Переключение локали по кругу
+  const cycleLocale = useCallback(() => {
+    const idx = LOCALES.findIndex((l) => l.code === locale);
+    const next = LOCALES[(idx + 1) % LOCALES.length];
+    setLocale(next.code);
+  }, [locale, setLocale]);
 
   // Сплиттер: ширина правой панели
   const PREVIEW_MIN = 250;
@@ -144,66 +153,31 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-[1600px] mx-auto px-3 py-3">
-        {/* Шапка: заголовок + скачать */}
+        {/* Шапка: заголовок + версия + языковой переключатель */}
         <div className="flex items-center gap-4 mb-3">
           <h1 className="text-xl font-bold text-gray-900">
-            WB Template Generator
+            {t('app.title')}
           </h1>
           {appVersion && (
             <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
               v{appVersion}
             </span>
           )}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json,.json.jinja"
+            onChange={handleImportFile}
+            className="hidden"
+          />
           <div className="ml-auto flex items-center gap-2">
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".json,.json.jinja"
-              onChange={handleImportFile}
-              className="hidden"
-            />
             <button
-              onClick={() => importInputRef.current?.click()}
-              disabled={importing}
-              className="px-3 py-1.5 text-sm text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors disabled:opacity-50"
+              onClick={cycleLocale}
+              className="text-xs font-medium bg-gray-100 px-2 py-0.5 rounded hover:bg-gray-200 transition-colors select-none"
+              title={LOCALES.map((l) => l.label).join(' → ')}
             >
-              {importing ? 'Импорт...' : 'Загрузить шаблон'}
+              {LOCALES.find((l) => l.code === locale)?.label ?? 'RU'}
             </button>
-            {registers.length > 0 && (
-              <button
-                onClick={() => setConfirmResetOpen(true)}
-                className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
-              >
-                Новый шаблон
-              </button>
-            )}
-            {template && (
-              <div className="relative" ref={downloadRef}>
-                <button
-                  onClick={() => setDownloadOpen((v) => !v)}
-                  className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-                >
-                  Скачать
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                </button>
-                {downloadOpen && (
-                  <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 min-w-[180px]">
-                    <button
-                      onClick={() => { handleDownloadJson(); setDownloadOpen(false); }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
-                    >
-                      JSON (.json)
-                    </button>
-                    <button
-                      onClick={handleDownloadJinja}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors border-t border-gray-100"
-                    >
-                      Jinja (.json.jinja)
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
@@ -224,7 +198,7 @@ export default function App() {
         {/* Поля устройства */}
         <div className="flex flex-wrap items-center gap-4 mb-4">
           <label className="flex items-center gap-2 text-sm text-gray-700">
-            Имя устройства:
+            {t('device.name')}:
             <input
               type="text"
               value={deviceInfo.name}
@@ -234,7 +208,7 @@ export default function App() {
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-gray-700">
-            ID:
+            {t('device.id')}:
             <input
               type="text"
               value={deviceInfo.id}
@@ -250,14 +224,23 @@ export default function App() {
           <div className="flex" ref={splitContainerRef}>
             {/* Левая панель: таблица регистров */}
             <section className="bg-white rounded-lg shadow-sm p-4 min-w-[400px]" style={{ flex: '1 1 0' }}>
-              <RegisterTable />
+              <RegisterTable
+                importInputRef={importInputRef}
+                onDownloadJson={handleDownloadJson}
+                onDownloadJinja={handleDownloadJinja}
+                downloadOpen={downloadOpen}
+                setDownloadOpen={setDownloadOpen}
+                downloadRef={downloadRef}
+                importing={importing}
+                onResetAll={() => setConfirmResetOpen(true)}
+              />
             </section>
 
             {/* Разделитель */}
             <div
               onMouseDown={handleSplitterMouseDown}
               className="w-1.5 cursor-col-resize bg-gray-200 hover:bg-blue-300 active:bg-blue-400 transition-colors rounded mx-1 flex-shrink-0 self-stretch"
-              title="Перетащите для изменения ширины превью"
+              title={t('splitter.title')}
             />
 
             {/* Правая панель: превью (sticky) */}
@@ -266,7 +249,7 @@ export default function App() {
               style={{ width: previewWidth }}
             >
               <h2 className="text-base font-semibold text-gray-800 mb-3">
-                Превью
+                {t('preview.title')}
               </h2>
 
               {buildError && (
@@ -279,7 +262,7 @@ export default function App() {
                 <TemplatePreview />
               ) : (
                 <p className="text-gray-400 text-sm text-center py-8">
-                  Превью появится после добавления регистров
+                  {t('preview.empty')}
                 </p>
               )}
             </section>
@@ -288,13 +271,22 @@ export default function App() {
           <div className="grid grid-cols-1 gap-4">
             {/* Левая панель: таблица регистров */}
             <section className="bg-white rounded-lg shadow-sm p-4">
-              <RegisterTable />
+              <RegisterTable
+                importInputRef={importInputRef}
+                onDownloadJson={handleDownloadJson}
+                onDownloadJinja={handleDownloadJinja}
+                downloadOpen={downloadOpen}
+                setDownloadOpen={setDownloadOpen}
+                downloadRef={downloadRef}
+                importing={importing}
+                onResetAll={() => setConfirmResetOpen(true)}
+              />
             </section>
 
             {/* Правая панель: превью */}
             <section className="bg-white rounded-lg shadow-sm p-4">
               <h2 className="text-base font-semibold text-gray-800 mb-3">
-                Превью
+                {t('preview.title')}
               </h2>
 
               {buildError && (
@@ -307,7 +299,7 @@ export default function App() {
                 <TemplatePreview />
               ) : (
                 <p className="text-gray-400 text-sm text-center py-8">
-                  Превью появится после добавления регистров
+                  {t('preview.empty')}
                 </p>
               )}
             </section>
@@ -316,9 +308,9 @@ export default function App() {
       </div>
       <ConfirmModal
         isOpen={confirmResetOpen}
-        title="Новый шаблон"
-        message="Очистить все регистры, группы и устройство? Настройки LLM сохранятся."
-        confirmText="Очистить"
+        title={t('confirm.resetTitle')}
+        message={t('confirm.resetMessage')}
+        confirmText={t('confirm.resetButton')}
         onConfirm={() => { resetAll(); setConfirmResetOpen(false); }}
         onCancel={() => setConfirmResetOpen(false)}
       />

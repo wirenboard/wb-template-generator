@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { fetchModels, fetchPrompts } from '../api';
+import { useT } from '../i18n';
 
 interface LlmSettingsFieldsProps {
   /** Показывать как развёрнутую форму (без заголовка-аккордеона) */
@@ -9,6 +10,7 @@ interface LlmSettingsFieldsProps {
 
 /** Поля настроек LLM — переиспользуется в модалке и в LlmImportModal */
 export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
+  const t = useT();
   const llmConfig = useStore((s) => s.llmConfig);
   const setLlmConfig = useStore((s) => s.setLlmConfig);
 
@@ -26,7 +28,7 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
       });
       setModels(list);
     } catch (e) {
-      setModelsError(e instanceof Error ? e.message : 'Ошибка загрузки');
+      setModelsError(e instanceof Error ? e.message : t('api.modelsLoadError'));
     } finally {
       setModelsLoading(false);
     }
@@ -38,12 +40,12 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
     <div className="space-y-3">
       {!inline && (
         <p className="text-xs text-gray-400">
-          По умолчанию используются настройки сервера
+          {t('llmSettings.serverDefault')}
         </p>
       )}
 
       <div>
-        <label className="block text-sm text-gray-600 mb-1">API URL</label>
+        <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.apiUrl')}</label>
         <input
           type="text"
           value={llmConfig.apiUrl ?? ''}
@@ -54,7 +56,7 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
       </div>
 
       <div>
-        <label className="block text-sm text-gray-600 mb-1">API Key</label>
+        <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.apiKey')}</label>
         <input
           type="password"
           value={llmConfig.apiKey ?? ''}
@@ -63,12 +65,12 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
           className={inputClass}
         />
         <p className="text-[10px] text-gray-400 mt-0.5">
-          Ключ хранится в localStorage браузера. При запросах к LLM передаётся через бэкенд только на указанный выше URL провайдера.
+          {t('llmSettings.apiKeyHint')}
         </p>
       </div>
 
       <div>
-        <label className="block text-sm text-gray-600 mb-1">Модель</label>
+        <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.model')}</label>
         <div className="flex gap-1.5">
           <input
             type="text"
@@ -87,7 +89,7 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
             onClick={handleLoadModels}
             disabled={modelsLoading}
             className="px-2.5 py-2 border border-gray-300 rounded text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors flex-shrink-0"
-            title="Загрузить список моделей"
+            title={t('llmSettings.loadModels')}
           >
             {modelsLoading ? (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -103,13 +105,13 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
         </div>
         {modelsError && <p className="text-xs text-red-500 mt-1">{modelsError}</p>}
         {models.length > 0 && !modelsError && (
-          <p className="text-xs text-gray-400 mt-1">Доступно моделей: {models.length}</p>
+          <p className="text-xs text-gray-400 mt-1">{t('llmSettings.modelsAvailable', { count: models.length })}</p>
         )}
       </div>
 
       <div className="flex gap-3">
         <div className="flex-1">
-          <label className="block text-sm text-gray-600 mb-1">Max tokens</label>
+          <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.maxTokens')}</label>
           <input
             type="number"
             value={llmConfig.maxTokens ?? ''}
@@ -120,7 +122,7 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
           />
         </div>
         <div className="flex-1">
-          <label className="block text-sm text-gray-600 mb-1">Timeout (сек)</label>
+          <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.timeout')}</label>
           <input
             type="number"
             value={llmConfig.timeout ?? ''}
@@ -131,12 +133,12 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
           />
         </div>
         <div className="flex-1">
-          <label className="block text-sm text-gray-600 mb-1">Temperature</label>
+          <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.temperature')}</label>
           <input
             type="number"
             value={llmConfig.temperature ?? ''}
             onChange={(e) => setLlmConfig({ temperature: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="авто"
+            placeholder={t('llmSettings.temperaturePlaceholder')}
             min={0}
             max={2}
             step={0.1}
@@ -146,17 +148,17 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
       </div>
 
       <div>
-        <label className="block text-sm text-gray-600 mb-1">Параметр токенов</label>
+        <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.tokenParam')}</label>
         <select
           value={llmConfig.legacyMaxTokens ? 'legacy' : 'new'}
           onChange={(e) => setLlmConfig({ legacyMaxTokens: e.target.value === 'legacy' ? true : undefined })}
           className={inputClass}
         >
-          <option value="new">max_completion_tokens (OpenAI 2024+)</option>
-          <option value="legacy">max_tokens (legacy / совместимые API)</option>
+          <option value="new">{t('llmSettings.tokenParamNew')}</option>
+          <option value="legacy">{t('llmSettings.tokenParamLegacy')}</option>
         </select>
         <p className="text-[10px] text-gray-400 mt-0.5">
-          Новые модели OpenAI (gpt-5, o1 и др.) требуют max_completion_tokens. Для старых моделей или совместимых API используйте legacy.
+          {t('llmSettings.tokenParamHint')}
         </p>
       </div>
 
@@ -168,6 +170,7 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
 
 /** Секция редактора системного промпта */
 function SystemPromptEditor() {
+  const t = useT();
   const customSystemPrompt = useStore((s) => s.customSystemPrompt);
   const setCustomSystemPrompt = useStore((s) => s.setCustomSystemPrompt);
   const apiUrl = useStore((s) => s.llmConfig.apiUrl);
@@ -188,7 +191,7 @@ function SystemPromptEditor() {
       const data = await fetchPrompts();
       setDraft(data.system_prompt);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка загрузки');
+      setError(e instanceof Error ? e.message : t('api.modelsLoadError'));
     } finally {
       setLoading(false);
     }
@@ -211,10 +214,10 @@ function SystemPromptEditor() {
     return (
       <div className="border-t border-gray-200 pt-3 mt-3">
         <p className="text-xs text-gray-400">
-          Используется серверная модель{serverModel ? ` (${serverModel})` : ''}. Системный промпт недоступен.
+          {t('llmSettings.promptServerOnly', { model: serverModel ? ` (${serverModel})` : '' })}
         </p>
         <p className="text-[10px] text-gray-300 mt-1">
-          Укажите свой API URL выше, чтобы настроить промпт.
+          {t('llmSettings.promptServerHint')}
         </p>
       </div>
     );
@@ -233,14 +236,14 @@ function SystemPromptEditor() {
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
-          <span className="text-sm text-gray-700 font-medium">Системный промпт</span>
+          <span className="text-sm text-gray-700 font-medium">{t('llmSettings.systemPrompt')}</span>
         </div>
         <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
           isCustom
             ? 'bg-green-100 text-green-700'
             : 'bg-gray-100 text-gray-500'
         }`}>
-          {isCustom ? 'кастомный' : 'по умолчанию'}
+          {isCustom ? t('llmSettings.promptCustom') : t('llmSettings.promptDefault')}
         </span>
       </button>
 
@@ -248,21 +251,21 @@ function SystemPromptEditor() {
         <div className="mt-3 space-y-2">
           {!draft && !isCustom && (
             <p className="text-xs text-gray-400">
-              Нажмите «Загрузить по умолчанию», чтобы посмотреть и отредактировать промпт
+              {t('llmSettings.promptLoadHint')}
             </p>
           )}
 
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Нажмите «Загрузить по умолчанию», чтобы посмотреть и отредактировать промпт"
+            placeholder={t('llmSettings.promptLoadHint')}
             rows={15}
             className="w-full border border-gray-300 rounded px-3 py-2 text-xs font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             style={{ minHeight: '200px' }}
           />
 
           <p className="text-[10px] text-gray-400">
-            Плейсхолдеры <code className="bg-gray-100 px-1 rounded">{'{template_type}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{template_type_instruction}'}</code> и <code className="bg-gray-100 px-1 rounded">{'{translation_languages}'}</code> подставляются автоматически
+            {t('llmSettings.promptPlaceholders')}
           </p>
 
           {error && <p className="text-xs text-red-500">{error}</p>}
@@ -273,21 +276,21 @@ function SystemPromptEditor() {
               disabled={loading}
               className="px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 transition-colors"
             >
-              {loading ? 'Загрузка...' : 'Загрузить по умолчанию'}
+              {loading ? t('llmSettings.promptLoading') : t('llmSettings.promptLoadDefault')}
             </button>
             <button
               onClick={handleSave}
               disabled={!draft.trim()}
               className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              Сохранить
+              {t('llmSettings.promptSave')}
             </button>
             {isCustom && (
               <button
                 onClick={handleReset}
                 className="px-3 py-1.5 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
               >
-                Сбросить
+                {t('llmSettings.promptReset')}
               </button>
             )}
           </div>
@@ -299,17 +302,18 @@ function SystemPromptEditor() {
 
 /** Модалка настроек LLM */
 export function LlmSettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const t = useT();
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-900">Настройки LLM</h3>
+          <h3 className="text-base font-semibold text-gray-900">{t('llmSettings.title')}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg font-bold">x</button>
         </div>
         <p className="text-xs text-gray-400 mb-3">
-          Используются для анализа документов и автоперевода. По умолчанию — настройки сервера.
+          {t('llmSettings.hint')}
         </p>
         <LlmSettingsFields inline />
         <SystemPromptEditor />

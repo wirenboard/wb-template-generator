@@ -1,12 +1,13 @@
 import { useStore } from '../store';
+import { useT } from '../i18n';
 
-const STAGE_LABELS: Record<string, string> = {
-  queued: 'В очереди',
-  uploading: 'Загрузка',
-  converting: 'Конвертация',
-  analyzing: 'Анализ LLM',
-  merging: 'Обработка',
-  slow: 'Долгий анализ',
+const STAGE_KEYS: Record<string, string> = {
+  queued: 'progress.queued',
+  uploading: 'progress.uploading',
+  converting: 'progress.converting',
+  analyzing: 'progress.analyzing',
+  merging: 'progress.merging',
+  slow: 'progress.slow',
 };
 
 interface AnalyzeProgressProps {
@@ -16,6 +17,7 @@ interface AnalyzeProgressProps {
 
 /** Компонент отображения прогресса анализа */
 export default function AnalyzeProgress({ onCancel }: AnalyzeProgressProps) {
+  const t = useT();
   const analyzeStatus = useStore((s) => s.analyzeStatus);
   const progress = useStore((s) => s.analyzeProgress);
   const requestId = useStore((s) => s.analyzeRequestId);
@@ -31,7 +33,7 @@ export default function AnalyzeProgress({ onCancel }: AnalyzeProgressProps) {
   const hasProgress = progress?.current != null && progress?.total != null && progress.total > 0;
   const percent = hasProgress ? Math.round((progress!.current! / progress!.total!) * 100) : 0;
 
-  const stageLabel = progress?.stage ? (STAGE_LABELS[progress.stage] || progress.stage) : '';
+  const stageLabel = progress?.stage ? (STAGE_KEYS[progress.stage] ? t(STAGE_KEYS[progress.stage]) : progress.stage) : '';
 
   const handleCancel = async () => {
     if (onCancel) {
@@ -60,13 +62,13 @@ export default function AnalyzeProgress({ onCancel }: AnalyzeProgressProps) {
             <svg className="w-4 h-4 text-amber-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
             </svg>
-            <p className="text-sm font-medium text-amber-700">Запрос в очереди</p>
+            <p className="text-sm font-medium text-amber-700">{t('progress.queueTitle')}</p>
           </div>
           <p className="text-sm text-gray-600">
-            Позиция: <span className="font-semibold">{queuePosition ?? '?'}</span>
+            {t('progress.position')}: <span className="font-semibold">{queuePosition ?? '?'}</span>
             {queueEta != null && (
               <span className="ml-2 text-gray-500">
-                ~{queueEta >= 60 ? `${Math.ceil(queueEta / 60)} мин.` : `${queueEta} сек.`}
+                {queueEta >= 60 ? t('progress.etaMin', { min: Math.ceil(queueEta / 60) }) : t('progress.etaSec', { sec: queueEta })}
               </span>
             )}
           </p>
@@ -77,10 +79,10 @@ export default function AnalyzeProgress({ onCancel }: AnalyzeProgressProps) {
       {isSlow && (
         <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded">
           <p className="text-sm font-medium text-amber-800">
-            Анализ занимает больше времени чем обычно
+            {t('progress.slowTitle')}
           </p>
           <p className="text-xs text-amber-600 mt-1">
-            {progress?.message || 'LLM всё ещё обрабатывает запрос. Можно продолжить ожидание или отменить.'}
+            {progress?.message || t('progress.slowHint')}
           </p>
         </div>
       )}
@@ -92,7 +94,7 @@ export default function AnalyzeProgress({ onCancel }: AnalyzeProgressProps) {
           <p className="text-xs text-gray-500">{progress.message}</p>
           {progress.stage === 'analyzing' && (
             <p className="text-xs text-gray-400 mt-1 italic">
-              Обычно анализ занимает 1–3 минуты. Для больших PDF — до 5 минут.
+              {t('progress.analyzeHint')}
             </p>
           )}
         </div>
@@ -125,7 +127,7 @@ export default function AnalyzeProgress({ onCancel }: AnalyzeProgressProps) {
             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
         }`}
       >
-        Отменить
+        {t('progress.cancel')}
       </button>
     </div>
   );

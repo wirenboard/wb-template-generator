@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../store';
+import { useT } from '../i18n';
 import type { EnumEntry } from '../types';
 import { translateStrings } from '../api';
 
@@ -12,6 +13,7 @@ interface EnumEditorProps {
 
 /** Мини-таблица enum с переводами: | Значение | Title (EN) | Переводы | [x] | */
 export default function EnumEditor({ entries, onChange, availableLanguages = [] }: EnumEditorProps) {
+  const t = useT();
   const [expandedTranslations, setExpandedTranslations] = useState<Set<number>>(new Set());
 
   const updateEntry = (index: number, patch: Partial<EnumEntry>) => {
@@ -66,9 +68,9 @@ export default function EnumEditor({ entries, onChange, availableLanguages = [] 
         <table className="w-full text-xs mb-1">
           <thead>
             <tr className="text-gray-500">
-              <th className="text-left font-medium px-1 w-16">Знач.</th>
-              <th className="text-left font-medium px-1">Title (EN)</th>
-              {hasAnyLangs && <th className="text-left font-medium px-1 w-28">Переводы</th>}
+              <th className="text-left font-medium px-1 w-16">{t('enum.value')}</th>
+              <th className="text-left font-medium px-1">{t('enum.titleEn')}</th>
+              {hasAnyLangs && <th className="text-left font-medium px-1 w-28">{t('enum.translations')}</th>}
               <th className="w-6"></th>
             </tr>
           </thead>
@@ -96,7 +98,7 @@ export default function EnumEditor({ entries, onChange, availableLanguages = [] 
         onClick={addEntry}
         className="text-xs text-blue-600 hover:text-blue-800"
       >
-        + Добавить значение
+        {t('enum.addValue')}
       </button>
     </div>
   );
@@ -124,6 +126,7 @@ function EnumRow({
   inputClass: string;
   hasAnyLangs: boolean;
 }) {
+  const t = useT();
   // Бейджи переводов
   const tr = entry.translations ?? {};
   const trLangs = Object.keys(tr).filter((l) => tr[l]);
@@ -173,13 +176,13 @@ function EnumRow({
                     ))}
                   </span>
                 ) : (
-                  <span className="text-gray-400">+ перевод</span>
+                  <span className="text-gray-400">{t('enum.addTranslation')}</span>
                 )}
               </button>
               {duplicateCount > 0 && (
                 <span
                   className="text-[9px] bg-green-50 text-green-600 px-1 rounded cursor-help"
-                  title={`«${entry.title}» используется в ${duplicateCount + 1} регистрах.\nИзменение перевода обновит все ${duplicateCount + 1} места.\nЧтобы изменить только здесь — сначала измените Title (EN).`}
+                  title={t('enum.duplicateHint', { title: entry.title, count: duplicateCount + 1 })}
                 >
                   {'\u21C4'}{duplicateCount + 1}
                 </span>
@@ -191,7 +194,7 @@ function EnumRow({
           <button
             onClick={onRemove}
             className="text-red-400 hover:text-red-600 text-xs font-bold"
-            title="Удалить"
+            title={t('enum.delete')}
           >
             x
           </button>
@@ -227,6 +230,7 @@ function EnumTranslationField({
   lang: string; value: string; englishTitle: string;
   onChange: (v: string) => void; inputClass: string;
 }) {
+  const t = useT();
   const llmAvailable = useStore((s) => s.llmAvailable);
   const llmConfig = useStore((s) => s.llmConfig);
   const [loading, setLoading] = useState(false);
@@ -256,7 +260,7 @@ function EnumTranslationField({
           onClick={handleTranslate}
           disabled={loading}
           className="text-purple-400 hover:text-purple-600 disabled:opacity-50 flex-shrink-0"
-          title={`Перевести на ${lang}`}
+          title={t('misc.translateTo', { lang })}
         >
           {loading ? (
             <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" /></svg>

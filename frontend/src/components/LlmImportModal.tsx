@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
+import { useT } from '../i18n';
 import FileUpload from './FileUpload';
 import { LlmSettingsModal } from './LlmSettings';
 import AnalyzeProgress from './AnalyzeProgress';
@@ -7,6 +8,7 @@ import ErrorDisplay from './ErrorDisplay';
 
 /** Сворачиваемая панель лога анализа с кнопкой копирования */
 function AnalyzeLog() {
+  const t = useT();
   const analyzeLog = useStore((s) => s.analyzeLog);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -34,14 +36,14 @@ function AnalyzeLog() {
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-3 py-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
       >
-        <span>Лог ({analyzeLog.length})</span>
+        <span>{t('log.title')} ({analyzeLog.length})</span>
         <span className="text-[10px]">{open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <div className="border-t border-gray-200">
           <div className="max-h-40 overflow-y-auto px-3 py-2 bg-gray-50 font-mono text-[11px] leading-relaxed text-gray-600 whitespace-pre-wrap">
             {analyzeLog.map((line, i) => (
-              <div key={i} className={line.includes('ОШИБКА') ? 'text-red-600' : ''}>{line}</div>
+              <div key={i} className={/ОШИБКА|ERROR|ҚАТЕ|ERRORE/.test(line) ? 'text-red-600' : ''}>{line}</div>
             ))}
             <div ref={bottomRef} />
           </div>
@@ -50,7 +52,7 @@ function AnalyzeLog() {
               onClick={handleCopy}
               className="text-[11px] text-blue-500 hover:text-blue-700 transition-colors"
             >
-              {copied ? 'Скопировано!' : 'Копировать лог'}
+              {copied ? t('log.copied') : t('log.copy')}
             </button>
           </div>
         </div>
@@ -60,9 +62,9 @@ function AnalyzeLog() {
 }
 
 const TEMPLATE_TYPES = [
-  { value: 'small' as const, label: 'Small', desc: '10-30 основных каналов' },
-  { value: 'medium' as const, label: 'Medium', desc: 'Каналы + параметры конфигурации' },
-  { value: 'full' as const, label: 'Full', desc: 'Все регистры' },
+  { value: 'small' as const, label: 'Small', descKey: 'llmImport.smallDesc' },
+  { value: 'medium' as const, label: 'Medium', descKey: 'llmImport.mediumDesc' },
+  { value: 'full' as const, label: 'Full', descKey: 'llmImport.fullDesc' },
 ];
 
 interface LlmImportModalProps {
@@ -72,6 +74,7 @@ interface LlmImportModalProps {
 
 /** Модалка LLM-импорта: загрузка файлов, настройки, анализ */
 export default function LlmImportModal({ isOpen, onClose }: LlmImportModalProps) {
+  const t = useT();
   const files = useStore((s) => s.files);
   const templateType = useStore((s) => s.templateType);
   const setTemplateType = useStore((s) => s.setTemplateType);
@@ -173,11 +176,11 @@ export default function LlmImportModal({ isOpen, onClose }: LlmImportModalProps)
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 max-h-[90vh] overflow-y-auto">
         {/* Шапка */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">LLM Импорт</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t('llmImport.title')}</h2>
           <button
             onClick={handleClose}
             className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-            title="Закрыть"
+            title={t('llmImport.close')}
           >
             &times;
           </button>
@@ -190,32 +193,32 @@ export default function LlmImportModal({ isOpen, onClose }: LlmImportModalProps)
           {/* Тип шаблона */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Тип шаблона
+              {t('llmImport.templateType')}
             </label>
             <div className="flex gap-2">
-              {TEMPLATE_TYPES.map((t) => (
+              {TEMPLATE_TYPES.map((tt) => (
                 <button
-                  key={t.value}
-                  onClick={() => setTemplateType(t.value)}
+                  key={tt.value}
+                  onClick={() => setTemplateType(tt.value)}
                   className={`px-4 py-2 rounded text-sm transition-colors ${
-                    templateType === t.value
+                    templateType === tt.value
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
-                  title={t.desc}
+                  title={t(tt.descKey)}
                 >
-                  {t.label}
+                  {tt.label}
                 </button>
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              {TEMPLATE_TYPES.find((t) => t.value === templateType)?.desc}
+              {t(TEMPLATE_TYPES.find((tt) => tt.value === templateType)?.descKey ?? '')}
             </p>
             <button
               onClick={() => setSettingsOpen(true)}
               className="text-xs text-blue-500 hover:text-blue-700 mt-1 transition-colors"
             >
-              + настройки LLM
+              {t('llmImport.settingsLink')}
             </button>
           </div>
 
@@ -232,12 +235,12 @@ export default function LlmImportModal({ isOpen, onClose }: LlmImportModalProps)
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               )}
-              {analyzeStatus === 'loading' ? 'Анализ...' : 'Анализировать'}
+              {analyzeStatus === 'loading' ? t('llmImport.analyzing') : t('llmImport.analyze')}
             </button>
             {!llmReady && (
               <p className="text-xs text-amber-600 mt-1.5">
-                LLM не настроен. Задайте LLM_API_URL на сервере или укажите URL в{' '}
-                <button onClick={() => setSettingsOpen(true)} className="underline hover:text-amber-800">настройках LLM</button>.
+                {t('llmImport.llmNotReady')}{' '}
+                <button onClick={() => setSettingsOpen(true)} className="underline hover:text-amber-800">{t('llmImport.llmSettingsLink')}</button>.
               </p>
             )}
           </div>
@@ -256,7 +259,7 @@ export default function LlmImportModal({ isOpen, onClose }: LlmImportModalProps)
                 onClick={handleAnalyze}
                 className="mt-2 px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
               >
-                Повторить
+                {t('llmImport.retry')}
               </button>
             </div>
           )}
@@ -273,20 +276,20 @@ export default function LlmImportModal({ isOpen, onClose }: LlmImportModalProps)
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-5">
             <p className="text-sm text-gray-800 mb-4">
-              Анализ ещё выполняется. Прервать?
+              {t('llmImport.cancelConfirm')}
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={handleDismissConfirm}
                 className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
               >
-                Продолжить анализ
+                {t('llmImport.continueAnalysis')}
               </button>
               <button
                 onClick={handleConfirmCancel}
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
               >
-                Прервать
+                {t('llmImport.abort')}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, Fragment } from 'react';
 import { useStore } from '../store';
+import { useT } from '../i18n';
 import GroupSection from './GroupSection';
 import ChannelPreview from './ChannelPreview';
 import ParameterPreview from './ParameterPreview';
@@ -158,6 +159,7 @@ function parseWarningKey(warning: string): string | null {
 
 /** Основной компонент превью шаблона */
 export default function TemplatePreview() {
+  const t = useT();
   const template = useStore((s) => s.template);
   const registers = useStore((s) => s.registers);
   const previewLang = useStore((s) => s.previewLang);
@@ -248,7 +250,7 @@ export default function TemplatePreview() {
   if (!template) {
     return (
       <p className="text-gray-400 text-sm text-center py-4">
-        Превью появится после добавления регистров
+        {t('preview.empty')}
       </p>
     );
   }
@@ -329,14 +331,14 @@ export default function TemplatePreview() {
       {/* Предупреждения о конфликтах переводов */}
       {warnings && warnings.length > 0 && (
         <div className="mb-3 bg-yellow-50 border border-yellow-200 rounded px-3 py-2">
-          <div className="text-xs font-semibold text-yellow-700 mb-1">Конфликты переводов ({warnings.length})</div>
+          <div className="text-xs font-semibold text-yellow-700 mb-1">{t('preview.translationConflicts')} ({warnings.length})</div>
           <ul className="text-[11px] text-yellow-600 space-y-0.5 max-h-24 overflow-y-auto">
             {warnings.map((w, i) => (
               <li
                 key={i}
                 onClick={() => handleWarningClick(w)}
                 className="cursor-pointer hover:text-yellow-800 hover:underline"
-                title="Нажмите, чтобы перейти к регистру"
+                title={t('preview.goToRegister')}
               >
                 {w}
               </li>
@@ -378,7 +380,7 @@ export default function TemplatePreview() {
             className={`flex items-center gap-2 px-3 py-1 bg-gray-50 select-none ${
               window.innerWidth >= 1280 ? 'cursor-pointer hover:bg-gray-100' : ''
             } transition-colors ${showBorder ? 'border-t border-gray-200' : ''}`}
-            title="Перейти к группе в таблице"
+            title={t('preview.goToGroup')}
           >
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider truncate">
               {translate(group.title, activeLang, translations)}
@@ -451,7 +453,7 @@ export default function TemplatePreview() {
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
-              Каналы ({visibleChannelCount})
+              {t('preview.channels')} ({visibleChannelCount})
             </button>
 
             {channelsOpen && (
@@ -469,7 +471,7 @@ export default function TemplatePreview() {
                   return (
                     <>
                       <div className="flex items-center gap-2 px-3 py-1 bg-gray-50 select-none border-t border-gray-200">
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Прочие</span>
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{t('preview.other')}</span>
                         <span className="flex-1 border-t border-gray-200" />
                       </div>
                       <div className="divide-y divide-gray-100">
@@ -518,7 +520,7 @@ export default function TemplatePreview() {
               let dIdx = 0;
               return (
                 <div className="mt-2">
-                  <GroupSection title={`Отключенные каналы (${disabledChannels.length})`}>
+                  <GroupSection title={`${t('preview.disabledChannels')} (${disabledChannels.length})`}>
                     <div className="opacity-50 border border-gray-200 rounded-lg overflow-hidden">
                       {topLevelGroups.map((group) => {
                         if (!hasDisabledIn(group.id)) return null;
@@ -556,7 +558,7 @@ export default function TemplatePreview() {
                         return (
                           <>
                             <div className="flex items-center gap-2 px-3 py-1 bg-gray-50 select-none border-t border-gray-200">
-                              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Прочие</span>
+                              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{t('preview.other')}</span>
                               <span className="flex-1 border-t border-gray-200" />
                             </div>
                             <div className="divide-y divide-gray-100">
@@ -655,7 +657,7 @@ export default function TemplatePreview() {
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
-                Параметры ({visibleParamCount})
+                {t('preview.parameters')} ({visibleParamCount})
               </button>
               {paramsOpen && totalParamGroups > 1 && (
                 <button
@@ -667,7 +669,7 @@ export default function TemplatePreview() {
                     }
                   }}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
-                  title={allParamGroupsCollapsed ? 'Развернуть все группы' : 'Свернуть все группы'}
+                  title={allParamGroupsCollapsed ? t('misc.expandAll') : t('misc.collapseAll')}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     {allParamGroupsCollapsed
@@ -690,7 +692,7 @@ export default function TemplatePreview() {
                 if (ungroupedParams.length === 0) return null;
                 return (
                   <GroupSection
-                    title="Общие"
+                    title={t('preview.general')}
                     expanded={!collapsedParamGroups.has('__ungrouped__')}
                     onToggle={() => setCollapsedParamGroups((prev) => {
                       const next = new Set(prev);

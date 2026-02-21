@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store';
+import { useT } from '../i18n';
 import type { RegisterGroup } from '../types';
 import { translateStrings } from '../api';
 
@@ -10,6 +11,7 @@ interface GroupManagerProps {
 
 /** Модалка управления группами — автоматически подтягивает группы из регистров */
 export default function GroupManager({ isOpen, onClose }: GroupManagerProps) {
+  const t = useT();
   const groups = useStore((s) => s.groups);
   const registers = useStore((s) => s.registers);
   const setGroups = useStore((s) => s.setGroups);
@@ -85,12 +87,12 @@ export default function GroupManager({ isOpen, onClose }: GroupManagerProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 p-5 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-900">Управление группами</h3>
+          <h3 className="text-base font-semibold text-gray-900">{t('groups.title')}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg font-bold">x</button>
         </div>
 
         <p className="text-xs text-gray-400 mb-3">
-          Группы подтягиваются из регистров автоматически. Здесь можно задать title, description, переводы и порядок.
+          {t('groups.hint')}
         </p>
 
         {/* Список групп — с иерархической вложенностью */}
@@ -132,13 +134,13 @@ export default function GroupManager({ isOpen, onClose }: GroupManagerProps) {
           </div>
         ) : (
           <p className="text-sm text-gray-400 mb-4 text-center py-3">
-            Нет групп. Создайте группу ниже или задайте в таблице регистров.
+            {t('groups.empty')}
           </p>
         )}
 
         {/* Добавление группы */}
         <div className="border-t pt-3">
-          <div className="text-xs font-medium text-gray-500 mb-2">Новая группа</div>
+          <div className="text-xs font-medium text-gray-500 mb-2">{t('groups.newGroup')}</div>
           <div className="flex gap-2 items-end">
             <div className="w-28">
               <label className="text-xs text-gray-500">ID</label>
@@ -194,6 +196,7 @@ function GroupRow({
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
 }) {
+  const t = useT();
   const [showTranslations, setShowTranslations] = useState(false);
   const [showLangAdd, setShowLangAdd] = useState(false);
 
@@ -267,14 +270,14 @@ function GroupRow({
           className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
             langs.length > 0 ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-blue-500'
           }`}
-          title="Переводы"
+          title={t('detail.translations')}
         >
           {langs.length > 0 ? langs.map((l) => l.toUpperCase()).join(', ') : 'i18n'}
         </button>
         <button
           onClick={onRemove}
           className="text-red-400 hover:text-red-600 text-xs font-bold flex-shrink-0"
-          title="Удалить группу"
+          title={t('groups.deleteGroup')}
         >
           x
         </button>
@@ -302,7 +305,7 @@ function GroupRow({
               onClick={() => setShowLangAdd(!showLangAdd)}
               className="text-[10px] text-blue-600 hover:text-blue-800"
             >
-              + язык
+              {t('groups.addLang')}
             </button>
             {showLangAdd && (
               <div className="absolute z-10 mt-1 bg-white border border-gray-200 rounded shadow-lg py-1 w-24">
@@ -334,6 +337,7 @@ function GroupTranslationRow({
   onUpdateTitle: (v: string) => void; onUpdateDesc: (v: string) => void;
   onRemove: () => void; inputClass: string;
 }) {
+  const t = useT();
   const llmAvailable = useStore((s) => s.llmAvailable);
   const llmConfig = useStore((s) => s.llmConfig);
   const [loading, setLoading] = useState(false);
@@ -374,7 +378,7 @@ function GroupTranslationRow({
           onClick={handleTranslate}
           disabled={loading}
           className="text-purple-400 hover:text-purple-600 disabled:opacity-50 flex-shrink-0"
-          title={`Перевести на ${lang}`}
+          title={t('misc.translateTo', { lang })}
         >
           {loading ? (
             <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" /></svg>
@@ -386,7 +390,7 @@ function GroupTranslationRow({
       <button
         onClick={onRemove}
         className="text-red-400 hover:text-red-600 text-[10px] font-bold"
-        title={`Удалить ${lang}`}
+        title={`${t('enum.delete')} ${lang}`}
       >
         x
       </button>
