@@ -521,6 +521,30 @@ async def analyze_document(
 
         device_info, registers = _merge_batch_results(batch_results)
 
+        # Стрипаем переводы если языки не запрошены
+        _allowed = set(translation_languages or []) - {"en"}
+        if not _allowed:
+            for reg in registers:
+                reg.translations = None
+                if reg.enum_entries:
+                    for entry in reg.enum_entries:
+                        entry.translations = None
+        elif translation_languages:
+            # Оставляем только запрошенные языки
+            for reg in registers:
+                if reg.translations:
+                    reg.translations = {
+                        k: v for k, v in reg.translations.items()
+                        if k in _allowed
+                    } or None
+                if reg.enum_entries:
+                    for entry in reg.enum_entries:
+                        if entry.translations:
+                            entry.translations = {
+                                k: v for k, v in entry.translations.items()
+                                if k in _allowed
+                            } or None
+
         if not registers:
             yield sse_error(
                 "Не удалось извлечь регистры из документа. "

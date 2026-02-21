@@ -7,12 +7,14 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-02-21
+
 ### Добавлено
 - Тесты: покрытие i18n (полнота переводов, интерполяция, fallback, согласованность плейсхолдеров)
 - Тесты: валидация импорта (parameters_only, device_id_without_device_type)
 
 ### Исправлено
-- **LLM-промпт**: при отсутствии языков переводов (EN/KZ/IT локаль) LLM больше не генерирует ненужные русские переводы
+- **LLM-промпт**: при отсутствии языков переводов (EN/KZ/IT локаль) LLM больше не генерирует ненужные русские переводы — фронтенд не отправляет `translation_languages`, бэкенд стрипает лишние переводы из ответа LLM
 - **Баг**: клик по drop zone и кнопке «Импорт шаблона» не открывал file dialog — заменено на нативный `<label>`
 
 ## [0.5.1] - 2026-02-21
@@ -100,7 +102,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.3.0...v0.4.0
