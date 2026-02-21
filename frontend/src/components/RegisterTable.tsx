@@ -1658,10 +1658,11 @@ function EditableCell({ isEditing, displayValue, placeholder, onStartEdit, rende
 
 // --- Кнопка нормализации имени →EN в строке таблицы ---
 
-const HAS_CYRILLIC = /[а-яёА-ЯЁ]/;
+const HAS_NON_LATIN_TABLE = /[^\u0000-\u007F\u00C0-\u024F\u1E00-\u1EFF]/;
 
 function NameNormalizeButton({ reg }: { reg: Register }) {
   const t = useT();
+  const hasTranslations = useHasTranslations();
   const llmAvailable = useStore((s) => s.llmAvailable);
   const llmConfig = useStore((s) => s.llmConfig);
   const updateRegister = useStore((s) => s.updateRegister);
@@ -1669,7 +1670,7 @@ function NameNormalizeButton({ reg }: { reg: Register }) {
   const languages = useStore((s) => s.languages);
   const [loading, setLoading] = useState(false);
 
-  if (!llmAvailable || !reg.name || !HAS_CYRILLIC.test(reg.name)) return null;
+  if (!llmAvailable || !reg.name || !HAS_NON_LATIN_TABLE.test(reg.name)) return null;
 
   return (
     <button
@@ -1679,12 +1680,16 @@ function NameNormalizeButton({ reg }: { reg: Register }) {
         try {
           const result = await translateStrings({ _: reg.name }, 'en', llmConfig);
           if (result._) {
-            if (!languages.some((l) => l.code === 'ru')) {
-              addLanguage({ code: 'ru', label: 'Русский' });
+            if (hasTranslations) {
+              if (!languages.some((l) => l.code === 'ru')) {
+                addLanguage({ code: 'ru', label: 'Русский' });
+              }
+              const translations = { ...(reg.translations ?? {}) };
+              translations.ru = { ...(translations.ru ?? {}), name: reg.name };
+              updateRegister(reg.id, { name: result._, translations });
+            } else {
+              updateRegister(reg.id, { name: result._ });
             }
-            const translations = { ...(reg.translations ?? {}) };
-            translations.ru = { ...(translations.ru ?? {}), name: reg.name };
-            updateRegister(reg.id, { name: result._, translations });
           }
         } catch { /* игнорируем */ }
         setLoading(false);
