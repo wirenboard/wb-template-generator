@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
 
@@ -12,7 +12,6 @@ export default function FileUpload() {
   const addFiles = useStore((s) => s.addFiles);
   const removeFile = useStore((s) => s.removeFile);
   const maxFileSizeMb = useStore((s) => s.maxFileSizeMb);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [pasteFlash, setPasteFlash] = useState(false);
   const [sizeError, setSizeError] = useState<string | null>(null);
@@ -41,7 +40,7 @@ export default function FileUpload() {
   );
 
   const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
+    (e: React.DragEvent<HTMLElement>) => {
       e.preventDefault();
       setDragging(false);
       handleFiles(e.dataTransfer.files);
@@ -49,12 +48,12 @@ export default function FileUpload() {
     [handleFiles],
   );
 
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setDragging(false);
   }, []);
@@ -96,13 +95,12 @@ export default function FileUpload() {
 
   return (
     <div>
-      {/* Зона drag-n-drop */}
-      <div
+      {/* Зона drag-n-drop — label нативно открывает file dialog при клике */}
+      <label
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+        className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
           pasteFlash
             ? 'border-green-500 bg-green-50'
             : dragging
@@ -121,7 +119,6 @@ export default function FileUpload() {
           {t('upload.paste')}
         </p>
         <input
-          ref={inputRef}
           type="file"
           multiple
           accept={ACCEPTED}
@@ -131,7 +128,7 @@ export default function FileUpload() {
           }}
           className="hidden"
         />
-      </div>
+      </label>
 
       {/* Ошибка размера файла */}
       {sizeError && (
