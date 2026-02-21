@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress, Language } from './types';
 import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi } from './api';
-import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY } from './constants';
+import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN } from './constants';
 import { generateId } from './utils';
 import type { Locale } from './i18n';
 import { getT, getHasTranslations } from './i18n';
@@ -534,7 +534,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
   },
 
   normalizeToEnglish: async () => {
-    const hasNonLatin = (s: string) => /[^\u0000-\u007F\u00C0-\u024F\u1E00-\u1EFF]/.test(s);
+    const hasNonLatin = (s: string) => HAS_NON_LATIN.test(s);
     const { registers, groups, llmConfig } = get();
 
     // Собираем не-латинские строки для перевода на EN

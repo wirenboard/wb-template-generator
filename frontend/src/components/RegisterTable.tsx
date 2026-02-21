@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect, Fragment } from 'react';
 import { useStore } from '../store';
 import type { Register } from '../types';
-import { REG_TYPES, UNITS, CHANNEL_TYPES, getChannelTypesForRegType } from '../constants';
+import { REG_TYPES, UNITS, CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { translateStrings } from '../api';
 import { useT, useHasTranslations } from '../i18n';
@@ -1172,7 +1172,7 @@ export default function RegisterTable({
         <div
           onDrop={handleHeroDrop}
           onDragOver={(e) => { e.preventDefault(); setHeroDragging(true); }}
-          onDragLeave={(e) => { e.preventDefault(); setHeroDragging(false); }}
+          onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setHeroDragging(false); }}
           className={`rounded-xl border-2 border-dashed transition-colors py-6 ${
             heroDragging ? 'border-blue-400 bg-blue-50/40' : 'border-transparent'
           }`}
@@ -1658,7 +1658,6 @@ function EditableCell({ isEditing, displayValue, placeholder, onStartEdit, rende
 
 // --- Кнопка нормализации имени →EN в строке таблицы ---
 
-const HAS_NON_LATIN_TABLE = /[^\u0000-\u007F\u00C0-\u024F\u1E00-\u1EFF]/;
 
 function NameNormalizeButton({ reg }: { reg: Register }) {
   const t = useT();
@@ -1670,7 +1669,7 @@ function NameNormalizeButton({ reg }: { reg: Register }) {
   const languages = useStore((s) => s.languages);
   const [loading, setLoading] = useState(false);
 
-  if (!llmAvailable || !reg.name || !HAS_NON_LATIN_TABLE.test(reg.name)) return null;
+  if (!llmAvailable || !reg.name || !HAS_NON_LATIN.test(reg.name)) return null;
 
   return (
     <button

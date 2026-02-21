@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useStore } from '../store';
 import { useT, useHasTranslations } from '../i18n';
 import type { Register, EnumEntry } from '../types';
 import { translateStrings } from '../api';
+import { HAS_NON_LATIN } from '../constants';
 import EnumEditor from './EnumEditor';
 
 interface Props {
@@ -104,8 +105,6 @@ function getVisibility(reg: Register): FieldVisibility {
   };
 }
 
-/** Текст не на латинице (нужна нормализация → EN) */
-const HAS_NON_LATIN = /[^\u0000-\u007F\u00C0-\u024F\u1E00-\u1EFF]/;
 
 /** Спиннер для кнопок LLM */
 function LlmSpinner() {
@@ -224,7 +223,7 @@ function ConditionField({
 }) {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
-  const operators = getConditionOperators(t);
+  const operators = useMemo(() => getConditionOperators(t), [t]);
 
   /** Вставить текст в позицию курсора */
   const insertAtCursor = (text: string, cursorOffset?: number) => {

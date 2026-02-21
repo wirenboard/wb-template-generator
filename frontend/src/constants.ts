@@ -102,6 +102,9 @@ export const LANGUAGE_NAMES: Record<string, string> = {
   ka: 'Georgian',
 };
 
+/** Текст содержит не-латинские символы (нужна нормализация → EN) */
+export const HAS_NON_LATIN = /[^\u0000-\u007F\u00C0-\u024F\u1E00-\u1EFF]/;
+
 /** Допустимые единицы измерения (пустая строка = без единиц) */
 export const UNITS = [
   '', 'V', 'mV', 'A', 'mA', 'W', 'kWh', 'Hz', 'rpm',
