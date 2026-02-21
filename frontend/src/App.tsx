@@ -27,7 +27,6 @@ export default function App() {
   const resetAll = useStore((s) => s.resetAll);
   const appVersion = useStore((s) => s.appVersion);
   const importTemplate = useStore((s) => s.importTemplate);
-  const importing = useStore((s) => s.importing);
   const importError = useStore((s) => s.importError);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -165,6 +164,7 @@ export default function App() {
         <div className="flex items-center gap-3 mb-2 flex-wrap">
           <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">
             {t('app.title')}
+            <span className="text-xs font-normal text-gray-400 ml-1.5 align-super">by AI</span>
           </h1>
           {appVersion && (
             <span className="text-[10px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded leading-none">
@@ -253,7 +253,6 @@ export default function App() {
                 downloadOpen={downloadOpen}
                 setDownloadOpen={setDownloadOpen}
                 downloadRef={downloadRef}
-                importing={importing}
                 onResetAll={() => setConfirmResetOpen(true)}
               />
             </section>
@@ -300,7 +299,6 @@ export default function App() {
                 downloadOpen={downloadOpen}
                 setDownloadOpen={setDownloadOpen}
                 downloadRef={downloadRef}
-                importing={importing}
                 onResetAll={() => setConfirmResetOpen(true)}
               />
             </section>

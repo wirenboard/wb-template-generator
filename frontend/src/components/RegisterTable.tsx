@@ -20,7 +20,6 @@ interface RegisterTableProps {
   downloadOpen: boolean;
   setDownloadOpen: (open: boolean) => void;
   downloadRef: React.RefObject<HTMLDivElement>;
-  importing: boolean;
   onResetAll: () => void;
 }
 
@@ -97,7 +96,6 @@ export default function RegisterTable({
   downloadOpen,
   setDownloadOpen,
   downloadRef,
-  importing,
   onResetAll,
 }: RegisterTableProps) {
   const t = useT();
@@ -800,8 +798,11 @@ export default function RegisterTable({
     </th>
   );
 
+  const hasRegisters = registers.length > 0;
+
   return (
     <div>
+      {hasRegisters && (
       <div className="flex flex-wrap items-center gap-2 mb-3" ref={menuRef}>
         {/* Редактирование */}
         <button onClick={addRegister} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
@@ -827,15 +828,6 @@ export default function RegisterTable({
             </div>
           )}
         </div>
-
-        {/* Импорт шаблона */}
-        <button
-          onClick={() => importInputRef.current?.click()}
-          disabled={importing}
-          className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 transition-colors"
-        >
-          {importing ? t('toolbar.importing') : t('toolbar.importTemplate')}
-        </button>
 
         {/* Организация */}
         <div className="inline-flex rounded overflow-hidden">
@@ -878,17 +870,7 @@ export default function RegisterTable({
           </button>
         )}
 
-        {/* AI: кнопка Анализ + dropdown AI */}
-        <button
-          onClick={() => setLlmImportOpen(true)}
-          className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors inline-flex items-center gap-1"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-          </svg>
-          {t('toolbar.analyze')}
-        </button>
-
+        {/* AI dropdown */}
         <div className="relative">
           <button
             onClick={() => setOpenMenu(openMenu === 'ai' ? null : 'ai')}
@@ -941,7 +923,6 @@ export default function RegisterTable({
           )}
         </div>
 
-        <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = ''; }} />
         {translating && (
           <span className="inline-flex items-center gap-1.5 text-xs text-purple-600">
             <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" /></svg>
@@ -981,8 +962,12 @@ export default function RegisterTable({
           <span className="text-sm text-gray-500">{t('toolbar.regCount', { count: registers.length })}</span>
         </div>
       </div>
+      )}
 
-      {registers.length > 0 ? (
+      {/* Hidden inputs — всегда доступны (для hero drop zone и меню) */}
+      <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = ''; }} />
+
+      {hasRegisters ? (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>

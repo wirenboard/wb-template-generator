@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-02-21
+
+### Изменено
+- **UX**: тулбар скрыт при пустой таблице — hero-блок полностью заменяет навигацию
+- **UX**: кнопки «Анализ» и «Импорт шаблона» убраны из тулбара — доступны через hero-блок при пустом состоянии
+- **UX**: метка «by AI» в заголовке приложения
+
 ## [0.5.0] - 2026-02-21
 
 ### Добавлено
@@ -85,7 +92,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.2.0...v0.3.0
