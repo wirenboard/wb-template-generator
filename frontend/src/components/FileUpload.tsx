@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
 
@@ -12,7 +12,6 @@ export default function FileUpload() {
   const addFiles = useStore((s) => s.addFiles);
   const removeFile = useStore((s) => s.removeFile);
   const maxFileSizeMb = useStore((s) => s.maxFileSizeMb);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [pasteFlash, setPasteFlash] = useState(false);
   const [sizeError, setSizeError] = useState<string | null>(null);
@@ -120,7 +119,6 @@ export default function FileUpload() {
           {t('upload.paste')}
         </p>
         <input
-          ref={inputRef}
           type="file"
           multiple
           accept={ACCEPTED}

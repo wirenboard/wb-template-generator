@@ -26,13 +26,11 @@ export default function App() {
   const setDeviceInfo = useStore((s) => s.setDeviceInfo);
   const resetAll = useStore((s) => s.resetAll);
   const appVersion = useStore((s) => s.appVersion);
-
   const importError = useStore((s) => s.importError);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const downloadRef = useRef<HTMLDivElement>(null);
-
 
   // Закрытие dropdown при клике вне
   useEffect(() => {
@@ -234,7 +232,6 @@ export default function App() {
             {/* Левая панель: таблица регистров */}
             <section className="bg-white rounded-lg shadow-sm p-4 min-w-[400px]" style={{ flex: '1 1 0' }}>
               <RegisterTable
-
                 onDownloadJson={handleDownloadJson}
                 onDownloadJinja={handleDownloadJinja}
                 downloadOpen={downloadOpen}
@@ -280,7 +277,6 @@ export default function App() {
             {/* Левая панель: таблица регистров */}
             <section className="bg-white rounded-lg shadow-sm p-4">
               <RegisterTable
-
                 onDownloadJson={handleDownloadJson}
                 onDownloadJinja={handleDownloadJinja}
                 downloadOpen={downloadOpen}

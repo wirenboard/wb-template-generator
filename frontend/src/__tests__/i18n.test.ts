@@ -127,7 +127,7 @@ describe('getT fallback', () => {
   });
 
   it('каждая локаль возвращает свой перевод app.title', () => {
-    for (const locale of ['ru', 'en', 'kk', 'it'] as const) {
+    for (const locale of ALL_LOCALE_CODES) {
       useStore.setState({ uiLocale: locale });
       const t = getT();
       expect(t('app.title')).toBe(translations[locale]['app.title']);
@@ -173,7 +173,7 @@ describe('setUiLocale', () => {
   });
 
   it('переключение по всем локалям', () => {
-    for (const locale of ['ru', 'en', 'kk', 'it'] as const) {
+    for (const locale of ALL_LOCALE_CODES) {
       getState().setUiLocale(locale);
       expect(getState().uiLocale).toBe(locale);
       expect(localStorage.getItem('wb-ui-locale')).toBe(locale);
