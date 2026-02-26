@@ -227,27 +227,31 @@ async def main():
     total_failed = 0
     skipped = 0
 
-    for case_id, case_text in cases:
-        if case_id not in expectations:
-            print(f"\n{_YELLOW}ПРОПУСК: {case_id} — нет ожиданий в expectations.yaml{_RESET}")
-            skipped += 1
-            continue
+    try:
+        for case_id, case_text in cases:
+            if case_id not in expectations:
+                print(f"\n{_YELLOW}ПРОПУСК: {case_id} — нет ожиданий в expectations.yaml{_RESET}")
+                skipped += 1
+                continue
 
-        passed, failed = await run_case(
-            client=client,
-            model=settings.LLM_MODEL,
-            system_prompt=system_prompt,
-            case_id=case_id,
-            case_text=case_text,
-            expected=expectations[case_id],
-            timeout=settings.LLM_TIMEOUT,
-            max_tokens=settings.LLM_MAX_TOKENS,
-            legacy_max_tokens=settings.LLM_LEGACY_MAX_TOKENS,
-            temperature=settings.LLM_TEMPERATURE,
-        )
+            passed, failed = await run_case(
+                client=client,
+                model=settings.LLM_MODEL,
+                system_prompt=system_prompt,
+                case_id=case_id,
+                case_text=case_text,
+                expected=expectations[case_id],
+                timeout=settings.LLM_TIMEOUT,
+                max_tokens=settings.LLM_MAX_TOKENS,
+                legacy_max_tokens=settings.LLM_LEGACY_MAX_TOKENS,
+                temperature=settings.LLM_TEMPERATURE,
+            )
 
-        total_passed += passed
-        total_failed += failed
+            total_passed += passed
+            total_failed += failed
+    finally:
+        if http_client:
+            await http_client.aclose()
 
     # Итог
     print(f"\n{'='*60}")

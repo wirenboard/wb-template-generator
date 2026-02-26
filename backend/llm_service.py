@@ -35,6 +35,27 @@ class LLMApiError(Exception):
 
 
 # ---------------------------------------------------------------------------
+# Маршрутизация LLM-ключей (изоляция серверного ключа)
+# ---------------------------------------------------------------------------
+
+def resolve_llm_credentials(
+    settings: Settings,
+    user_url: str | None,
+    user_key: str | None,
+) -> tuple[str | None, str | None]:
+    """Определяет URL и API-ключ для LLM-запроса.
+
+    Изоляция: при пользовательском URL серверный ключ НЕ подставляется.
+
+    Returns:
+        (effective_url, effective_key) — URL и ключ для использования.
+    """
+    if user_url:
+        return user_url, user_key
+    return settings.LLM_API_URL, settings.LLM_API_KEY
+
+
+# ---------------------------------------------------------------------------
 # Парсинг JSON из ответа LLM
 # ---------------------------------------------------------------------------
 
@@ -318,12 +339,9 @@ async def analyze_document(
             custom_system_prompt = None
 
         # Изоляция ключей: при пользовательском LLM НЕ фолбечим на серверный ключ
-        if is_custom_llm:
-            effective_url = api_url  # всегда truthy (is_custom_llm = bool(api_url))
-            effective_key = api_key  # может быть None — не подставляем серверный
-        else:
-            effective_url = settings.LLM_API_URL
-            effective_key = settings.LLM_API_KEY
+        effective_url, effective_key = resolve_llm_credentials(
+            settings, api_url if is_custom_llm else None, api_key if is_custom_llm else None,
+        )
         effective_model = model or settings.LLM_MODEL
         effective_max_tokens = max_tokens or settings.LLM_MAX_TOKENS
         effective_timeout = timeout or settings.LLM_TIMEOUT

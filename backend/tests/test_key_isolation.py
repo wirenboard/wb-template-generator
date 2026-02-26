@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import Settings
+from llm_service import analyze_document, resolve_llm_credentials
 
 
 # ---------------------------------------------------------------------------
@@ -82,8 +83,6 @@ class TestAnalyzeKeyIsolation:
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
             mock_image.open.return_value = MagicMock()
 
-            from llm_service import analyze_document
-
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
                 template_type="full",
@@ -119,8 +118,6 @@ class TestAnalyzeKeyIsolation:
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
             mock_image.open.return_value = MagicMock()
 
-            from llm_service import analyze_document
-
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
                 template_type="full",
@@ -153,8 +150,6 @@ class TestAnalyzeKeyIsolation:
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
             mock_image.open.return_value = MagicMock()
-
-            from llm_service import analyze_document
 
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
@@ -194,8 +189,6 @@ class TestAnalyzePromptIsolation:
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
             mock_image.open.return_value = MagicMock()
 
-            from llm_service import analyze_document
-
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
                 template_type="full",
@@ -227,8 +220,6 @@ class TestAnalyzePromptIsolation:
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
             mock_image.open.return_value = MagicMock()
-
-            from llm_service import analyze_document
 
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
@@ -269,8 +260,6 @@ class TestAnalyzeProxyIsolation:
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
             mock_image.open.return_value = MagicMock()
 
-            from llm_service import analyze_document
-
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
                 template_type="full",
@@ -292,26 +281,17 @@ class TestAnalyzeProxyIsolation:
 # ---------------------------------------------------------------------------
 
 class TestModelsKeyIsolation:
-    """Изоляция серверного ключа в логике /api/models."""
+    """Изоляция серверного ключа через resolve_llm_credentials (/api/models)."""
 
     def test_custom_url_does_not_leak_server_key(self):
         """При пользовательском URL — серверный ключ не подставляется."""
         settings = _make_settings()
 
-        # Воспроизводим логику из main.py /api/models
-        llm_api_url = USER_URL
-        llm_api_key = None
-
-        if llm_api_url:
-            effective_url = llm_api_url
-            effective_key = llm_api_key
-        else:
-            effective_url = settings.LLM_API_URL
-            effective_key = settings.LLM_API_KEY
-
-        assert effective_key != SERVER_KEY, (
-            f"Утечка серверного ключа в /api/models!"
+        effective_url, effective_key = resolve_llm_credentials(
+            settings, USER_URL, None,
         )
+
+        assert effective_key != SERVER_KEY, "Утечка серверного ключа!"
         assert effective_key is None
         assert effective_url == USER_URL
 
@@ -319,15 +299,9 @@ class TestModelsKeyIsolation:
         """Без пользовательского URL — используется серверный ключ."""
         settings = _make_settings()
 
-        llm_api_url = None
-        llm_api_key = None
-
-        if llm_api_url:
-            effective_url = llm_api_url
-            effective_key = llm_api_key
-        else:
-            effective_url = settings.LLM_API_URL
-            effective_key = settings.LLM_API_KEY
+        effective_url, effective_key = resolve_llm_credentials(
+            settings, None, None,
+        )
 
         assert effective_key == SERVER_KEY
         assert effective_url == SERVER_URL
@@ -338,26 +312,17 @@ class TestModelsKeyIsolation:
 # ---------------------------------------------------------------------------
 
 class TestTranslateKeyIsolation:
-    """Изоляция серверного ключа в логике /api/translate."""
+    """Изоляция серверного ключа через resolve_llm_credentials (/api/translate)."""
 
     def test_custom_url_does_not_leak_server_key(self):
         """При пользовательском URL — серверный ключ не подставляется."""
         settings = _make_settings()
 
-        user_url = USER_URL
-        user_key = None
-        is_custom_llm = bool(user_url)
-
-        if is_custom_llm:
-            effective_url = user_url
-            effective_key = user_key
-        else:
-            effective_url = settings.LLM_API_URL
-            effective_key = settings.LLM_API_KEY
-
-        assert effective_key != SERVER_KEY, (
-            f"Утечка серверного ключа в /api/translate!"
+        effective_url, effective_key = resolve_llm_credentials(
+            settings, USER_URL, None,
         )
+
+        assert effective_key != SERVER_KEY, "Утечка серверного ключа!"
         assert effective_key is None
         assert effective_url == USER_URL
 
@@ -365,16 +330,9 @@ class TestTranslateKeyIsolation:
         """При пользовательском URL и ключе — используется пользовательский ключ."""
         settings = _make_settings()
 
-        user_url = USER_URL
-        user_key = USER_KEY
-        is_custom_llm = bool(user_url)
-
-        if is_custom_llm:
-            effective_url = user_url
-            effective_key = user_key
-        else:
-            effective_url = settings.LLM_API_URL
-            effective_key = settings.LLM_API_KEY
+        effective_url, effective_key = resolve_llm_credentials(
+            settings, USER_URL, USER_KEY,
+        )
 
         assert effective_key == USER_KEY
         assert effective_key != SERVER_KEY
