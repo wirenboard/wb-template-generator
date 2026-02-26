@@ -17,7 +17,7 @@ from openai import AsyncOpenAI
 
 from config import get_settings
 from jinja_exporter import build_jinja_template
-from llm_service import analyze_document
+from llm_service import analyze_document, resolve_llm_credentials
 from models import BuildRequest, TranslateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
@@ -273,13 +273,7 @@ async def list_models(
     """Получение списка доступных моделей от LLM API провайдера."""
     settings = get_settings()
 
-    # Изоляция ключей: если указан пользовательский URL — НЕ фолбечим на серверный ключ
-    if llm_api_url:
-        effective_url = llm_api_url
-        effective_key = llm_api_key  # может быть None — это нормально
-    else:
-        effective_url = settings.LLM_API_URL
-        effective_key = settings.LLM_API_KEY
+    effective_url, effective_key = resolve_llm_credentials(settings, llm_api_url, llm_api_key)
 
     if not effective_url:
         return JSONResponse(
@@ -546,10 +540,12 @@ async def translate(request: TranslateRequest):
 
     is_custom_llm = bool(request.llm_api_url)
 
-    # Изоляция: при пользовательском URL — только пользовательские настройки
+    # Изоляция ключей через единую функцию
+    effective_url, effective_key = resolve_llm_credentials(
+        settings, request.llm_api_url if is_custom_llm else None,
+        request.llm_api_key if is_custom_llm else None,
+    )
     if is_custom_llm:
-        effective_url = request.llm_api_url
-        effective_key = request.llm_api_key
         effective_model = request.llm_model or settings.LLM_MODEL
         effective_legacy = (
             request.llm_legacy_max_tokens if request.llm_legacy_max_tokens is not None
@@ -558,8 +554,6 @@ async def translate(request: TranslateRequest):
         effective_temperature = request.llm_temperature  # None = дефолт модели
         effective_timeout = request.llm_timeout or settings.LLM_TIMEOUT
     else:
-        effective_url = settings.LLM_API_URL
-        effective_key = settings.LLM_API_KEY
         effective_model = settings.LLM_MODEL
         effective_legacy = settings.LLM_LEGACY_MAX_TOKENS
         effective_temperature = settings.LLM_TEMPERATURE

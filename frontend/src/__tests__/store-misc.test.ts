@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useStore } from '../store';
 import { createTestRegister, createTestGroup, createTestDeviceInfo, resetFixtureCounter } from './fixtures';
 import { resetMocks } from './setup';
+import { importTemplate as importTemplateApi } from '../api';
 
 function getState() {
   return useStore.getState();
@@ -181,5 +182,41 @@ describe('customSystemPrompt', () => {
 
     expect(getState().customSystemPrompt).toBeNull();
     expect(localStorage.getItem('wb-template-custom-prompt')).toBeNull();
+  });
+});
+
+describe('importTemplate', () => {
+  it('устанавливает importing=true на время импорта', async () => {
+    const states: boolean[] = [];
+    // Мок, который фиксирует importing в момент вызова
+    vi.mocked(importTemplateApi).mockImplementation(async () => {
+      states.push(getState().importing);
+      return { registers: [], groups: [], device_info: { name: '', id: '' } };
+    });
+
+    expect(getState().importing).toBe(false);
+    await getState().importTemplate(new File(['{}'], 'test.json'));
+    expect(states[0]).toBe(true); // во время вызова API
+    expect(getState().importing).toBe(false); // после завершения
+  });
+
+  it('при ошибке API сохраняет importError и сбрасывает importing', async () => {
+    vi.mocked(importTemplateApi).mockRejectedValue(new Error('Not a wb-mqtt-serial template'));
+
+    await getState().importTemplate(new File(['{}'], 'bad.json'));
+
+    expect(getState().importing).toBe(false);
+    expect(getState().importError).toBe('Not a wb-mqtt-serial template');
+  });
+
+  it('сбрасывает importError при повторном импорте', async () => {
+    useStore.setState({ importError: 'Previous error' });
+    vi.mocked(importTemplateApi).mockResolvedValue({
+      registers: [], groups: [], device_info: { name: '', id: '' },
+    });
+
+    await getState().importTemplate(new File(['{}'], 'good.json'));
+
+    expect(getState().importError).toBeNull();
   });
 });

@@ -1,0 +1,9 @@
+Device: Simple Controller SC-300
+
+Holding Registers:
+
+| Address | Name             | Data Type | R/W | Description                    |
+|---------|------------------|-----------|-----|--------------------------------|
+| 0       | Temperature      | INT16     | R   | Temperature in 0.1 deg C       |
+| 1       | Humidity         | UINT16    | R   | Relative humidity in 0.1 %     |
+| 100     | Setpoint         | INT16     | RW  | Temperature setpoint in 0.1 °C |

@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-02-26
+
+### Добавлено
+- **Тесты**: изоляция серверного API-ключа — 10 тестов на утечку ключа, промпта и прокси при пользовательском LLM (analyze, models, translate)
+
+### Изменено
+- **Рефакторинг**: логика маршрутизации LLM-ключей вынесена в `resolve_llm_credentials()` — единая точка изоляции для analyze, models, translate
+
+## [0.5.5] - 2026-02-26
+
+### Добавлено
+- **Тесты**: prompt regression тесты — 5 ручных кейсов для проверки LLM-промпта (адреса FC, legacy 5-digit, plain, bitwise, coil/discrete→switch). Запуск: `docker compose exec backend python tests/prompt_regression/run.py`
+
+## [0.5.4] - 2026-02-26
+
+### Исправлено
+- **UX**: при импорте невалидного JSON (не wb-mqtt-serial) ошибка теперь отображается заметным блоком внутри hero-блока, а не мелким баннером в шапке (#16)
+- **UX**: hero-блок показывает loading-спиннер во время импорта шаблона — `importing` из store теперь используется в UI
+- **LLM-промпт**: bitwise-формат адреса (`reg:bit:width`) теперь явно ограничен только holding-регистрами — для coil, discrete и input не применяется
+- **LLM-промпт**: исправлена конвертация адресов — убраны legacy-форматы 0xxxx/1xxxx (путали LLM), добавлено явное правило для таблиц с колонкой Function Code (FC 01/02/03/04 → тип из FC, адрес как есть)
+
 ## [0.5.3] - 2026-02-21
 
 ### Исправлено
@@ -109,7 +130,10 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.5...v0.5.6
+[0.5.5]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.4...v0.5.5
+[0.5.4]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.0...v0.5.1

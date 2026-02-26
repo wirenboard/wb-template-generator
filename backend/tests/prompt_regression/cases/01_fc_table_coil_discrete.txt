@@ -1,0 +1,9 @@
+Device: Test Sensor FC-100
+
+Modbus Register Map:
+
+| Address | Function Code | Name           | Description              |
+|---------|---------------|----------------|--------------------------|
+| 1       | 01            | Relay Output   | Main relay control       |
+| 3       | 02            | Door Sensor    | Door open/closed sensor  |
+| 5       | 01            | Alarm Output   | Alarm relay output       |

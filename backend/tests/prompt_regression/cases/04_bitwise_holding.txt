@@ -1,0 +1,9 @@
+Device: IO Module BW-400
+
+Holding Register 200 — Status Word (read-only):
+
+| Bit   | Name              | Description                          |
+|-------|-------------------|--------------------------------------|
+| Bit 0 | Overcurrent       | 0 = Normal, 1 = Overcurrent fault    |
+| Bit 1 | Overvoltage       | 0 = Normal, 1 = Overvoltage fault    |
+| Bit 2 | Overtemperature   | 0 = Normal, 1 = Overtemperature fault|

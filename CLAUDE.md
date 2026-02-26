@@ -2,25 +2,14 @@
 
 **Язык общения: русский. Все ответы, комментарии в коде, документация — на русском языке.**
 
-## Обзор
+## Проект
 
-WB Template Generator — веб-сервис для генерации JSON-шаблонов Modbus-устройств для драйвера wb-mqtt-serial (Wiren Board).
+**WB Template Generator** — веб-сервис для генерации JSON-шаблонов Modbus-устройств для драйвера [wb-mqtt-serial](https://github.com/wirenboard/wb-mqtt-serial) (Wiren Board).
+
+- **Репозиторий**: https://github.com/wirenboard/wb-template-generator
+- **Issues**: https://github.com/wirenboard/wb-template-generator/issues
 
 Пользователь загружает документацию устройства (PDF, Excel, изображение), LLM извлекает регистры, детерминированный скрипт собирает валидный JSON-шаблон. Визуальный редактор позволяет доработать результат.
-
-## Запуск и тестирование
-
-**Все команды — только через Docker, НЕ локально.**
-
-```bash
-docker compose up --build -d          # Сборка и запуск
-docker compose build --no-cache && docker compose up -d  # Без кеша
-docker compose exec backend pytest tests/ -v             # Бэкенд-тесты (142)
-docker run --rm -v $(pwd)/frontend:/app -w /app node:20-alpine sh -c "npm ci --ignore-scripts && npx vitest run"  # Фронтенд-тесты (75)
-docker compose down                   # Остановка
-```
-
-Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
 
 ## Стек
 
@@ -31,6 +20,35 @@ Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
 | i18n | Свой лёгкий словарь (4 языка: RU, EN, KZ, IT), `useT()` хук |
 | LLM | OpenAI-compatible API (любой провайдер) |
 | Контейнер | Docker: nginx (frontend) + uvicorn (backend) |
+
+## Запуск и тестирование
+
+**Все команды — только через Docker, НЕ локально.**
+
+```bash
+docker compose up --build -d          # Сборка и запуск
+docker compose build --no-cache && docker compose up -d  # Без кеша
+docker compose exec backend pytest tests/ -v             # Бэкенд-тесты
+docker run --rm -v $(pwd)/frontend:/app -w /app node:20-alpine sh -c "npm ci --ignore-scripts && npx vitest run"  # Фронтенд-тесты
+docker compose down                   # Остановка
+```
+
+Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
+
+## Флоу разработки
+
+1. **Ветка**: каждая задача — в отдельной ветке от `main` (напр. `fix/16-import-error-feedback`, `feat/dark-mode`)
+2. **Тесты**: новые фичи и фиксы покрываются тестами. Запуск — обязательно перед коммитом
+3. **CHANGELOG**: обновлять `CHANGELOG.md` при каждом PR — записи в `[Unreleased]`, при релизе — перенести в `[X.Y.Z] - YYYY-MM-DD]`
+4. **Версия**: берётся из первого `## [X.Y.Z]` в CHANGELOG.md (парсит бэкенд). При релизе — поднять версию
+5. **Коммит**: осмысленное сообщение с префиксом (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`)
+6. **PR**: пуш ветки → PR в `main` через `gh pr create`
+
+### CHANGELOG
+
+Формат [Keep a Changelog](https://keepachangelog.com/) + [Semantic Versioning](https://semver.org/).
+
+- Категории: `Добавлено`, `Изменено`, `Исправлено`, `Удалено`
 
 ## Структура проекта
 
@@ -61,26 +79,8 @@ frontend/src/
     LanguageManager.tsx        # Управление языками переводов
     TemplatePreview.tsx        # Превью JSON-шаблона
     EnumEditor.tsx             # Редактор enum с переводами
-  __tests__/                  # Vitest: store-тесты (75 тестов)
+  __tests__/                  # Vitest: store-тесты
 ```
-
-## Ключевые концепции
-
-- **Hero-блок**: при пустой таблице — 3 карточки (AI / Импорт / Вручную) с drag-n-drop роутингом по расширению файла
-- **Тулбар**: скрыт при пустой таблице; при наличии регистров — только инструменты редактирования
-- **i18n**: `useT()` в компонентах, `getT()` в api.ts/store.ts; ошибки бэкенда на EN, перевод на фронте
-- **Нормализация → EN**: `HAS_NON_LATIN` regex — любой нелатинский текст, не только кириллица
-- **Condition**: regex-парсинг, подсветка связанных регистров при клике
-- **Jinja-экспорт**: автодетекция числовых/строковых/вариантных паттернов → `{% for %}` циклы
-
-## CHANGELOG
-
-Формат [Keep a Changelog](https://keepachangelog.com/) + [Semantic Versioning](https://semver.org/).
-
-**При каждом PR обязательно обновлять `CHANGELOG.md`:**
-- Добавлять записи в секцию `[Unreleased]`
-- Категории: `Добавлено`, `Изменено`, `Исправлено`, `Удалено`
-- При релизе — перенести из `[Unreleased]` в `[X.Y.Z] - YYYY-MM-DD`
 
 ## Подробная документация
 
