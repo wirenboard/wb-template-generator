@@ -1,0 +1,9 @@
+Device: Legacy Meter LM-200
+
+Register Table:
+
+| Register | Name            | Data Type | Access | Units |
+|----------|-----------------|-----------|--------|-------|
+| 40001    | Voltage L1      | FLOAT     | R      | V     |
+| 40003    | Current L1      | FLOAT     | R      | A     |
+| 30001    | Device Status   | UINT16    | R      |       |

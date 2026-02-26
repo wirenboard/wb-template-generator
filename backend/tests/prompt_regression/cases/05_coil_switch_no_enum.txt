@@ -1,0 +1,13 @@
+Device: Relay Module RM-500
+
+Coil Registers (Function Code 01):
+
+| Address | Name    | Description            |
+|---------|---------|------------------------|
+| 0       | Relay 1 | 0: Off, 1: On          |
+
+Discrete Input Registers (Function Code 02):
+
+| Address | Name           | Description            |
+|---------|----------------|------------------------|
+| 0       | Input 1 Status | 0: Normal, 1: Fault    |
