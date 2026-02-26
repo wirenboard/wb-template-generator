@@ -9,8 +9,8 @@ import pytest
 # Добавляем backend/ в sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import Settings
-from llm_service import analyze_document, resolve_llm_credentials
+from config import Settings  # noqa: E402, I001
+from llm_service import analyze_document, resolve_llm_credentials  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

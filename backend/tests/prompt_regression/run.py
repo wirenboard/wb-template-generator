@@ -21,12 +21,12 @@ _BACKEND_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
-import yaml
-from openai import AsyncOpenAI
+import yaml  # noqa: E402
+from openai import AsyncOpenAI  # noqa: E402
 
-from config import Settings
-from llm_service import _call_llm, _extract_json_from_response, _parse_registers
-from prompts import get_analyze_prompt
+from config import Settings  # noqa: E402
+from llm_service import _call_llm, _extract_json_from_response, _parse_registers  # noqa: E402
+from prompts import get_analyze_prompt  # noqa: E402
 
 CASES_DIR = Path(__file__).parent / "cases"
 EXPECTATIONS_FILE = Path(__file__).parent / "expectations.yaml"
@@ -77,7 +77,7 @@ def check_register(actual_regs, expected_reg) -> tuple[bool, str]:
             break
 
     if not found:
-        return False, f"регистр не найден в ответе LLM"
+        return False, "регистр не найден в ответе LLM"
 
     errors = []
 
