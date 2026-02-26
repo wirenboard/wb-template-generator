@@ -30,23 +30,32 @@ some devices split registers across tables (e.g. "Input Registers" and "Holding 
 ## Step-by-step instructions
 
 1. **Extract ALL registers** from the document — holding, input, coil, discrete.
-2. **Convert legacy Modbus addresses** to zero-based:
+2. **Determine register type and address**:
+
+   **Case A — Table has a "Function Code" column** (e.g. FC 01, 02, 03, 04):
+   - Determine `reg_type` from function code: 01 → coil, 02 → discrete, 03 → holding, 04 → input.
+   - Use the address EXACTLY as given in the table — do NOT subtract 1 or convert in any way.
+   - Example: FC 01, Address 3 → `reg_type: "coil"`, `address: 3` (NOT 2).
+   - Example: FC 03, Address 100 → `reg_type: "holding"`, `address: 100`.
+
+   **Case B — No function code column, but addresses use legacy 5-digit format** (4xxxx, 3xxxx):
    - 4xxxx (e.g. 40001) → holding register, address = xxxx - 1 (40001 → 0)
    - 3xxxx (e.g. 30001) → input register, address = xxxx - 1 (30001 → 0)
-   - 0xxxx (e.g. 00001) → coil, address = xxxx - 1 (00001 → 0)
-   - 1xxxx (e.g. 10001) → discrete input, address = xxxx - 1 (10001 → 0)
-   - ONLY apply the -1 conversion for legacy 5-digit addresses (4xxxx, 3xxxx, 0xxxx, 1xxxx). \
-For all other addresses, use them EXACTLY as given in the document — do NOT subtract 1. \
-If a table shows address 100, use 100. If it shows address 1, use 1. \
-Do NOT assume addresses are 1-based unless they use the 5-digit legacy format.
+   - ONLY apply this conversion for 5-digit addresses starting with 3 or 4.
+
+   **Case C — All other addresses** (plain numbers, hex, etc.):
+   - Use addresses EXACTLY as given in the document — do NOT subtract 1.
+   - If a table shows address 1, use 1. If it shows address 100, use 100.
+   - Do NOT assume addresses are 1-based. Never subtract 1 unless it matches Case B.
    - If addresses are given as hex (0x0000, 0x64, etc.), convert to decimal.
-   - **Bitwise access**: if the document describes individual bits within a register \
+   - **Bitwise access** (ONLY for holding registers): if the document describes individual bits within a holding register \
 (e.g. "bit 0 = relay 1 status, bit 1 = relay 2 status"), use address format `"register:bit_offset:bit_width"`:
      - `"109:0:1"` — register 109, bit 0, width 1 bit (single flag)
      - `"109:4:4"` — register 109, starting at bit 4, width 4 bits (nibble)
      - bit_offset is 0-based from the LSB
-     - Use this when a single register contains multiple independent fields packed as bits
-     - If the document describes a status/control register with named bits, create SEPARATE registers \
+     - Use this ONLY for `reg_type: "holding"`. For coil and discrete registers (already 1-bit each) \
+and for input registers, do NOT use bitwise format — use the plain integer address.
+     - If the document describes a holding status/control register with named bits, create SEPARATE registers \
 for each meaningful bit or bit group using this format
 3. **Determine register properties**:
    - `reg_type`: "holding", "input", "coil", "discrete"
@@ -149,15 +158,18 @@ Set to null if no translations are needed.
    - Group together related registers: all power measurements in "power_meters", \
 all temperature/humidity in "environment", all communication settings in "communication", etc.
 
-7. **Bitmask / status registers** — if a register contains multiple bit flags \
+7. **Bitmask / status registers** — if a **holding** register contains multiple bit flags \
 (e.g. "Bit 0: Overcurrent, Bit 1: Overvoltage, Bit 2: Stall"), \
 split each bit into a **separate register** using bitwise address format `"register:bit:width"`.
-   - Example: Status register at address 0 with Bit 0 = Error, Bit 1 = Running → \
+   - This applies ONLY to holding registers (`reg_type: "holding"`).
+   - Example: Holding register at address 0 with Bit 0 = Error, Bit 1 = Running → \
 create two registers with addresses `"0:0:1"` and `"0:1:1"`.
    - Each bit register should have a clear name (e.g. "Error Flag", "Running Status").
-   - For bit-fields extracted from holding/input registers: use `channel_type: "value"` \
+   - For bit-fields extracted from holding registers: use `channel_type: "value"` \
 with `enum: [0, 1]` and descriptive `enum_titles` (e.g. ["No Error", "Error"]).
-   - For discrete registers: use `channel_type: "switch"` WITHOUT enum (discrete is always switch).
+   - For coil and discrete registers: use `channel_type: "switch"` WITHOUT enum and WITHOUT bitwise format \
+(coil/discrete are already 1-bit each).
+   - Do NOT use bitwise format for input registers — use the plain integer address.
    - Do NOT create a single register for the whole bitmask — always split into individual bits.
    - `width` is usually 1 (single bit). Use wider width only for multi-bit fields \
 (e.g. "Bits 2-3: Mode" → `"0:2:2"`).
@@ -342,8 +354,8 @@ Use `enum_entries` with `translations` if you want to include enum translations.
 - NEVER use "wo-switch" for registers that can be read (access "read" or "readwrite"). \
 "wo-switch" is ONLY for write-only registers (access "write"). For readable on/off registers, always use "switch".
 - Pay attention to scale factors: "×0.1", "/100", "LSB=0.01" → specific scale values.
-- If the document describes bits within a status/control register, split them into separate entries \
-with bitwise address format "reg:bit:width".
+- If the document describes bits within a holding status/control register, split them into separate entries \
+with bitwise address format "reg:bit:width". Do NOT use bitwise format for input, coil, or discrete registers.
 """
 
 # Инструкции для разных типов шаблонов

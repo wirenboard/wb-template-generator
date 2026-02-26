@@ -124,6 +124,8 @@ export default function RegisterTable({
   const translateAll = useStore((s) => s.translateAll);
   const normalizeToEnglish = useStore((s) => s.normalizeToEnglish);
   const importTemplateAction = useStore((s) => s.importTemplate);
+  const importing = useStore((s) => s.importing);
+  const importError = useStore((s) => s.importError);
 
   // Нормализация имени: "Show modes as range" → "show_modes_as_range"
   // Условия в wb-mqtt-serial ссылаются по ключу параметра (snake_case),
@@ -1176,52 +1178,76 @@ export default function RegisterTable({
               </svg>
               <p className="text-sm font-medium">{t('hero.dropHint')}</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Из документа (AI) — основной путь */}
-              <button
-                onClick={() => setLlmImportOpen(true)}
-                className="flex flex-col items-center text-center border border-blue-200 bg-blue-50/30 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition cursor-pointer"
-              >
-                <svg className="w-8 h-8 text-blue-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                </svg>
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.aiTitle')}</h3>
-                <p className="text-xs text-gray-500 mb-3">{t('hero.aiDesc')}</p>
-                <span className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">{t('hero.aiButton')}</span>
-              </button>
-
-              {/* Импорт шаблона — label нативно открывает file dialog */}
-              <label
-                className="flex flex-col items-center text-center border border-gray-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
-              >
-                <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                </svg>
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.importTitle')}</h3>
-                <p className="text-xs text-gray-500 mb-3">{t('hero.importDesc')}</p>
-                <span className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">{t('hero.importButton')}</span>
-                <input
-                  type="file"
-                  accept=".json,.json.jinja"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) importTemplateAction(f); e.target.value = ''; }}
-                  className="hidden"
-                />
-              </label>
-
-              {/* Вручную / CSV */}
-              <button
-                onClick={addRegister}
-                className="flex flex-col items-center text-center border border-gray-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
-              >
-                <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v1.5" />
-                </svg>
-                <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.manualTitle')}</h3>
-                <p className="text-xs text-gray-500 mb-3">{t('hero.manualDesc')}</p>
-                <span className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">{t('hero.manualButton')}</span>
-              </button>
+          ) : importing ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+              <svg className="w-10 h-10 mb-3 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <p className="text-sm font-medium">{t('hero.importing')}</p>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Из документа (AI) — основной путь */}
+                <button
+                  onClick={() => setLlmImportOpen(true)}
+                  className="flex flex-col items-center text-center border border-blue-200 bg-blue-50/30 rounded-xl p-6 hover:border-blue-400 hover:shadow-md transition cursor-pointer"
+                >
+                  <svg className="w-8 h-8 text-blue-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.aiTitle')}</h3>
+                  <p className="text-xs text-gray-500 mb-3">{t('hero.aiDesc')}</p>
+                  <span className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">{t('hero.aiButton')}</span>
+                </button>
+
+                {/* Импорт шаблона — label нативно открывает file dialog */}
+                <label
+                  className="flex flex-col items-center text-center border border-gray-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
+                >
+                  <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.importTitle')}</h3>
+                  <p className="text-xs text-gray-500 mb-3">{t('hero.importDesc')}</p>
+                  <span className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">{t('hero.importButton')}</span>
+                  <input
+                    type="file"
+                    accept=".json,.json.jinja"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) importTemplateAction(f); e.target.value = ''; }}
+                    className="hidden"
+                  />
+                </label>
+
+                {/* Вручную / CSV */}
+                <button
+                  onClick={addRegister}
+                  className="flex flex-col items-center text-center border border-gray-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
+                >
+                  <svg className="w-8 h-8 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v1.5" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('hero.manualTitle')}</h3>
+                  <p className="text-xs text-gray-500 mb-3">{t('hero.manualDesc')}</p>
+                  <span className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">{t('hero.manualButton')}</span>
+                </button>
+              </div>
+
+              {/* Ошибка импорта — заметный блок под карточками */}
+              {importError && (
+                <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                  <svg className="w-5 h-5 text-red-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  <span className="text-sm text-red-700 flex-1">{importError}</span>
+                  <button
+                    onClick={() => useStore.setState({ importError: null })}
+                    className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0"
+                  >&times;</button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

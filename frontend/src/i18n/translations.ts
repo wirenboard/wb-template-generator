@@ -80,6 +80,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'hero.manualDesc': 'Добавьте регистры вручную или импортируйте CSV',
     'hero.manualButton': 'Добавить регистр',
     'hero.dropHint': 'Отпустите файл: .json — импорт шаблона, .csv — импорт регистров, PDF/Excel/изображение — AI-анализ',
+    'hero.importing': 'Импорт шаблона...',
 
     // --- Undo toast ---
     'undo.deletedOne': 'Регистр «{name}» удалён',
@@ -439,6 +440,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'hero.manualDesc': 'Add registers manually or import from CSV',
     'hero.manualButton': 'Add register',
     'hero.dropHint': 'Drop file: .json — import template, .csv — import registers, PDF/Excel/image — AI analysis',
+    'hero.importing': 'Importing template...',
 
     'undo.deletedOne': 'Register "{name}" deleted',
     'undo.deletedMany': 'Deleted registers: {count}',
@@ -772,6 +774,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'hero.manualDesc': 'Регистрлерді қолмен қосыңыз немесе CSV импорттаңыз',
     'hero.manualButton': 'Регистр қосу',
     'hero.dropHint': 'Файлды тастаңыз: .json — шаблон импорты, .csv — регистр импорты, PDF/Excel/сурет — AI талдауы',
+    'hero.importing': 'Шаблон импорттау...',
 
     'undo.deletedOne': '«{name}» регистрі жойылды',
     'undo.deletedMany': 'Жойылған регистрлер: {count}',
@@ -1105,6 +1108,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'hero.manualDesc': 'Aggiungi registri manualmente o importa da CSV',
     'hero.manualButton': 'Aggiungi registro',
     'hero.dropHint': 'Rilascia il file: .json — importa template, .csv — importa registri, PDF/Excel/immagine — analisi AI',
+    'hero.importing': 'Importazione template...',
 
     'undo.deletedOne': 'Registro "{name}" eliminato',
     'undo.deletedMany': 'Registri eliminati: {count}',

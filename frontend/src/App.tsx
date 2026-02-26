@@ -26,7 +26,6 @@ export default function App() {
   const setDeviceInfo = useStore((s) => s.setDeviceInfo);
   const resetAll = useStore((s) => s.resetAll);
   const appVersion = useStore((s) => s.appVersion);
-  const importError = useStore((s) => s.importError);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -211,13 +210,6 @@ export default function App() {
             )}
           </div>
         </div>
-
-        {importError && (
-          <div className="mb-2 bg-red-50 text-red-700 border border-red-200 rounded p-1.5 text-xs flex items-center justify-between">
-            <span>{importError}</span>
-            <button onClick={() => useStore.setState({ importError: null })} className="ml-2 text-red-500 hover:text-red-700">&times;</button>
-          </div>
-        )}
 
         {downloadError && (
           <div className="mb-2 bg-red-50 text-red-700 border border-red-200 rounded p-1.5 text-xs flex items-center justify-between">
