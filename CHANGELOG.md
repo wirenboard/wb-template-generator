@@ -7,10 +7,11 @@
 
 ## [Unreleased]
 
-## [0.5.5] - 2026-02-26
+## [0.5.6] - 2026-02-26
 
 ### Добавлено
 - **Тесты**: prompt regression тесты — 5 ручных кейсов для проверки LLM-промпта (адреса FC, legacy 5-digit, plain, bitwise, coil/discrete→switch). Запуск: `docker compose exec backend python tests/prompt_regression/run.py`
+- **Тесты**: изоляция серверного API-ключа — 10 тестов на утечку ключа, промпта и прокси при пользовательском LLM (analyze, models, translate)
 
 ## [0.5.4] - 2026-02-26
 
@@ -122,8 +123,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.5...HEAD
-[0.5.5]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.4...v0.5.5
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.6...HEAD
+[0.5.6]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.4...v0.5.6
 [0.5.4]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.1...v0.5.2
