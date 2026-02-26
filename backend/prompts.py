@@ -48,8 +48,9 @@ some devices split registers across tables (e.g. "Input Registers" and "Holding 
    - If a table shows address 1, use 1. If it shows address 100, use 100.
    - Do NOT assume addresses are 1-based. Never subtract 1 unless it matches Case B.
    - If addresses are given as hex (0x0000, 0x64, etc.), convert to decimal.
-   - **Bitwise access** (ONLY for holding registers): if the document describes individual bits within a holding register \
-(e.g. "bit 0 = relay 1 status, bit 1 = relay 2 status"), use address format `"register:bit_offset:bit_width"`:
+   - **Bitwise access** (ONLY for holding registers): if the document describes individual bits
+     within a holding register (e.g. "bit 0 = relay 1 status, bit 1 = relay 2 status"),
+     use address format `"register:bit_offset:bit_width"`:
      - `"109:0:1"` — register 109, bit 0, width 1 bit (single flag)
      - `"109:4:4"` — register 109, starting at bit 4, width 4 bits (nibble)
      - bit_offset is 0-based from the LSB
