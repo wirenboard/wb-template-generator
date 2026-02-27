@@ -63,23 +63,40 @@ backend/
   jinja_exporter.py    # Экспорт в .json.jinja с детекцией паттернов
   file_converter.py    # PDF→images, Excel→text, Image→base64
   prompts.py           # Системные промпты для LLM
-  tests/               # pytest: builder, importer, jinja_exporter
+  queue_manager.py     # Управление очередями анализа (server + custom)
+  sse.py               # Формирование SSE-событий
+  request_context.py   # Request ID через ContextVar (middleware)
+  mock_data.py         # Тестовые данные для разработки
+  tests/               # pytest: builder, importer, jinja_exporter, key_isolation
 
 frontend/src/
-  App.tsx              # Шапка (заголовок + "by AI" + версия + язык) + layout
+  App.tsx              # Шапка (заголовок + "by AI" + версия + язык) + layout + футер
   store.ts             # Zustand store — всё состояние приложения
   api.ts               # API-клиент (SSE, REST, translate, import)
+  types.ts             # TypeScript-типы (Register, DeviceInfo, RegisterGroup и т.д.)
   i18n/                # Словари 4 языков, useT() хук, getT() для non-React
   constants.ts         # Форматы, единицы, языки, channel_types
+  utils/
+    conditionValidation.ts  # Валидация condition-ссылок (только на параметры)
   components/
     RegisterTable.tsx         # Таблица + тулбар + hero-блок (пустое состояние)
     RegisterDetailPanel.tsx   # Панель деталей + NormalizeToEnButton
     LlmImportModal.tsx        # Модалка AI-анализа (файлы + прогресс)
+    LlmSettings.tsx           # Модалка настроек LLM (URL, ключ, модель, промпт)
     GroupManager.tsx           # Управление группами
+    GroupSection.tsx           # Секция группы в таблице (заголовок + collapse)
     LanguageManager.tsx        # Управление языками переводов
     TemplatePreview.tsx        # Превью JSON-шаблона
+    ChannelPreview.tsx         # Превью канала в TemplatePreview
+    ParameterPreview.tsx       # Превью параметра в TemplatePreview
     EnumEditor.tsx             # Редактор enum с переводами
-  __tests__/                  # Vitest: store-тесты
+    FormatSelect.tsx           # Селектор форматов с подсказками
+    FileUpload.tsx             # Загрузка файлов (drag-n-drop)
+    AnalyzeProgress.tsx        # Прогресс AI-анализа (SSE)
+    ConfirmModal.tsx           # Модалка подтверждения (сброс и т.д.)
+    ErrorBoundary.tsx          # Обработка ошибок React
+    ErrorDisplay.tsx           # Отображение ошибок импорта
+  __tests__/                  # Vitest: store, i18n, condition-validation
 ```
 
 ## Подробная документация

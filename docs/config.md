@@ -17,4 +17,6 @@ QUEUE_CUSTOM_MAX_CONCURRENT=15   # Параллельных запросов с 
 QUEUE_ACTIVATION_DELAY=1.0       # Задержка между запусками из очереди (сек)
 RATE_LIMIT_REQUESTS=10
 RATE_LIMIT_WINDOW=60
+LOG_FORMAT=text              # Формат логов: text или json
+CORS_ORIGINS=*               # Разрешённые CORS-источники через запятую
 ```

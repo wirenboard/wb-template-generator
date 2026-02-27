@@ -17,6 +17,18 @@
 | GET | `/api/queue-status` | Состояние очередей |
 | GET | `/api/metrics` | Метрики (счётчики, гистограммы) |
 
+### Параметры `/api/analyze` (multipart/form-data)
+
+| Параметр | Тип | По умолчанию | Описание |
+|----------|-----|-------------|----------|
+| `files` | File[] | — | Файлы документации (PDF, Excel, изображения) |
+| `template_type` | str | `"full"` | Тип шаблона: `small`, `medium`, `full` |
+| `translation_languages` | str | `null` | Языки переводов через запятую, напр. `"ru,kz"` |
+| `custom_llm_url` | str | `null` | URL пользовательского LLM API |
+| `custom_llm_key` | str | `null` | Ключ пользовательского LLM API |
+| `custom_llm_model` | str | `null` | Модель пользовательского LLM |
+| `custom_system_prompt` | str | `null` | Кастомный промпт (только для пользовательского LLM) |
+
 ## SSE-события `/api/analyze`
 
 ```

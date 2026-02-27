@@ -206,13 +206,15 @@ to include translations:
 {{"value": 1, "title": "On", "translations": {{"ru": "Вкл"}}}}]`
    When using `enum_entries`, set `enum` and `enum_titles` to null.
 
-9. **Conditions** — if a register is only relevant when another parameter has a specific value:
+9. **Conditions** — if a register is only relevant when a **parameter** has a specific value:
    - `condition` — expression in format `"parameter_snake_case_id==value"` \
 (e.g. "relay_mode==1", "output_type==2")
-   - The left side is the snake_case id of a **parameter**, the right side is the integer value.
+   - The left side MUST be the snake_case id of a **parameter** (`is_parameter: true`). \
+**NEVER** reference a channel (`is_parameter: false`) in condition — channels cannot be condition sources.
+   - The right side is the integer value.
    - Example: if relay has mode register (parameter) with values 0=Off, 1=Timer, 2=Manual, \
 and there are timer-related parameters, set their condition to "relay_mode==1".
-   - Set to null if no obvious condition dependency.
+   - Set to null if no obvious condition dependency or if the dependency is on a channel (not parameter).
 
 10. **Names in English** — all names must be in English:
    - `name` — concise English name (e.g. "Voltage", "Active Power", "Baud Rate")
