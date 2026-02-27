@@ -22,7 +22,9 @@
 - `is_parameter: bool` — false=канал (данные/управление), true=параметр (настройки)
 - `channel_type`: value, switch, wo-switch, pushbutton, range, text, rgb
 - `group: str` — ID группы (default: `"general"`)
-- `condition: str | None` — условие показа (`"parameter_id==value"`)
+- `group_title: str | None` — читаемое название группы (при создании через LLM)
+- `group_title_translations: dict[str, str] | None` — переводы заголовка группы (`{lang: title}`)
+- `condition: str | None` — условие показа (`"parameter_id==value"`). Ссылается только на параметры (`is_parameter: true`)
 - `enabled: bool` — включён/выключен в шаблоне
 - `enum` + `enum_titles` — параллельные массивы значений и меток
 - `enum_entries: list[EnumEntry]` — альтернатива с переводами (приоритет над enum/enum_titles)
