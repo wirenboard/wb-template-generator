@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
+import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { translateStrings } from '../api';
 import { useT, useHasTranslations, useLocale } from '../i18n';
 import FormatSelect from './FormatSelect';
@@ -158,6 +159,9 @@ export default function RegisterTable({
     }
     return map;
   }, [registers, normalize]);
+
+  // Набор id регистров, у которых condition ссылается на канал (не параметр) — невалидная зависимость
+  const invalidConditionIds = useMemo(() => findInvalidConditionIds(registers), [registers]);
 
   // Вычисляем зависимые регистры для подсветки
   const relatedRegisterIds = useMemo(() => {
@@ -956,9 +960,15 @@ export default function RegisterTable({
               {t('toolbar.download')} <span className="text-[10px]">▾</span>
             </button>
             {downloadOpen && (
-              <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-48 right-0">
-                <button onClick={() => { onDownloadJson(); setDownloadOpen(false); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">{t('toolbar.downloadJson')}</button>
-                <button onClick={() => { onDownloadJinja(); }} className="block w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50">{t('toolbar.downloadJinja')}</button>
+              <div className="absolute z-20 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-64 right-0">
+                <button onClick={() => { onDownloadJson(); setDownloadOpen(false); }} className="block w-full text-left px-3 py-1.5 hover:bg-gray-50">
+                  <span className="text-sm">{t('toolbar.downloadJson')}</span>
+                  <span className="block text-[11px] text-gray-400">{t('toolbar.downloadJsonHint')}</span>
+                </button>
+                <button onClick={() => { onDownloadJinja(); }} className="block w-full text-left px-3 py-1.5 hover:bg-gray-50">
+                  <span className="text-sm">{t('toolbar.downloadJinja')}</span>
+                  <span className="block text-[11px] text-gray-400">{t('toolbar.downloadJinjaHint')}</span>
+                </button>
               </div>
             )}
           </div>
@@ -1076,6 +1086,7 @@ export default function RegisterTable({
                           isSelected={selected.has(reg.id)}
                           isExpanded={expandedRows.has(reg.id)}
                           conditionDependentsCount={conditionDependentsMap.get(reg.id) ?? 0}
+                          hasInvalidCondition={invalidConditionIds.has(reg.id)}
                           editing={editing}
                           groupOptions={groupOptions}
                           draggable={!sortField}
@@ -1134,6 +1145,7 @@ export default function RegisterTable({
                     isSelected={selected.has(reg.id)}
                     isExpanded={expandedRows.has(reg.id)}
                     conditionDependentsCount={conditionDependentsMap.get(reg.id) ?? 0}
+                    hasInvalidCondition={invalidConditionIds.has(reg.id)}
                     editing={editing}
                     groupOptions={groupOptions}
                     draggable={!sortField}
@@ -1321,6 +1333,8 @@ interface RegisterRowProps {
   isExpanded: boolean;
   /** Количество каналов, зависящих от этого параметра через condition (0 = не используется) */
   conditionDependentsCount: number;
+  /** condition ссылается на канал (не параметр) — невалидная зависимость */
+  hasInvalidCondition: boolean;
   editing: EditingCell | null;
   groupOptions: string[];
   draggable?: boolean;
@@ -1354,6 +1368,7 @@ function RegisterRow({
   isSelected,
   isExpanded,
   conditionDependentsCount,
+  hasInvalidCondition,
   editing,
   groupOptions,
   draggable,
@@ -1580,10 +1595,17 @@ function RegisterRow({
                 {/* Бейдж: канал/параметр имеет condition (зависит от другого параметра) */}
                 {reg.condition && (
                   <span
-                    className="flex-shrink-0 inline-flex items-center px-1 py-0.5 text-[9px] font-medium bg-amber-100 text-amber-700 rounded cursor-help"
-                    title={t('preview.conditionLabel', { cond: reg.condition })}
+                    className={`flex-shrink-0 inline-flex items-center px-1 py-0.5 text-[9px] font-medium rounded cursor-help ${
+                      hasInvalidCondition
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                    title={hasInvalidCondition
+                      ? t('row.invalidCondition', { cond: reg.condition })
+                      : t('preview.conditionLabel', { cond: reg.condition })
+                    }
                   >
-                    ?=
+                    {hasInvalidCondition ? '⚠ ?=' : '?='}
                   </span>
                 )}
               </div>

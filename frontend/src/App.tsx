@@ -155,12 +155,12 @@ export default function App() {
         <div className="flex items-center gap-3 mb-2 flex-wrap">
           <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">
             {t('app.title')}
-            <span className="text-xs font-normal text-gray-400 ml-1.5 align-super">by AI</span>
+            <span className="text-xs font-normal text-gray-400 ml-1.5 align-super cursor-help" title={t('app.byAiTip')}>by AI</span>
           </h1>
           {appVersion && (
-            <span className="text-[10px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded leading-none">
+            <a href="https://github.com/wirenboard/wb-template-generator/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer" className="text-[10px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded leading-none hover:text-blue-600 hover:bg-blue-50 transition-colors">
               v{appVersion}
-            </span>
+            </a>
           )}
           <div className="h-4 w-px bg-gray-300 hidden sm:block" />
           <label className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -309,6 +309,11 @@ export default function App() {
         onConfirm={() => { resetAll(); setConfirmResetOpen(false); }}
         onCancel={() => setConfirmResetOpen(false)}
       />
+      <footer className="text-center text-xs text-gray-400 py-4">
+        <a href="https://github.com/wirenboard/wb-template-generator" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600 transition-colors">
+          {t('footer.source')}
+        </a>
+      </footer>
     </div>
   );
 }
