@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect, Fragment } from 'react';
 import { useStore } from '../store';
 import type { Register } from '../types';
-import { REG_TYPES, UNITS, CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
+import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { translateStrings } from '../api';
@@ -1461,7 +1461,7 @@ function RegisterRow({
 
     if (col.type === 'select' && col.options) {
       const options = col.field === 'channel_type'
-        ? getChannelTypesForRegType(reg.reg_type)
+        ? (reg.is_parameter ? PARAMETER_CHANNEL_TYPES : getChannelTypesForRegType(reg.reg_type))
         : col.options;
       const currentValue = String(getDefaultValue(reg, col.field));
       // Если текущее значение не в списке — добавляем его в начало
@@ -1628,7 +1628,14 @@ function RegisterRow({
 
         {/* Параметр */}
         <td className="px-1 py-1 text-center">
-          <input type="checkbox" checked={reg.is_parameter} onChange={(e) => updateRegister(reg.id, { is_parameter: e.target.checked })} className="rounded" title={reg.is_parameter ? t('row.parameterTip') : t('row.channelTip')} />
+          <input type="checkbox" checked={reg.is_parameter} onChange={(e) => {
+            const isParam = e.target.checked;
+            const patch: Partial<Register> = { is_parameter: isParam };
+            if (isParam && reg.channel_type !== 'value') {
+              patch.channel_type = 'value';
+            }
+            updateRegister(reg.id, patch);
+          }} className="rounded" title={reg.is_parameter ? t('row.parameterTip') : t('row.channelTip')} />
         </td>
 
         <td className="px-1 py-1">

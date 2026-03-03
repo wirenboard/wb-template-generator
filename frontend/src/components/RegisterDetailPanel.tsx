@@ -79,8 +79,8 @@ function getVisibility(reg: Register): FieldVisibility {
     // enum: аналоговый тип (value, range, text, temperature и т.д.) + не бит
     enum: isAnalog && !isBit,
 
-    // on/off: только switch/wo-switch на не-битовом регистре (coil и так 0/1)
-    onOff: isSwitch && !isBit,
+    // on/off: только switch/wo-switch на не-битовом регистре (coil и так 0/1), не для параметров
+    onOff: isSwitch && !isBit && !reg.is_parameter,
 
     // word_order: только для многорегистровых форматов
     wordOrder: isMultiReg && !isBit,

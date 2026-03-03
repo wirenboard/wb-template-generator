@@ -127,7 +127,10 @@ null if not specified or single-word.
    When in doubt, ask yourself: "Does the building automation user look at this value on a dashboard \
 or control it regularly?" → Channel. "Is this set once during installation?" → Parameter.
 
-5. **Assign channel_type** (for channels, i.e. `is_parameter: false`) — ONLY these values:
+5. **Assign channel_type** — for **channels** (`is_parameter: false`) ONLY these values. \
+For **parameters** (`is_parameter: true`) always set `channel_type: "value"`. \
+Parameters NEVER use "switch" — use enum with values [0,1] and enum_titles ["Off","On"] instead.
+   Channel types:
    - `"value"` — numeric measurement or status value (temperature, voltage, counter...). \
 This is the most common type. Use with appropriate `units`.
    - `"switch"` — on/off toggle (boolean). Use for ANY readable on/off register — \
