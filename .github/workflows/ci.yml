@@ -64,7 +64,7 @@ jobs:
         run: npm test
 
   changelog:
-    name: CHANGELOG — проверка обновления
+    name: CHANGELOG — проверка версии
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
@@ -75,7 +75,17 @@ jobs:
       - name: Проверить обновление CHANGELOG.md
         run: |
           if git diff origin/main...HEAD --name-only | grep -q '^CHANGELOG.md$'; then
-            echo "CHANGELOG.md обновлён"
+            echo "✅ CHANGELOG.md обновлён"
           else
-            echo "::warning::CHANGELOG.md не обновлён в этом PR. Не забудьте добавить запись в [Unreleased]."
+            echo "::error::CHANGELOG.md не обновлён в этом PR. Добавьте запись об изменениях."
+            exit 1
           fi
+
+      - name: Проверить что версия указана (не Unreleased)
+        run: |
+          if grep -q '## \[Unreleased\]' CHANGELOG.md; then
+            echo "::error::В CHANGELOG.md найдена секция [Unreleased]. Укажите версию перед мержем, например: ## [0.5.9] - $(date +%Y-%m-%d)"
+            exit 1
+          fi
+          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          echo "✅ Версия: $VERSION"
