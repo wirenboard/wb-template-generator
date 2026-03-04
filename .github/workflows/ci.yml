@@ -81,13 +81,20 @@ jobs:
             exit 1
           fi
 
-      - name: Проверить что версия указана (не Unreleased)
+      - name: Проверить что есть версионная секция с записями
         run: |
-          if grep -q '## \[Unreleased\]' CHANGELOG.md; then
-            echo "::error::В CHANGELOG.md найдена секция [Unreleased]. Укажите версию перед мержем, например: ## [0.5.9] - $(date +%Y-%m-%d)"
+          # Первая версионная секция (## [X.Y.Z]) должна существовать
+          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "::error::В CHANGELOG.md нет ни одной версионной секции. Добавьте ## [X.Y.Z] - YYYY-MM-DD с записями."
             exit 1
           fi
-          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          # Проверяем что первая секция — версия, а не Unreleased
+          FIRST_SECTION=$(grep -oP '## \[\K[^\]]+' CHANGELOG.md | head -1)
+          if [ "$FIRST_SECTION" = "Unreleased" ]; then
+            echo "::error::Первая секция в CHANGELOG.md — [Unreleased]. Добавьте версионную секцию ## [X.Y.Z] - $(date +%Y-%m-%d) с записями перед мержем."
+            exit 1
+          fi
           echo "✅ Версия: $VERSION"
 
   tag:
