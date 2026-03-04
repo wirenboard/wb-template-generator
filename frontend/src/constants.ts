@@ -37,6 +37,9 @@ const CHANNEL_TYPES_BY_REG_TYPE: Record<string, readonly string[]> = {
   input: ALL_EXCEPT_WO_SWITCH,
 };
 
+/** Допустимые типы для параметров (switch и др. недопустимы в wb-mqtt-serial parameters) */
+export const PARAMETER_CHANNEL_TYPES = ['value'] as const;
+
 /** Возвращает допустимые типы каналов для данного reg_type */
 export function getChannelTypesForRegType(regType: string): readonly string[] {
   return CHANNEL_TYPES_BY_REG_TYPE[regType] ?? ALL_CHANNEL_TYPES;
