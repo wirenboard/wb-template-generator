@@ -5,6 +5,11 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.5.9] - 2026-03-04
+
+### Добавлено
+- **CI**: проверка версии в CHANGELOG.md — PR в main блокируется если есть `[Unreleased]` или CHANGELOG не обновлён
+
 ## [0.5.8] - 2026-03-04
 
 ### Исправлено
