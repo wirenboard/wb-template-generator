@@ -81,11 +81,40 @@ jobs:
             exit 1
           fi
 
-      - name: Проверить что версия указана (не Unreleased)
+      - name: Проверить что есть версионная секция с записями
         run: |
-          if grep -q '## \[Unreleased\]' CHANGELOG.md; then
-            echo "::error::В CHANGELOG.md найдена секция [Unreleased]. Укажите версию перед мержем, например: ## [0.5.9] - $(date +%Y-%m-%d)"
+          # Должна быть хотя бы одна версионная секция ## [X.Y.Z]
+          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "::error::В CHANGELOG.md нет ни одной версионной секции. Добавьте ## [X.Y.Z] - YYYY-MM-DD с записями."
             exit 1
           fi
-          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          # [Unreleased] допустима только пустая (без ### подсекций до следующего ## [X.Y.Z])
+          # Извлекаем содержимое между ## [Unreleased] и следующей ## секцией
+          UNRELEASED_CONTENT=$(sed -n '/^## \[Unreleased\]/,/^## \[/{ /^## \[/d; /^[[:space:]]*$/d; p; }' CHANGELOG.md)
+          if [ -n "$UNRELEASED_CONTENT" ]; then
+            echo "::error::Секция [Unreleased] содержит записи. Перенесите их в версионную секцию ## [X.Y.Z] - $(date +%Y-%m-%d) перед мержем."
+            exit 1
+          fi
           echo "✅ Версия: $VERSION"
+
+  tag:
+    name: Создать git-тег из версии в CHANGELOG
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Извлечь версию и создать тег
+        run: |
+          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          TAG="v${VERSION}"
+          if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+            echo "Тег ${TAG} уже существует — пропускаем"
+          else
+            git tag "${TAG}"
+            git push origin "${TAG}"
+            echo "✅ Создан тег ${TAG}"
+          fi

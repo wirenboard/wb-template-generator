@@ -5,10 +5,16 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [Unreleased]
+
 ## [0.5.9] - 2026-03-04
 
 ### Добавлено
-- **CI**: проверка версии в CHANGELOG.md — PR в main блокируется если есть `[Unreleased]` или CHANGELOG не обновлён
+- **CI**: проверка версии в CHANGELOG.md — первая секция должна быть версионной `[X.Y.Z]`, не `[Unreleased]`
+- **CI**: автоматическое создание git-тега из версии в CHANGELOG при merge в main
+
+### Исправлено
+- **CHANGELOG**: восстановлен формат Keep a Changelog — секция `[Unreleased]`, compare-ссылки для всех версий
 
 ## [0.5.8] - 2026-03-04
 
@@ -159,7 +165,10 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.6...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.9...HEAD
+[0.5.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.8...v0.5.9
+[0.5.8]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.7...v0.5.8
+[0.5.7]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.3...v0.5.4
