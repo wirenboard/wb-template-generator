@@ -5,7 +5,7 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
-## [Unreleased]
+## [0.5.8] - 2026-03-04
 
 ### Исправлено
 - **UI**: запрет недопустимых channel_type для параметров — параметры допускают только `value`, тип `switch` и другие доступны только для каналов
