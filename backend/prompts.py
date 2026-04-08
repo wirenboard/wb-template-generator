@@ -450,6 +450,33 @@ def get_retry_prompt() -> str:
     return _RETRY_PROMPT
 
 
+# Промпт для семантического retry — когда JSON валиден, но содержимое невалидно
+_VALIDATION_RETRY_PROMPT = """\
+Your previous response contained registers with validation errors.
+Here are the specific problems found:
+
+{error_descriptions}
+
+Please fix ALL the errors listed above and return the COMPLETE corrected register list \
+(including registers that were already correct — do not omit them).
+
+Reminder of valid values:
+- format: s16, u16, s8, u8, s24, u24, s32, u32, s64, u64, bcd8, bcd16, bcd24, bcd32, \
+float, double, char8, string, string8
+- reg_type: coil, discrete, holding, holding_single, holding_multi, input
+- channel_type: "value" for measurements, "switch" for on/off toggles, \
+"wo-switch" for write-only switches, "pushbutton" for buttons, "range" for sliders
+- address: non-negative integer or "register:bit:width" string (e.g. "109:1:2")
+
+Return ONLY the corrected JSON with the same structure, no markdown code blocks, no explanation.
+"""
+
+
+def get_validation_retry_prompt(error_descriptions: str) -> str:
+    """Промпт для повторной попытки при ошибках валидации содержимого."""
+    return _VALIDATION_RETRY_PROMPT.format(error_descriptions=error_descriptions)
+
+
 def get_raw_prompts() -> dict:
     """Возвращает сырые шаблоны промптов для отображения/редактирования на фронте."""
     return {

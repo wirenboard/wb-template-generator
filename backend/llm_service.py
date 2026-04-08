@@ -84,11 +84,16 @@ def _extract_json_from_response(text: str) -> dict:
     return json.loads(text)
 
 
-def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register]]:
+def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register], int]:
     """Парсит ответ LLM в структуры DeviceInfo и список Register.
 
-    Использует мягкую валидацию — невалидные поля заменяются дефолтами.
+    Использует авто-исправление синонимов + мягкую валидацию.
+
+    Returns:
+        (DeviceInfo, список Register, количество авто-исправлений)
     """
+    from register_validator import auto_fix_register
+
     # Парсим device_info
     raw_info = raw.get("device_info", {})
     device_info = DeviceInfo(
@@ -97,9 +102,10 @@ def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register]]:
         device_group=raw_info.get("device_group"),
     )
 
-    # Парсим регистры с мягкой валидацией
+    # Парсим регистры с авто-фиксом и мягкой валидацией
     registers: list[Register] = []
     raw_registers = raw.get("registers", [])
+    auto_fixed_count = 0
 
     for raw_reg in raw_registers:
         if not isinstance(raw_reg, dict):
@@ -107,7 +113,15 @@ def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register]]:
         try:
             # Убираем поле id если LLM его сгенерировала (мы генерируем свои uuid)
             raw_reg.pop("id", None)
-            reg = Register(**raw_reg)
+            # Авто-исправление синонимов (uint16→u16, holding_register→holding и т.д.)
+            fixed_reg, fixes = auto_fix_register(raw_reg)
+            auto_fixed_count += len(fixes)
+            if fixes:
+                fix_desc = ", ".join(f'{f.message_params.get("field", "")}: '
+                                     f'{f.message_params.get("from", "")}→{f.message_params.get("to", "")}'
+                                     for f in fixes)
+                logger.info("Авто-исправление регистра «%s»: %s", raw_reg.get("name", "?"), fix_desc)
+            reg = Register(**fixed_reg)
             registers.append(reg)
         except Exception as e:
             # Мягкая валидация — пробуем с минимальными полями
@@ -121,22 +135,27 @@ def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register]]:
             except Exception:
                 logger.error("Не удалось распарсить регистр, пропускаем: %s", raw_reg)
 
-    return device_info, registers
+    return device_info, registers, auto_fixed_count
 
 
 def _merge_batch_results(
-    batches: list[tuple[DeviceInfo, list[Register]]],
-) -> tuple[DeviceInfo, list[Register]]:
+    batches: list[tuple[DeviceInfo, list[Register], int]],
+) -> tuple[DeviceInfo, list[Register], int]:
     """Мержит результаты из нескольких батчей.
 
     Дедупликация по ключу (address, reg_type) — побеждает первое вхождение.
     device_info берётся из первого непустого батча.
+
+    Returns:
+        (DeviceInfo, список Register, суммарное количество авто-исправлений)
     """
     device_info = DeviceInfo(name="Unknown Device", id="unknown-device")
     all_registers: list[Register] = []
     seen: set[tuple[int, str]] = set()
+    total_auto_fixed = 0
 
-    for batch_info, batch_regs in batches:
+    for batch_info, batch_regs, batch_fixed in batches:
+        total_auto_fixed += batch_fixed
         # Берём device_info из первого батча, где он непустой
         if device_info.name == "Unknown Device" and batch_info.name != "Unknown Device":
             device_info = batch_info
@@ -159,7 +178,7 @@ def _merge_batch_results(
         return (r.reg_type, addr)
 
     all_registers.sort(key=_sort_key)
-    return device_info, all_registers
+    return device_info, all_registers, total_auto_fixed
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +435,7 @@ async def analyze_document(
             max_retries=2,
         )
 
-        batch_results: list[tuple[DeviceInfo, list[Register]]] = []
+        batch_results: list[tuple[DeviceInfo, list[Register], int]] = []
         last_parse_error: str | None = None  # фрагмент ответа LLM при неудаче парсинга
 
         # --- Этап 3: отправка всех файлов в LLM одним запросом ---
@@ -537,7 +556,28 @@ async def analyze_document(
             request_id=request_id,
         )
 
-        device_info, registers = _merge_batch_results(batch_results)
+        device_info, registers, total_auto_fixed = _merge_batch_results(batch_results)
+
+        # --- Этап 5.1: финальная валидация ---
+        if registers:
+            from register_validator import validate_registers as _validate_regs
+
+            yield sse_progress(
+                "validating",
+                "Проверка и исправление регистров...",
+                request_id=request_id,
+            )
+            final_validation = _validate_regs(registers)
+            if total_auto_fixed:
+                logger.info(
+                    "[%s] Авто-исправлено %d полей в регистрах",
+                    request_id, total_auto_fixed,
+                )
+            if final_validation.error_count or final_validation.warning_count:
+                logger.info(
+                    "[%s] Валидация: %d ошибок, %d предупреждений",
+                    request_id, final_validation.error_count, final_validation.warning_count,
+                )
 
         # Стрипаем переводы если языки не запрошены
         _allowed = set(translation_languages or []) - {"en"}
@@ -649,9 +689,46 @@ async def _analyze_single_batch(
     else:
         try:
             raw_data = _extract_json_from_response(raw_response)
-            return _parse_registers(raw_data)
+            result = _parse_registers(raw_data)
+
+            # --- Валидация: проверяем качество ответа ---
+            from register_validator import (
+                format_validation_errors,
+                validate_registers,
+            )
+            from prompts import get_validation_retry_prompt
+
+            device_info, registers, auto_fixed = result
+            if registers:
+                validation = validate_registers(registers)
+                error_rate = validation.error_count / len(registers)
+                if error_rate > 0.3:
+                    # Слишком много ошибок — семантический retry
+                    reason = (
+                        f"Валидация: {validation.error_count} ошибок в "
+                        f"{len(registers)} регистрах ({error_rate:.0%})"
+                    )
+                    logger.warning(
+                        "Высокий процент ошибок (%.0f%%, %d из %d), семантический retry",
+                        error_rate * 100, validation.error_count, len(registers),
+                    )
+                    error_desc = format_validation_errors(validation, registers)
+                    # Переходим к retry ниже
+                else:
+                    if auto_fixed:
+                        logger.info("Авто-исправлено %d полей", auto_fixed)
+                    if validation.error_count:
+                        logger.info(
+                            "Валидация: %d ошибок, %d предупреждений (ниже порога retry)",
+                            validation.error_count, validation.warning_count,
+                        )
+                    return result
+            else:
+                return result
+
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             reason = f"Ошибка парсинга JSON: {e}"
+            error_desc = None
             logger.warning("Ошибка парсинга JSON ответа LLM, повторная попытка: %s", e)
 
     # Уведомляем вызывающий код о ретрае
@@ -659,11 +736,18 @@ async def _analyze_single_batch(
     status["retrying"] = True
     status["retry_reason"] = reason
 
-    # Повторная попытка с упрощённым промптом
+    # Повторная попытка: семантический retry (с ошибками) или упрощённый промпт
     try:
-        retry_content = content + [
-            {"type": "text", "text": get_retry_prompt()},
-        ]
+        if error_desc:
+            # Семантический retry — отправляем описание ошибок валидации
+            retry_content = content + [
+                {"type": "text", "text": get_validation_retry_prompt(error_desc)},
+            ]
+        else:
+            # Простой retry — ошибка парсинга JSON
+            retry_content = content + [
+                {"type": "text", "text": get_retry_prompt()},
+            ]
         raw_response, _usage = await _call_llm(
             client, model, system_prompt, retry_content, timeout, max_tokens, legacy_max_tokens, temperature,
         )

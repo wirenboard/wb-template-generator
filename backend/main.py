@@ -18,7 +18,7 @@ from openai import AsyncOpenAI
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_service import analyze_document, resolve_llm_credentials
-from models import BuildRequest, TranslateRequest
+from models import BuildRequest, TranslateRequest, ValidateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
 from request_context import generate_request_id, get_request_id, set_request_id
@@ -522,6 +522,35 @@ async def build(request: BuildRequest):
     """Сборка JSON-шаблона из отредактированных регистров."""
     template = build_template(request)
     return JSONResponse(content=template)
+
+
+@app.post("/api/validate")
+async def validate(request: ValidateRequest):
+    """Валидация регистров по схеме wb-mqtt-serial."""
+    from register_validator import Severity, validate_registers
+
+    result = validate_registers(request.registers)
+    return JSONResponse(content={
+        "registers": [
+            {
+                "register_id": rv.register_id,
+                "errors": [
+                    {
+                        "field": e.field,
+                        "severity": e.severity.value,
+                        "message_key": e.message_key,
+                        "message_params": e.message_params,
+                        "suggestion": e.suggestion,
+                    }
+                    for e in rv.errors
+                ],
+            }
+            for rv in result.registers
+            if rv.errors
+        ],
+        "error_count": result.error_count,
+        "warning_count": result.warning_count,
+    })
 
 
 @app.post("/api/build-jinja")

@@ -163,6 +163,19 @@ export async function analyzeFiles(
   }
 }
 
+/** Валидация регистров по схеме wb-mqtt-serial */
+export async function validateRegisters(
+  registers: Register[],
+): Promise<import('./utils/registerValidation').ValidationResponse> {
+  const res = await fetch('/api/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ registers }),
+  });
+  if (!res.ok) throw new Error(getT()('api.validateError', { code: res.status }));
+  return res.json();
+}
+
 /** Сборка Jinja-шаблона (.json.jinja) */
 export async function buildJinjaTemplate(request: BuildRequest): Promise<string> {
   const res = await fetch('/api/build-jinja', {

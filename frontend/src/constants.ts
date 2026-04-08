@@ -1,22 +1,36 @@
 /** Допустимые типы Modbus-регистров */
-export const REG_TYPES = ['holding', 'input', 'coil', 'discrete', 'holding_single', 'holding_multi'] as const;
+export const REG_TYPES = ['holding', 'input', 'coil', 'discrete', 'holding_single', 'holding_multi', 'direct'] as const;
 
-/** Допустимые форматы данных */
-export const FORMATS = ['u16', 's16', 'u32', 's32', 'u64', 's64', 'float', 'double', 'u8', 's8', 'string'] as const;
+/** Допустимые форматы данных (из wb-mqtt-serial-confed-common.schema.json) */
+export const FORMATS = [
+  'u16', 's16', 'u32', 's32', 'u64', 's64',
+  'float', 'double',
+  'u8', 's8', 'u24', 's24',
+  'bcd8', 'bcd16', 'bcd24', 'bcd32',
+  'char8', 'string', 'string8',
+] as const;
 
 /** Форматы с i18n-ключами описаний для dropdown */
 export const FORMAT_OPTIONS: { value: string; label: string; descriptionKey: string }[] = [
   { value: 'u16', label: 'u16', descriptionKey: 'format.u16' },
   { value: 's16', label: 's16', descriptionKey: 'format.s16' },
+  { value: 'u8', label: 'u8', descriptionKey: 'format.u8' },
+  { value: 's8', label: 's8', descriptionKey: 'format.s8' },
+  { value: 'u24', label: 'u24', descriptionKey: 'format.u24' },
+  { value: 's24', label: 's24', descriptionKey: 'format.s24' },
   { value: 'u32', label: 'u32', descriptionKey: 'format.u32' },
   { value: 's32', label: 's32', descriptionKey: 'format.s32' },
   { value: 'u64', label: 'u64', descriptionKey: 'format.u64' },
   { value: 's64', label: 's64', descriptionKey: 'format.s64' },
   { value: 'float', label: 'float', descriptionKey: 'format.float' },
   { value: 'double', label: 'double', descriptionKey: 'format.double' },
-  { value: 'u8', label: 'u8', descriptionKey: 'format.u8' },
-  { value: 's8', label: 's8', descriptionKey: 'format.s8' },
+  { value: 'bcd8', label: 'bcd8', descriptionKey: 'format.bcd8' },
+  { value: 'bcd16', label: 'bcd16', descriptionKey: 'format.bcd16' },
+  { value: 'bcd24', label: 'bcd24', descriptionKey: 'format.bcd24' },
+  { value: 'bcd32', label: 'bcd32', descriptionKey: 'format.bcd32' },
+  { value: 'char8', label: 'char8', descriptionKey: 'format.char8' },
   { value: 'string', label: 'string', descriptionKey: 'format.string' },
+  { value: 'string8', label: 'string8', descriptionKey: 'format.string8' },
 ];
 
 /** Допустимые типы каналов */
@@ -35,6 +49,7 @@ const CHANNEL_TYPES_BY_REG_TYPE: Record<string, readonly string[]> = {
   holding_single: ALL_CHANNEL_TYPES,
   holding_multi: ALL_CHANNEL_TYPES,
   input: ALL_EXCEPT_WO_SWITCH,
+  direct: ALL_CHANNEL_TYPES,
 };
 
 /** Допустимые типы для параметров (switch и др. недопустимы в wb-mqtt-serial parameters) */
