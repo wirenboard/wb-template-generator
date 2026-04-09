@@ -168,6 +168,9 @@ export default function RegisterTable({
   const validationMap = useStore((s) => s.validationMap);
   const validationErrorCount = useStore((s) => s.validationErrorCount);
   const validationWarningCount = useStore((s) => s.validationWarningCount);
+  const fixWithAi = useStore((s) => s.fixWithAi);
+  const fixingWithAi = useStore((s) => s.fixingWithAi);
+  const fixWithAiError = useStore((s) => s.fixWithAiError);
 
   // Вычисляем зависимые регистры для подсветки
   const relatedRegisterIds = useMemo(() => {
@@ -954,7 +957,7 @@ export default function RegisterTable({
         {translateError && !translating && (
           <span className="text-xs text-red-600 truncate max-w-48" title={translateError}>{translateError}</span>
         )}
-        {/* Счётчик ошибок валидации */}
+        {/* Счётчик ошибок валидации + кнопка "Исправить через AI" */}
         {(validationErrorCount > 0 || validationWarningCount > 0) && (
           <span className="inline-flex items-center gap-1.5 text-xs">
             {validationErrorCount > 0 && (
@@ -963,7 +966,20 @@ export default function RegisterTable({
             {validationWarningCount > 0 && (
               <span className="text-amber-600">{t('validation.warningCount', { count: validationWarningCount })}</span>
             )}
+            {validationErrorCount > 0 && (
+              <button
+                onClick={fixWithAi}
+                disabled={fixingWithAi}
+                className="ml-1 px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                title={t('validation.fixWithAiTip')}
+              >
+                {fixingWithAi ? t('validation.fixing') : t('validation.fixWithAi')}
+              </button>
+            )}
           </span>
+        )}
+        {fixWithAiError && (
+          <span className="text-xs text-red-600 truncate max-w-48" title={fixWithAiError}>{fixWithAiError}</span>
         )}
 
         {/* Экспорт (правая сторона) */}

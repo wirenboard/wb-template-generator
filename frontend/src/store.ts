@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress, Language } from './types';
-import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi, validateRegisters as validateRegistersApi } from './api';
+import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi, validateRegisters as validateRegistersApi, fixRegisters as fixRegistersApi } from './api';
 import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN } from './constants';
 import { generateId } from './utils';
 import type { Locale } from './i18n';
@@ -172,6 +172,9 @@ interface TemplateStore {
   validating: boolean;
   validateRegisters: () => void;
   clearValidation: () => void;
+  fixingWithAi: boolean;
+  fixWithAiError: string | null;
+  fixWithAi: () => void;
 
   // Сброс всего состояния
   resetAll: () => void;
@@ -245,6 +248,8 @@ export const useStore = create<TemplateStore>((set, get) => ({
   validationErrorCount: 0,
   validationWarningCount: 0,
   validating: false,
+  fixingWithAi: false,
+  fixWithAiError: null,
 
   setFiles: (files) => set({ files }),
   addFiles: (newFiles) => set((s) => ({ files: [...s.files, ...newFiles] })),
@@ -826,6 +831,28 @@ export const useStore = create<TemplateStore>((set, get) => ({
 
   clearValidation: () => {
     set({ validationMap: new Map(), validationErrorCount: 0, validationWarningCount: 0 });
+  },
+
+  fixWithAi: () => {
+    const { registers, fixingWithAi } = get();
+    if (fixingWithAi || registers.length === 0) return;
+    set({ fixingWithAi: true, fixWithAiError: null });
+
+    fixRegistersApi(registers, {
+      onProgress: () => { /* прогресс можно показать, пока просто ждём */ },
+      onResult: (data) => {
+        if (data.registers?.length) {
+          set({ registers: data.registers });
+          buildAndSave(get);
+        }
+      },
+      onError: (message) => {
+        set({ fixingWithAi: false, fixWithAiError: message });
+      },
+      onDone: () => {
+        set({ fixingWithAi: false });
+      },
+    });
   },
 
   resetAll: () => {

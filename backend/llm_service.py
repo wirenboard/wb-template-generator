@@ -770,3 +770,90 @@ async def _analyze_single_batch(
         # Возвращаем фрагмент ответа LLM для диагностики
         snippet = raw_response[:300] if raw_response else "(пустой ответ)"
         return snippet
+
+
+# ---------------------------------------------------------------------------
+# Исправление регистров через AI (кнопка "Исправить через AI")
+# ---------------------------------------------------------------------------
+
+async def fix_registers(
+    registers: list[Register],
+    error_descriptions: str,
+    *,
+    effective_url: str,
+    effective_key: str | None,
+    effective_model: str,
+    effective_timeout: int = 600,
+    max_tokens: int = 16384,
+    legacy_max_tokens: bool = False,
+    temperature: float | None = 0,
+    proxy: str = "",
+    request_id: str = "",
+) -> AsyncGenerator[str, None]:
+    """SSE-генератор: отправляет регистры с ошибками в LLM для исправления.
+
+    Yields SSE-события: progress, result, done, error.
+    """
+    from prompts import get_fix_registers_prompt
+    from register_validator import validate_registers as _validate_regs
+
+    try:
+        yield sse_progress("analyzing", "Отправка в LLM для исправления...", request_id=request_id)
+
+        # Сериализуем регистры в JSON для промпта
+        registers_json = json.dumps(
+            {"device_info": {"name": "device", "id": "device"},
+             "registers": [r.model_dump(exclude_none=True) for r in registers]},
+            ensure_ascii=False, indent=2,
+        )
+
+        prompt = get_fix_registers_prompt(registers_json, error_descriptions)
+        content = [{"type": "text", "text": prompt}]
+
+        # Создаём LLM-клиент
+        http_client = None
+        if proxy:
+            import httpx
+            http_client = httpx.AsyncClient(proxy=proxy)
+        client = AsyncOpenAI(
+            base_url=effective_url,
+            api_key=effective_key or "no-key-provided",
+            http_client=http_client,
+            max_retries=2,
+        )
+
+        yield sse_progress("analyzing", "LLM исправляет ошибки...", request_id=request_id)
+
+        raw_response, _usage = await _call_llm(
+            client, effective_model,
+            "You are a Modbus device template validator.",
+            content, effective_timeout, max_tokens, legacy_max_tokens, temperature,
+        )
+
+        if not raw_response or not raw_response.strip():
+            yield sse_error("LLM вернул пустой ответ", request_id=request_id)
+            return
+
+        raw_data = _extract_json_from_response(raw_response)
+        device_info, fixed_registers, auto_fixed = _parse_registers(raw_data)
+
+        if not fixed_registers:
+            yield sse_error("LLM не вернул регистров", request_id=request_id)
+            return
+
+        # Валидация результата
+        yield sse_progress("validating", "Проверка исправленных регистров...", request_id=request_id)
+        validation = _validate_regs(fixed_registers)
+        logger.info(
+            "[%s] Fix-registers: %d регистров, %d ошибок, %d предупреждений, %d авто-исправлений",
+            request_id, len(fixed_registers), validation.error_count,
+            validation.warning_count, auto_fixed,
+        )
+
+        response = AnalyzeResponse(device_info=device_info, registers=fixed_registers)
+        yield sse_result(response, request_id=request_id)
+        yield sse_done(request_id=request_id)
+
+    except Exception as e:
+        logger.exception("Ошибка при исправлении регистров через AI")
+        yield sse_error(f"Ошибка: {e!s}", request_id=request_id)

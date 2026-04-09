@@ -344,7 +344,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'validation.gateTitle': 'Обнаружены проблемы',
     'validation.gateMessage': 'Найдено ошибок: {errors}, предупреждений: {warnings}. Скачать всё равно?',
     'validation.downloadAnyway': 'Скачать всё равно',
+    'validation.fixWithAi': 'Исправить через AI',
+    'validation.fixWithAiTip': 'Отправить регистры с ошибками в LLM для автоматического исправления',
+    'validation.fixing': 'Исправление...',
     'api.validateError': 'Ошибка валидации: {code}',
+    'api.fixError': 'Ошибка исправления: {code}',
     'analyze.validating': 'Проверка регистров...',
 
     // --- Store messages ---
@@ -722,7 +726,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'validation.gateTitle': 'Validation issues found',
     'validation.gateMessage': 'Found {errors} errors and {warnings} warnings. Download anyway?',
     'validation.downloadAnyway': 'Download anyway',
+    'validation.fixWithAi': 'Fix with AI',
+    'validation.fixWithAiTip': 'Send registers with errors to LLM for automatic correction',
+    'validation.fixing': 'Fixing...',
     'api.validateError': 'Validation error: {code}',
+    'api.fixError': 'Fix error: {code}',
     'analyze.validating': 'Validating registers...',
 
     'store.allTranslated': 'All strings already translated',
@@ -1092,7 +1100,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'validation.gateTitle': 'Мәселелер табылды',
     'validation.gateMessage': 'Қателер: {errors}, ескертулер: {warnings}. Бәрібір жүктеу?',
     'validation.downloadAnyway': 'Бәрібір жүктеу',
+    'validation.fixWithAi': 'AI арқылы түзету',
+    'validation.fixWithAiTip': 'Қателері бар регистрлерді LLM-ге автоматты түзету үшін жіберу',
+    'validation.fixing': 'Түзетілуде...',
     'api.validateError': 'Валидация қатесі: {code}',
+    'api.fixError': 'Түзету қатесі: {code}',
     'analyze.validating': 'Регистрлерді тексеру...',
 
     'store.allTranslated': 'Барлық жолдар аударылған',
@@ -1462,7 +1474,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'validation.gateTitle': 'Problemi trovati',
     'validation.gateMessage': 'Trovati {errors} errori e {warnings} avvisi. Scaricare comunque?',
     'validation.downloadAnyway': 'Scarica comunque',
+    'validation.fixWithAi': 'Correggi con AI',
+    'validation.fixWithAiTip': 'Invia registri con errori a LLM per correzione automatica',
+    'validation.fixing': 'Correzione...',
     'api.validateError': 'Errore validazione: {code}',
+    'api.fixError': 'Errore correzione: {code}',
     'analyze.validating': 'Verifica registri...',
 
     'store.allTranslated': 'Tutte le stringhe già tradotte',

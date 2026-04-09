@@ -176,6 +176,59 @@ export async function validateRegisters(
   return res.json();
 }
 
+/** Исправление регистров через AI (SSE) */
+export async function fixRegisters(
+  registers: Register[],
+  callbacks: {
+    onProgress: (progress: AnalyzeProgress) => void;
+    onResult: (data: { device_info: DeviceInfo; registers: Register[] }) => void;
+    onError: (message: string) => void;
+    onDone: () => void;
+  },
+): Promise<void> {
+  try {
+    const res = await fetch('/api/fix-registers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ registers }),
+    });
+    if (!res.ok) {
+      callbacks.onError(getT()('api.fixError', { code: res.status }));
+      return;
+    }
+    const reader = res.body?.getReader();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split('\n\n');
+      buffer = events.pop() ?? '';
+      for (const event of events) {
+        if (!event.trim()) continue;
+        let eventType = '';
+        let eventData = '';
+        for (const line of event.split('\n')) {
+          if (line.startsWith('event:')) eventType = line.slice(6).trim();
+          else if (line.startsWith('data:')) eventData = line.slice(5).trim();
+        }
+        if (!eventData) continue;
+        try {
+          const parsed = JSON.parse(eventData);
+          if (eventType === 'progress') callbacks.onProgress(parsed);
+          else if (eventType === 'result') callbacks.onResult(parsed);
+          else if (eventType === 'error') callbacks.onError(parsed.message || 'Unknown error');
+          else if (eventType === 'done') callbacks.onDone();
+        } catch { /* skip unparseable */ }
+      }
+    }
+  } catch (e) {
+    callbacks.onError(e instanceof Error ? e.message : getT()('api.unknownError'));
+  }
+}
+
 /** Сборка Jinja-шаблона (.json.jinja) */
 export async function buildJinjaTemplate(request: BuildRequest): Promise<string> {
   const res = await fetch('/api/build-jinja', {

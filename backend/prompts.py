@@ -477,6 +477,45 @@ def get_validation_retry_prompt(error_descriptions: str) -> str:
     return _VALIDATION_RETRY_PROMPT.format(error_descriptions=error_descriptions)
 
 
+# Промпт для исправления регистров через кнопку "Исправить через AI"
+_FIX_REGISTERS_PROMPT = """\
+You are a Modbus device template validator for the wb-mqtt-serial driver.
+
+Below is a JSON with device registers and a list of validation errors.
+Fix ALL the errors and return the COMPLETE corrected register list \
+(including registers that were already correct — do not omit them).
+
+CURRENT REGISTERS:
+{registers_json}
+
+VALIDATION ERRORS:
+{error_descriptions}
+
+Reminder of valid values:
+- format: s16, u16, s8, u8, s24, u24, s32, u32, s64, u64, bcd8, bcd16, bcd24, bcd32, \
+float, double, char8, string, string8
+- reg_type: coil, discrete, holding, holding_single, holding_multi, input
+- channel_type: "value" for measurements, "switch" for on/off toggles, \
+"wo-switch" for write-only switches, "pushbutton" for buttons, "range" for sliders
+- address: non-negative integer or "register:bit:width" string (e.g. "109:1:2")
+- enum and enum_titles must have the same length
+- name must not be empty
+- string format requires string_data_size
+
+Return ONLY a valid JSON object:
+{{"device_info": {{"name": "...", "id": "..."}}, "registers": [...]}}
+No markdown code blocks, no explanation.
+"""
+
+
+def get_fix_registers_prompt(registers_json: str, error_descriptions: str) -> str:
+    """Промпт для исправления регистров через AI (кнопка в UI)."""
+    return _FIX_REGISTERS_PROMPT.format(
+        registers_json=registers_json,
+        error_descriptions=error_descriptions,
+    )
+
+
 def get_raw_prompts() -> dict:
     """Возвращает сырые шаблоны промптов для отображения/редактирования на фронте."""
     return {
