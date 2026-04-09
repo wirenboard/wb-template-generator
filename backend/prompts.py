@@ -130,7 +130,9 @@ or control it regularly?" → Channel. "Is this set once during installation?" �
 
 5. **Assign channel_type** — for **channels** (`is_parameter: false`) ONLY these values. \
 For **parameters** (`is_parameter: true`) always set `channel_type: "value"`. \
-Parameters NEVER use "switch" — use enum with values [0,1] and enum_titles ["Off","On"] instead.
+Parameters NEVER use "switch" — use enum with values [0,1] and enum_titles ["Off","On"] instead. \
+**Conversely**: if a register needs `channel_type: "switch"`, it MUST be a channel (`is_parameter: false`), \
+not a parameter. On/off enable/disable registers that use switch should be classified as channels.
    Channel types:
    - `"value"` — numeric measurement or status value (temperature, voltage, counter...). \
 This is the most common type. Use with appropriate `units`.
