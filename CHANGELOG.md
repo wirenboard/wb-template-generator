@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-04-09
+
+### Добавлено
+- **Валидация по схеме драйвера**: опциональная проверка собранного шаблона по JSON-схеме `wb-mqtt-serial-device-template.schema.json` при скачивании
+- **UI**: модалка подтверждения при скачивании со статусом валидации и чекбоксом «Проверить по схеме драйвера»
+- **API**: эндпоинт `POST /api/validate-schema` — валидация шаблона по JSON-схеме драйвера
+- Фильтрация ложных ошибок схемы (oneOf-варианты протоколов, bitwise-адреса)
+- Человекочитаемые сообщения об ошибках схемы с i18n (4 локали)
+
 ## [0.6.0] - 2026-04-09
 
 ### Добавлено
@@ -186,7 +195,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.9...v0.6.0
 [0.5.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.7...v0.5.8

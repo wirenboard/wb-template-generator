@@ -146,6 +146,7 @@ export interface WBTemplate {
   title: string;
   group?: string;
   _warnings?: string[];
+  _schema_errors?: string[];
   device: {
     name: string;
     id: string;

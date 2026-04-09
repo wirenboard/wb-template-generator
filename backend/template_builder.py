@@ -71,12 +71,22 @@ def _make_channel_id(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
+# Символы, запрещённые в именах каналов/параметров wb-mqtt-serial (из JSON-схемы)
+_FORBIDDEN_NAME_CHARS = re.compile(r'[$#+\\\/"\']+')
+
+
+def _sanitize_channel_name(name: str) -> str:
+    """Заменяет запрещённые символы в имени канала: '/' → '-', остальные удаляются."""
+    name = name.replace("/", "-")
+    return _FORBIDDEN_NAME_CHARS.sub("", name).strip()
+
+
 
 def _build_channel(reg: Register, group_id: str, channel_id: str) -> dict:
     """Собирает описание канала из регистра."""
     ch: dict = {
         "id": channel_id,
-        "name": reg.name,
+        "name": _sanitize_channel_name(reg.name),
         "reg_type": reg.reg_type,
         "address": _format_address(reg.address),
         "group": group_id,
@@ -168,7 +178,7 @@ def _build_parameter(reg: Register, group_id: str, order: int) -> tuple[str, dic
     param_id = reg.original_channel_id or _make_param_id(reg.name)
 
     param: dict = {
-        "title": reg.name,
+        "title": _sanitize_channel_name(reg.name),
         "address": _format_address(reg.address),
         "reg_type": reg.reg_type,
         "group": group_id,
