@@ -527,7 +527,7 @@ async def build(request: BuildRequest):
 @app.post("/api/validate")
 async def validate(request: ValidateRequest):
     """Валидация регистров по схеме wb-mqtt-serial."""
-    from register_validator import Severity, validate_registers
+    from register_validator import validate_registers
 
     result = validate_registers(request.registers)
     return JSONResponse(content={

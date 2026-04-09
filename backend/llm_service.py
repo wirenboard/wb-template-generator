@@ -692,11 +692,11 @@ async def _analyze_single_batch(
             result = _parse_registers(raw_data)
 
             # --- Валидация: проверяем качество ответа ---
+            from prompts import get_validation_retry_prompt
             from register_validator import (
                 format_validation_errors,
                 validate_registers,
             )
-            from prompts import get_validation_retry_prompt
 
             device_info, registers, auto_fixed = result
             if registers:
