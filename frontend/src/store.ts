@@ -1,13 +1,15 @@
 import { create } from 'zustand';
 import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress, Language } from './types';
-import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi } from './api';
+import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi, validateRegisters as validateRegistersApi, fixRegisters as fixRegistersApi } from './api';
 import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN } from './constants';
 import { generateId } from './utils';
 import type { Locale } from './i18n';
 import { getT, getHasTranslations } from './i18n';
+import { buildValidationMap, type ValidationMap } from './utils/registerValidation';
 
-// Debounce-хелпер
+// Debounce-хелперы
 let buildTimeout: ReturnType<typeof setTimeout> | null = null;
+let validateTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Ключи localStorage
 const STATE_STORAGE_KEY = 'wb-template-state';
@@ -163,6 +165,17 @@ interface TemplateStore {
   customSystemPrompt: string | null;
   setCustomSystemPrompt: (prompt: string | null) => void;
 
+  // Валидация регистров
+  validationMap: ValidationMap;
+  validationErrorCount: number;
+  validationWarningCount: number;
+  validating: boolean;
+  validateRegisters: () => void;
+  clearValidation: () => void;
+  fixingWithAi: boolean;
+  fixWithAiError: string | null;
+  fixWithAi: () => void;
+
   // Сброс всего состояния
   resetAll: () => void;
 
@@ -184,9 +197,10 @@ interface TemplateStore {
 // Загружаем сохранённое состояние при инициализации
 const _saved = loadState();
 
-/** Вызывает triggerBuild и сохраняет состояние в localStorage с debounce */
+/** Вызывает triggerBuild, валидацию и сохраняет состояние в localStorage с debounce */
 function buildAndSave(get: () => TemplateStore) {
   get().triggerBuild();
+  get().validateRegisters();
   const s = get();
   debouncedSaveState({ registers: s.registers, groups: s.groups, deviceInfo: s.deviceInfo, llmConfig: s.llmConfig });
 }
@@ -230,6 +244,12 @@ export const useStore = create<TemplateStore>((set, get) => ({
   translating: false,
   translateError: null,
   translateResult: null,
+  validationMap: new Map(),
+  validationErrorCount: 0,
+  validationWarningCount: 0,
+  validating: false,
+  fixingWithAi: false,
+  fixWithAiError: null,
 
   setFiles: (files) => set({ files }),
   addFiles: (newFiles) => set((s) => ({ files: [...s.files, ...newFiles] })),
@@ -785,6 +805,56 @@ export const useStore = create<TemplateStore>((set, get) => ({
     buildAndSave(get);
   },
 
+  validateRegisters: () => {
+    if (validateTimeout) clearTimeout(validateTimeout);
+    validateTimeout = setTimeout(async () => {
+      const { registers } = get();
+      if (registers.length === 0) {
+        set({ validationMap: new Map(), validationErrorCount: 0, validationWarningCount: 0, validating: false });
+        return;
+      }
+      set({ validating: true });
+      try {
+        const response = await validateRegistersApi(registers);
+        const map = buildValidationMap(response.registers);
+        set({
+          validationMap: map,
+          validationErrorCount: response.error_count,
+          validationWarningCount: response.warning_count,
+          validating: false,
+        });
+      } catch {
+        set({ validating: false });
+      }
+    }, 500);
+  },
+
+  clearValidation: () => {
+    set({ validationMap: new Map(), validationErrorCount: 0, validationWarningCount: 0 });
+  },
+
+  fixWithAi: () => {
+    const { registers, fixingWithAi } = get();
+    if (fixingWithAi || registers.length === 0) return;
+    set({ fixingWithAi: true, fixWithAiError: null });
+
+    fixRegistersApi(registers, {
+      onProgress: () => { /* прогресс можно показать, пока просто ждём */ },
+      onResult: (data) => {
+        if (data.registers?.length) {
+          set({ registers: data.registers });
+          buildAndSave(get);
+        }
+      },
+      onError: (message) => {
+        set({ fixingWithAi: false, fixWithAiError: message });
+      },
+      onDone: () => {
+        set({ fixingWithAi: false });
+      },
+    });
+  },
+
   resetAll: () => {
     // Сохраняем llmConfig — настройки LLM не сбрасываются
     const { llmConfig } = get();
@@ -804,6 +874,9 @@ export const useStore = create<TemplateStore>((set, get) => ({
       highlightedRegisterId: null,
       expandedRows: new Set(),
       previewLang: 'en',
+      validationMap: new Map(),
+      validationErrorCount: 0,
+      validationWarningCount: 0,
     });
   },
 

@@ -168,6 +168,12 @@ class BuildRequest(DeviceData):
     groups: list[RegisterGroup] = []
 
 
+class ValidateRequest(BaseModel):
+    """Запрос на валидацию списка регистров."""
+
+    registers: list[Register]
+
+
 class TranslateRequest(BaseModel):
     """Запрос на перевод строк через LLM."""
 

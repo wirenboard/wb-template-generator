@@ -4,6 +4,7 @@ import { useT, useHasTranslations } from '../i18n';
 import type { Register, EnumEntry } from '../types';
 import { translateStrings } from '../api';
 import { HAS_NON_LATIN } from '../constants';
+import { getFieldErrors, type FieldValidationError } from '../utils/registerValidation';
 import EnumEditor from './EnumEditor';
 
 interface Props {
@@ -295,12 +296,36 @@ function ConditionField({
 }
 
 /** Панель деталей регистра (раскрывается под строкой таблицы) */
+/** Показывает ошибки валидации под полем */
+function FieldErrors({ errors }: { errors: FieldValidationError[] }) {
+  const t = useT();
+  if (errors.length === 0) return null;
+  return (
+    <div className="mt-0.5">
+      {errors.map((e, i) => (
+        <div key={i} className={`text-[10px] ${e.severity === 'error' ? 'text-red-600' : 'text-amber-600'}`}>
+          {t(e.message_key, e.message_params)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function RegisterDetailPanel({ register: reg }: Props) {
   const t = useT();
   const hasTranslations = useHasTranslations();
   const updateRegister = useStore((s) => s.updateRegister);
   const registers = useStore((s) => s.registers);
+  const validationMap = useStore((s) => s.validationMap);
 
+  // Ошибки валидации для текущего регистра
+  const fieldErrs = (field: string) => getFieldErrors(validationMap, reg.id, field);
+  const fieldErrClass = (field: string) => {
+    const errs = fieldErrs(field);
+    if (errs.some((e) => e.severity === 'error')) return 'ring-1 ring-red-400 border-red-400';
+    if (errs.length > 0) return 'ring-1 ring-amber-400 border-amber-400';
+    return '';
+  };
 
   const vis = getVisibility(reg);
 
@@ -367,13 +392,14 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
           <div>
             <SectionTitle>{t('detail.nameEn')} <Tip text={t('detail.nameEnTip')} /></SectionTitle>
             <div className="flex items-center gap-1.5">
-              <input type="text" value={reg.name} onChange={(e) => update({ name: e.target.value })} className={`${inputClass} flex-1`} />
+              <input type="text" value={reg.name} onChange={(e) => update({ name: e.target.value })} className={`${inputClass} flex-1 ${fieldErrClass('name')}`} />
               <NormalizeToEnButton
                 text={reg.name}
                 onTranslated={(en) => update({ name: en })}
                 onSaveRussian={(ru) => updateTranslation('ru', 'name', ru)}
               />
             </div>
+            <FieldErrors errors={fieldErrs('name')} />
           </div>
           {vis.description && (
             <div>
@@ -542,7 +568,8 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
           {vis.stringSize && (
             <div>
               <SectionTitle>{t('detail.stringSize')} <Tip text={t('detail.stringSizeTip')} /></SectionTitle>
-              <input type="number" value={reg.string_data_size ?? ''} onChange={(e) => { const v = parseInt(e.target.value, 10); update({ string_data_size: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-24`} />
+              <input type="number" value={reg.string_data_size ?? ''} onChange={(e) => { const v = parseInt(e.target.value, 10); update({ string_data_size: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-24 ${fieldErrClass('string_data_size')}`} />
+              <FieldErrors errors={fieldErrs('string_data_size')} />
             </div>
           )}
 
@@ -553,21 +580,23 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
                 {vis.wordOrder && (
                   <div>
                     <label className={labelClass}>Word order</label>
-                    <select value={reg.word_order ?? ''} onChange={(e) => update({ word_order: e.target.value || undefined })} className={`${inputClass} w-32`}>
+                    <select value={reg.word_order ?? ''} onChange={(e) => update({ word_order: e.target.value || undefined })} className={`${inputClass} w-32 ${fieldErrClass('word_order')}`}>
                       <option value="">big endian</option>
                       <option value="big_endian">big endian</option>
                       <option value="little_endian">little endian</option>
                     </select>
+                    <FieldErrors errors={fieldErrs('word_order')} />
                   </div>
                 )}
                 {vis.byteOrder && (
                   <div>
                     <label className={labelClass}>Byte order</label>
-                    <select value={reg.byte_order ?? ''} onChange={(e) => update({ byte_order: e.target.value || undefined })} className={`${inputClass} w-32`}>
+                    <select value={reg.byte_order ?? ''} onChange={(e) => update({ byte_order: e.target.value || undefined })} className={`${inputClass} w-32 ${fieldErrClass('byte_order')}`}>
                       <option value="">big endian</option>
                       <option value="big_endian">big endian</option>
                       <option value="little_endian">little endian</option>
                     </select>
+                    <FieldErrors errors={fieldErrs('byte_order')} />
                   </div>
                 )}
                 {vis.errorValue && (

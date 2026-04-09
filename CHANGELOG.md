@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-09
+
+### Добавлено
+- **Валидация регистров**: проверка format, reg_type, channel_type, address, enum по JSON-схеме драйвера wb-mqtt-serial (`wb-mqtt-serial-confed-common.schema.json`)
+- **Авто-исправление**: синонимы LLM-ответов автоматически нормализуются (`uint16`→`u16`, `holding_register`→`holding`, `rw`→`readwrite` и т.д.)
+- **LLM retry по валидации**: при >30% ошибок в ответе LLM — автоматический повторный запрос с описанием ошибок
+- **UI**: красные/жёлтые бейджи ошибок валидации в строках таблицы регистров (тултип с описанием)
+- **UI**: подсветка полей с ошибками в панели деталей (name, word_order, byte_order, string_data_size)
+- **UI**: счётчик ошибок/предупреждений в тулбаре
+- **UI**: кнопка «Исправить через AI» — отправка регистров с ошибками в LLM для автоматического исправления
+- **UI**: модалка-предупреждение при скачивании шаблона с ошибками валидации («Скачать всё равно?»)
+- **SSE**: новая стадия `validating` — отображается при проверке регистров после анализа
+- **API**: эндпоинт `POST /api/validate` — валидация регистров, возвращает ошибки с i18n-ключами
+- **API**: эндпоинт `POST /api/fix-registers` — SSE-исправление регистров через LLM
+- **Форматы**: добавлены s24, u24, bcd8, bcd16, bcd24, bcd32, char8, string8 (из схемы драйвера)
+- **Тесты**: 66 тестов бэкенд-валидатора, 11 тестов фронтенд-утилит валидации
+
+### Изменено
+- **Константы**: `FORMATS` расширен с 11 до 19 значений, добавлен `direct` в `REG_TYPES`
+- **LLM pipeline**: `_parse_registers()` теперь применяет авто-исправление перед Pydantic-парсингом
+
 ## [0.5.9] - 2026-03-04
 
 ### Добавлено
@@ -165,7 +186,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.9...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.9...v0.6.0
 [0.5.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.6...v0.5.7

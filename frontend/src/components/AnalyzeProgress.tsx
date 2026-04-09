@@ -7,6 +7,7 @@ const STAGE_KEYS: Record<string, string> = {
   converting: 'progress.converting',
   analyzing: 'progress.analyzing',
   merging: 'progress.merging',
+  validating: 'analyze.validating',
   slow: 'progress.slow',
 };
 

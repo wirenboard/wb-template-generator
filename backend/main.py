@@ -18,7 +18,7 @@ from openai import AsyncOpenAI
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_service import analyze_document, resolve_llm_credentials
-from models import BuildRequest, TranslateRequest
+from models import BuildRequest, TranslateRequest, ValidateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
 from request_context import generate_request_id, get_request_id, set_request_id
@@ -522,6 +522,98 @@ async def build(request: BuildRequest):
     """Сборка JSON-шаблона из отредактированных регистров."""
     template = build_template(request)
     return JSONResponse(content=template)
+
+
+@app.post("/api/validate")
+async def validate(request: ValidateRequest):
+    """Валидация регистров по схеме wb-mqtt-serial."""
+    from register_validator import validate_registers
+
+    result = validate_registers(request.registers)
+    return JSONResponse(content={
+        "registers": [
+            {
+                "register_id": rv.register_id,
+                "errors": [
+                    {
+                        "field": e.field,
+                        "severity": e.severity.value,
+                        "message_key": e.message_key,
+                        "message_params": e.message_params,
+                        "suggestion": e.suggestion,
+                    }
+                    for e in rv.errors
+                ],
+            }
+            for rv in result.registers
+            if rv.errors
+        ],
+        "error_count": result.error_count,
+        "warning_count": result.warning_count,
+    })
+
+
+@app.post("/api/fix-registers")
+async def fix_registers_endpoint(
+    request: Request,
+    body: ValidateRequest,
+    llm_api_url: Optional[str] = None,
+    llm_api_key: Optional[str] = None,
+    llm_model: Optional[str] = None,
+    llm_timeout: Optional[int] = None,
+    llm_legacy_max_tokens: Optional[bool] = None,
+    llm_temperature: Optional[float] = None,
+):
+    """Исправление регистров через AI — SSE-поток."""
+    from llm_service import fix_registers
+    from register_validator import format_validation_errors, validate_registers
+
+    settings = get_settings()
+    request_id = get_request_id()
+    is_custom_llm = bool(llm_api_url)
+
+    effective_url, effective_key = resolve_llm_credentials(
+        settings,
+        llm_api_url if is_custom_llm else None,
+        llm_api_key if is_custom_llm else None,
+    )
+
+    if not effective_url:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "LLM не настроен."},
+        )
+
+    effective_model = (llm_model if is_custom_llm else None) or settings.LLM_MODEL
+    effective_timeout = (llm_timeout if is_custom_llm else None) or settings.LLM_TIMEOUT
+    effective_legacy = (
+        llm_legacy_max_tokens if llm_legacy_max_tokens is not None else settings.LLM_LEGACY_MAX_TOKENS
+    )
+    effective_temperature = llm_temperature if is_custom_llm else settings.LLM_TEMPERATURE
+
+    # Валидируем текущие регистры для получения описания ошибок
+    validation = validate_registers(body.registers)
+    error_desc = format_validation_errors(validation, body.registers)
+
+    generator = fix_registers(
+        body.registers,
+        error_desc,
+        effective_url=effective_url,
+        effective_key=effective_key,
+        effective_model=effective_model,
+        effective_timeout=effective_timeout,
+        max_tokens=settings.LLM_MAX_TOKENS or 16384,
+        legacy_max_tokens=effective_legacy,
+        temperature=effective_temperature,
+        proxy=settings.LLM_PROXY if not is_custom_llm else "",
+        request_id=request_id,
+    )
+
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/build-jinja")

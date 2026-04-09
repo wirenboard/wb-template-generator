@@ -4,6 +4,7 @@ import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
+import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
 import { useT, useHasTranslations, useLocale } from '../i18n';
 import FormatSelect from './FormatSelect';
@@ -162,6 +163,14 @@ export default function RegisterTable({
 
   // Набор id регистров, у которых condition ссылается на канал (не параметр) — невалидная зависимость
   const invalidConditionIds = useMemo(() => findInvalidConditionIds(registers), [registers]);
+
+  // Валидация регистров
+  const validationMap = useStore((s) => s.validationMap);
+  const validationErrorCount = useStore((s) => s.validationErrorCount);
+  const validationWarningCount = useStore((s) => s.validationWarningCount);
+  const fixWithAi = useStore((s) => s.fixWithAi);
+  const fixingWithAi = useStore((s) => s.fixingWithAi);
+  const fixWithAiError = useStore((s) => s.fixWithAiError);
 
   // Вычисляем зависимые регистры для подсветки
   const relatedRegisterIds = useMemo(() => {
@@ -948,6 +957,30 @@ export default function RegisterTable({
         {translateError && !translating && (
           <span className="text-xs text-red-600 truncate max-w-48" title={translateError}>{translateError}</span>
         )}
+        {/* Счётчик ошибок валидации + кнопка "Исправить через AI" */}
+        {(validationErrorCount > 0 || validationWarningCount > 0) && (
+          <span className="inline-flex items-center gap-1.5 text-xs">
+            {validationErrorCount > 0 && (
+              <span className="text-red-600 font-medium">{t('validation.errorCount', { count: validationErrorCount })}</span>
+            )}
+            {validationWarningCount > 0 && (
+              <span className="text-amber-600">{t('validation.warningCount', { count: validationWarningCount })}</span>
+            )}
+            {validationErrorCount > 0 && (
+              <button
+                onClick={fixWithAi}
+                disabled={fixingWithAi}
+                className="ml-1 px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                title={t('validation.fixWithAiTip')}
+              >
+                {fixingWithAi ? t('validation.fixing') : t('validation.fixWithAi')}
+              </button>
+            )}
+          </span>
+        )}
+        {fixWithAiError && (
+          <span className="text-xs text-red-600 truncate max-w-48" title={fixWithAiError}>{fixWithAiError}</span>
+        )}
 
         {/* Экспорт (правая сторона) */}
         <div className="ml-auto flex items-center gap-2">
@@ -1087,6 +1120,8 @@ export default function RegisterTable({
                           isExpanded={expandedRows.has(reg.id)}
                           conditionDependentsCount={conditionDependentsMap.get(reg.id) ?? 0}
                           hasInvalidCondition={invalidConditionIds.has(reg.id)}
+                          validationSeverity={getRegisterSeverity(validationMap, reg.id)}
+                          validationErrors={validationMap.get(reg.id) ?? []}
                           editing={editing}
                           groupOptions={groupOptions}
                           draggable={!sortField}
@@ -1146,6 +1181,8 @@ export default function RegisterTable({
                     isExpanded={expandedRows.has(reg.id)}
                     conditionDependentsCount={conditionDependentsMap.get(reg.id) ?? 0}
                     hasInvalidCondition={invalidConditionIds.has(reg.id)}
+                    validationSeverity={getRegisterSeverity(validationMap, reg.id)}
+                    validationErrors={validationMap.get(reg.id) ?? []}
                     editing={editing}
                     groupOptions={groupOptions}
                     draggable={!sortField}
@@ -1335,6 +1372,10 @@ interface RegisterRowProps {
   conditionDependentsCount: number;
   /** condition ссылается на канал (не параметр) — невалидная зависимость */
   hasInvalidCondition: boolean;
+  /** Уровень серьёзности ошибок валидации (null = нет ошибок) */
+  validationSeverity: 'error' | 'warning' | null;
+  /** Ошибки валидации для тултипа */
+  validationErrors: FieldValidationError[];
   editing: EditingCell | null;
   groupOptions: string[];
   draggable?: boolean;
@@ -1369,6 +1410,8 @@ function RegisterRow({
   isExpanded,
   conditionDependentsCount,
   hasInvalidCondition,
+  validationSeverity,
+  validationErrors,
   editing,
   groupOptions,
   draggable,
@@ -1464,20 +1507,23 @@ function RegisterRow({
         ? (reg.is_parameter ? PARAMETER_CHANNEL_TYPES : getChannelTypesForRegType(reg.reg_type))
         : col.options;
       const currentValue = String(getDefaultValue(reg, col.field));
-      // Если текущее значение не в списке — добавляем его в начало
-      const allOptions = (options as readonly string[]).includes(currentValue)
-        ? options
-        : [currentValue, ...options];
+      // Если текущее значение не в списке — добавляем его в начало (помечаем как невалидное)
+      const isCurrentInvalid = !(options as readonly string[]).includes(currentValue);
+      const allOptions = isCurrentInvalid
+        ? [currentValue, ...options]
+        : options;
       return (ref) => (
         <select
           ref={ref}
           defaultValue={currentValue}
           onBlur={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
           onChange={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
-          className={inputClass}
+          className={`${inputClass}${isCurrentInvalid ? ' text-red-600 ring-1 ring-red-400' : ''}`}
         >
           {allOptions.map((opt) => (
-            <option key={opt} value={opt}>{opt || t('row.none')}</option>
+            <option key={opt} value={opt} className={opt === currentValue && isCurrentInvalid ? 'text-red-600' : ''}>
+              {opt || t('row.none')}{opt === currentValue && isCurrentInvalid ? ' ⚠' : ''}
+            </option>
           ))}
         </select>
       );
@@ -1590,6 +1636,20 @@ function RegisterRow({
                       <path strokeLinecap="round" strokeLinejoin="round" d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" />
                     </svg>
                     {conditionDependentsCount}
+                  </span>
+                )}
+                {/* Бейдж: ошибки валидации */}
+                {validationSeverity && (
+                  <span
+                    className={`flex-shrink-0 inline-flex items-center px-1 py-0.5 text-[9px] font-medium rounded cursor-help ${
+                      validationSeverity === 'error'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}
+                    title={validationErrors.map((e) => t(e.message_key, e.message_params)).join('\n')}
+                  >
+                    {validationSeverity === 'error' ? '!' : '⚠'}
+                    {validationErrors.length > 1 ? ` ${validationErrors.length}` : ''}
                   </span>
                 )}
                 {/* Бейдж: канал/параметр имеет condition (зависит от другого параметра) */}

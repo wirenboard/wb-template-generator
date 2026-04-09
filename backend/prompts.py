@@ -76,26 +76,27 @@ Usually 0. Examples:
      - Inverted relay (NC): scale=-1, offset=1 → raw 0 = 0×(-1)+1 = 1 (ON), raw 1 = 1×(-1)+1 = 0 (OFF)
      - No offset needed → offset = 0
    - `units`: physical units — use ONLY values from this list:
-     - `"V"` — voltage (volts)
-     - `"A"` — current (amperes)
-     - `"mA"` — current (milliamperes)
-     - `"W"` — power (watts)
-     - `"kWh"` — energy (kilowatt-hours)
-     - `"mAh"` — battery capacity (milliamp-hours)
+     - `"V"` — voltage, `"mV"` — millivolts
+     - `"A"` — current, `"mA"` — milliamperes
+     - `"W"` — power, `"kWh"` — energy, `"mAh"` — battery capacity
+     - `"Hz"` — frequency, `"rpm"` — revolutions per minute
+     - `"Ohm"` — resistance, `"mOhm"` — milliohms
+     - `"bar"` — pressure, `"mbar"` — millibar, `"Pa"` — pascals
      - `"deg C"` — temperature (degrees Celsius)
      - `"%"` — percentage (load, level, duty cycle)
      - `"RH"` — relative humidity
-     - `"Ohm"` — resistance (ohms)
-     - `"bar"` — pressure (bar)
-     - `"ppm"` — concentration (parts per million, e.g. CO2)
-     - `"ppb"` — concentration (parts per billion)
-     - `"lx"` — illuminance (lux)
-     - `"s"` — time (seconds)
-     - `"day"` — time (days)
-     - `"m^3"` — volume (cubic meters)
+     - `"ppm"` — parts per million (CO2), `"ppb"` — parts per billion
+     - `"lx"` — illuminance, `"dB"` — decibels
+     - `"s"` — seconds, `"min"` — minutes, `"h"` — hours, `"day"` — days
+     - `"m"` — meters, `"m/s"` — speed, `"mm/h"` — precipitation
+     - `"m^3"` — volume, `"m^3/h"` — flow rate
+     - `"g"` — grams, `"kg"` — kilograms
+     - `"Gcal/h"` — heat power, `"cal"` — calories, `"Gcal"` — gigacalories
+     - `"deg"` — degrees (angle), `"rad"` — radians
+     - `"mol"` — moles, `"cd"` — candela
      If the document specifies units, map them to the closest match from this list \
 (e.g. "°C" → "deg C", "kW" → "W" with scale=1000, "MWh" → "kWh" with scale=1000, \
-"mbar" → "bar" with scale=0.001, "%" or "% RH" → "RH" for humidity).
+"mbar" → "mbar", "%" or "% RH" → "RH" for humidity).
      If the document does NOT specify units but the register meaning is clear, \
 **infer the appropriate unit** from the list above (e.g. temperature register → "deg C", \
 voltage register → "V", power register → "W", humidity → "RH").
@@ -129,7 +130,9 @@ or control it regularly?" → Channel. "Is this set once during installation?" �
 
 5. **Assign channel_type** — for **channels** (`is_parameter: false`) ONLY these values. \
 For **parameters** (`is_parameter: true`) always set `channel_type: "value"`. \
-Parameters NEVER use "switch" — use enum with values [0,1] and enum_titles ["Off","On"] instead.
+Parameters NEVER use "switch" — use enum with values [0,1] and enum_titles ["Off","On"] instead. \
+**Conversely**: if a register needs `channel_type: "switch"`, it MUST be a channel (`is_parameter: false`), \
+not a parameter. On/off enable/disable registers that use switch should be classified as channels.
    Channel types:
    - `"value"` — numeric measurement or status value (temperature, voltage, counter...). \
 This is the most common type. Use with appropriate `units`.
@@ -147,6 +150,9 @@ to read this register. Typical use: reset commands, trigger-only coils with no r
    - `"range"` — bounded numeric control with min/max (must set `min` and `max` fields)
    - `"text"` — string value (must set `string_data_size` = number of registers for string)
    - `"rgb"` — RGB color value (3-register color)
+
+   **Name-based hint**: registers with "Enable", "Disable", "On/Off" in the name \
+that have no enum are typically `"switch"` (or `"wo-switch"` if write-only).
 
    Do NOT use deprecated types like "temperature", "voltage", "current", "power", "humidity", "lux", etc. \
 Always use "value" with appropriate `units` instead.
@@ -448,6 +454,72 @@ def get_analyze_prompt(template_type: str, languages: list[str] | None = None) -
 def get_retry_prompt() -> str:
     """Возвращает упрощённый промпт для повторной попытки при ошибке парсинга JSON."""
     return _RETRY_PROMPT
+
+
+# Промпт для семантического retry — когда JSON валиден, но содержимое невалидно
+_VALIDATION_RETRY_PROMPT = """\
+Your previous response contained registers with validation errors.
+Here are the specific problems found:
+
+{error_descriptions}
+
+Please fix ALL the errors listed above and return the COMPLETE corrected register list \
+(including registers that were already correct — do not omit them).
+
+Reminder of valid values:
+- format: s16, u16, s8, u8, s24, u24, s32, u32, s64, u64, bcd8, bcd16, bcd24, bcd32, \
+float, double, char8, string, string8
+- reg_type: coil, discrete, holding, holding_single, holding_multi, input
+- channel_type: "value" for measurements, "switch" for on/off toggles, \
+"wo-switch" for write-only switches, "pushbutton" for buttons, "range" for sliders
+- address: non-negative integer or "register:bit:width" string (e.g. "109:1:2")
+
+Return ONLY the corrected JSON with the same structure, no markdown code blocks, no explanation.
+"""
+
+
+def get_validation_retry_prompt(error_descriptions: str) -> str:
+    """Промпт для повторной попытки при ошибках валидации содержимого."""
+    return _VALIDATION_RETRY_PROMPT.format(error_descriptions=error_descriptions)
+
+
+# Промпт для исправления регистров через кнопку "Исправить через AI"
+_FIX_REGISTERS_PROMPT = """\
+You are a Modbus device template validator for the wb-mqtt-serial driver.
+
+Below is a JSON with device registers and a list of validation errors.
+Fix ALL the errors and return the COMPLETE corrected register list \
+(including registers that were already correct — do not omit them).
+
+CURRENT REGISTERS:
+{registers_json}
+
+VALIDATION ERRORS:
+{error_descriptions}
+
+Reminder of valid values:
+- format: s16, u16, s8, u8, s24, u24, s32, u32, s64, u64, bcd8, bcd16, bcd24, bcd32, \
+float, double, char8, string, string8
+- reg_type: coil, discrete, holding, holding_single, holding_multi, input
+- channel_type: "value" for measurements, "switch" for on/off toggles, \
+"wo-switch" for write-only switches, "pushbutton" for buttons, "range" for sliders
+- address: non-negative integer or "register:bit:width" string (e.g. "109:1:2")
+- enum and enum_titles must have the same length
+- name must not be empty
+- string format requires string_data_size
+
+Return ONLY a valid JSON object:
+{{"device_info": {{"name": "...", "id": "..."}}, "registers": [...]}}
+No markdown code blocks, no explanation.
+"""
+
+
+def get_fix_registers_prompt(registers_json: str, error_descriptions: str) -> str:
+    """Промпт для исправления регистров через AI (кнопка в UI)."""
+    return _FIX_REGISTERS_PROMPT.format(
+        registers_json=registers_json,
+        error_descriptions=error_descriptions,
+    )
 
 
 def get_raw_prompts() -> dict:

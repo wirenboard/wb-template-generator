@@ -26,9 +26,13 @@ export default function App() {
   const setDeviceInfo = useStore((s) => s.setDeviceInfo);
   const resetAll = useStore((s) => s.resetAll);
   const appVersion = useStore((s) => s.appVersion);
+  const validationErrorCount = useStore((s) => s.validationErrorCount);
+  const validationWarningCount = useStore((s) => s.validationWarningCount);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [validationGateOpen, setValidationGateOpen] = useState(false);
+  const [pendingDownloadAction, setPendingDownloadAction] = useState<'json' | 'jinja' | null>(null);
   const downloadRef = useRef<HTMLDivElement>(null);
 
   // Закрытие dropdown при клике вне
@@ -43,14 +47,14 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handler);
   }, [downloadOpen]);
 
-  const handleDownloadJson = useCallback(() => {
+  const actualDownloadJson = useCallback(() => {
     const currentTemplate = useStore.getState().template;
     if (!currentTemplate) return;
     const json = JSON.stringify(currentTemplate, null, 2);
     downloadBlob(new Blob([json], { type: 'application/json' }), `${currentTemplate.device_type || 'template'}.json`);
   }, []);
 
-  const handleDownloadJinja = useCallback(async () => {
+  const actualDownloadJinja = useCallback(async () => {
     const store = useStore.getState();
     const { registers, deviceInfo, groups } = store;
     const enabledRegisters = registers.filter((r) => r.enabled);
@@ -69,6 +73,26 @@ export default function App() {
     }
     setDownloadOpen(false);
   }, [t]);
+
+  const handleDownloadJson = useCallback(() => {
+    const { validationErrorCount, validationWarningCount } = useStore.getState();
+    if (validationErrorCount > 0 || validationWarningCount > 0) {
+      setPendingDownloadAction('json');
+      setValidationGateOpen(true);
+      return;
+    }
+    actualDownloadJson();
+  }, [actualDownloadJson]);
+
+  const handleDownloadJinja = useCallback(async () => {
+    const { validationErrorCount, validationWarningCount } = useStore.getState();
+    if (validationErrorCount > 0 || validationWarningCount > 0) {
+      setPendingDownloadAction('jinja');
+      setValidationGateOpen(true);
+      return;
+    }
+    actualDownloadJinja();
+  }, [actualDownloadJinja]);
 
   // Dropdown языка
   const [langOpen, setLangOpen] = useState(false);
@@ -308,6 +332,19 @@ export default function App() {
         confirmText={t('confirm.resetButton')}
         onConfirm={() => { resetAll(); setConfirmResetOpen(false); }}
         onCancel={() => setConfirmResetOpen(false)}
+      />
+      <ConfirmModal
+        isOpen={validationGateOpen}
+        title={t('validation.gateTitle')}
+        message={t('validation.gateMessage', { errors: validationErrorCount, warnings: validationWarningCount })}
+        confirmText={t('validation.downloadAnyway')}
+        onConfirm={() => {
+          setValidationGateOpen(false);
+          if (pendingDownloadAction === 'json') actualDownloadJson();
+          else if (pendingDownloadAction === 'jinja') actualDownloadJinja();
+          setPendingDownloadAction(null);
+        }}
+        onCancel={() => { setValidationGateOpen(false); setPendingDownloadAction(null); }}
       />
       <footer className="text-center text-xs text-gray-400 py-4">
         <a href="https://github.com/wirenboard/wb-template-generator" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600 transition-colors">
