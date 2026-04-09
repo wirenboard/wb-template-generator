@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, useEffect } from 'react';
 import RegisterTable from './components/RegisterTable';
 import TemplatePreview from './components/TemplatePreview';
 import ConfirmModal from './components/ConfirmModal';
+import ValidationGateModal from './components/ValidationGateModal';
 import { useStore } from './store';
 import { buildJinjaTemplate } from './api';
 import { useT, useLocale, LOCALES } from './i18n';
@@ -75,24 +76,14 @@ export default function App() {
   }, [t]);
 
   const handleDownloadJson = useCallback(() => {
-    const { validationErrorCount, validationWarningCount } = useStore.getState();
-    if (validationErrorCount > 0 || validationWarningCount > 0) {
-      setPendingDownloadAction('json');
-      setValidationGateOpen(true);
-      return;
-    }
-    actualDownloadJson();
-  }, [actualDownloadJson]);
+    setPendingDownloadAction('json');
+    setValidationGateOpen(true);
+  }, []);
 
-  const handleDownloadJinja = useCallback(async () => {
-    const { validationErrorCount, validationWarningCount } = useStore.getState();
-    if (validationErrorCount > 0 || validationWarningCount > 0) {
-      setPendingDownloadAction('jinja');
-      setValidationGateOpen(true);
-      return;
-    }
-    actualDownloadJinja();
-  }, [actualDownloadJinja]);
+  const handleDownloadJinja = useCallback(() => {
+    setPendingDownloadAction('jinja');
+    setValidationGateOpen(true);
+  }, []);
 
   // Dropdown языка
   const [langOpen, setLangOpen] = useState(false);
@@ -333,12 +324,12 @@ export default function App() {
         onConfirm={() => { resetAll(); setConfirmResetOpen(false); }}
         onCancel={() => setConfirmResetOpen(false)}
       />
-      <ConfirmModal
+      <ValidationGateModal
         isOpen={validationGateOpen}
-        title={t('validation.gateTitle')}
-        message={t('validation.gateMessage', { errors: validationErrorCount, warnings: validationWarningCount })}
-        confirmText={t('validation.downloadAnyway')}
-        onConfirm={() => {
+        validationErrorCount={validationErrorCount}
+        validationWarningCount={validationWarningCount}
+        buildRequest={registers.length > 0 ? { device_info: deviceInfo, registers, groups: useStore.getState().groups ?? [] } : null}
+        onDownload={() => {
           setValidationGateOpen(false);
           if (pendingDownloadAction === 'json') actualDownloadJson();
           else if (pendingDownloadAction === 'jinja') actualDownloadJinja();

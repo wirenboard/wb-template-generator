@@ -524,6 +524,19 @@ async def build(request: BuildRequest):
     return JSONResponse(content=template)
 
 
+@app.post("/api/validate-schema")
+async def validate_schema(request: BuildRequest):
+    """Валидация собранного шаблона по JSON-схеме wb-mqtt-serial."""
+    from schema_validator import validate_template
+
+    template = build_template(request)
+    schema_errors = validate_template(template)
+    return JSONResponse(content={
+        "errors": schema_errors,
+        "error_count": len(schema_errors),
+    })
+
+
 @app.post("/api/validate")
 async def validate(request: ValidateRequest):
     """Валидация регистров по схеме wb-mqtt-serial."""

@@ -1,0 +1,440 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  // valijson doesn't support loading external refs, so we add here definitions from wb-mqtt-serial.schema.json in c++ code
+  "definitions": {
+
+    "device_type": {
+      "type": "string",
+      "minLength": 1
+    },
+
+    "hardware": {
+      "type": "object",
+      "properties": {
+        "signature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fw": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["signature"]
+    },
+
+    "group_condition": {
+      "properties": {
+        "group": {
+          "type": "string"
+        },
+        "condition": {
+          "type": "string"
+        }
+      }
+    },
+
+    "setup_item": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "address": {
+          "title": "Address",
+          "$ref": "#/definitions/address"
+        },
+        "value": {
+          "title": "Value",
+          "$ref": "#/definitions/serial_int"
+        },
+        "condition": {
+          "type": "string"
+        }
+      },
+      "required": ["title", "address", "value"]
+    },
+
+    "group": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        },
+        "description": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        }
+      },
+      "required": ["title", "id"]
+    },
+
+    "groups": {
+      "properties": {
+        "groups":{
+          "type": "array",
+          "items": { "$ref": "#/definitions/group" }
+        }
+      }
+    },
+
+    "parameter": {
+      "allOf": [
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "address": {
+              "$ref": "#/definitions/address"
+            },
+            "enum": {
+              "type": "array",
+              "items": { "type": "integer" }
+            },
+            "enum_titles": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "default": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "order": {
+              "type": "integer"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "readonly": {
+              "type": "boolean"
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "required": ["title"]
+        },
+        {
+          "anyOf": [
+            {
+              "required": ["address"]
+            },
+            {
+              "required": ["readonly"]
+            }
+          ]
+        },
+        { "$ref": "#/definitions/group_condition" }
+      ]
+    },
+
+    "parameter_in_array": {
+      "allOf": [
+        { "$ref": "#/definitions/parameter" },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^(?!(?:break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|false|finally|for|function|if|import|in|instanceof|new|null|return|super|switch|this|throw|true|try|typeof|var|void|while|with)\\b)[a-zA-Z_$][a-zA-Z0-9_$]*$"
+            }
+          },
+          "required": ["id"]
+        }
+      ]
+    },
+
+    "parameters": {
+      "oneOf": [
+        {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^(?!(?:break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|false|finally|for|function|if|import|in|instanceof|new|null|return|super|switch|this|throw|true|try|typeof|var|void|while|with)\\b)[a-zA-Z_$][a-zA-Z0-9_$]*$"
+          },
+          "additionalProperties": { "$ref": "#/definitions/parameter" }
+        },
+        {
+          "type": "array",
+          "items": { "$ref": "#/definitions/parameter_in_array" }
+        }
+      ]
+    },
+
+    "subdevice_channel": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/channel_name"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[^$#+\\/\"']*$"
+        },
+        "device_type": {
+          "type": "string"
+        },
+        "oneOf": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "shift": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string",
+              "pattern": "^(0x[A-Fa-f\\d]+|\\d+)$"
+            }
+          ]
+        },
+        "stride": {
+          "type": "integer"
+        }
+      },
+      "required": ["device_type", "name"]
+    },
+
+    "subdevice_device": {
+      "type": "object",
+      "properties": {
+        "setup": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/setup_item" }
+        },
+        "parameters": { 
+          "$ref": "#/definitions/parameters"
+        },
+        "channels" : {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/definitions/template_channel_with_int_address" },
+              { "$ref": "#/definitions/subdevice_channel" }
+            ]
+          }
+        },
+        "subdevices": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/subdevice" }
+        },
+        "groups":{
+          "type": "array",
+          "items": { "$ref": "#/definitions/group" }
+        }
+      }
+    },
+
+    "subdevice": {
+      "type": "object",
+      "properties": {
+        "device_type": { "$ref": "#/definitions/device_type" },
+        "title": { "$ref": "#/definitions/device_type" },
+        "device": { "$ref": "#/definitions/subdevice_device" }
+      },
+      "additionalProperties": false,
+      "required": ["device_type", "device"]
+    },
+
+    "template_channel_with_int_address": {
+      "allOf": [
+        { "$ref": "#/definitions/registerChannel" },
+        { "$ref": "#/definitions/group_condition" }
+      ]
+    },
+
+    "template_channels_with_int_address": {
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/template_channel_with_int_address" }
+        }
+      }
+    },
+
+    "template_channels_with_string_address": {
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              { "$ref": "#/definitions/register_channel_common"},
+              { "$ref": "#/definitions/string_address" },
+              { "$ref": "#/definitions/group_condition" }
+            ]
+          } 
+        }
+      }
+    },
+
+    "template_dlms_channels": {
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              { "$ref": "#/definitions/register_channel_common"},
+              { "$ref": "#/definitions/dlms_address" },
+              { "$ref": "#/definitions/group_condition" }
+            ]
+          }
+        }
+      }
+    }
+  },
+
+  "properties": {
+    "device_type": { "$ref": "#/definitions/device_type" },
+    "title": { "$ref": "#/definitions/device_type" },
+    "deprecated": {
+      "type": "boolean"
+    },
+    "hw": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/hardware" } 
+    },
+    "device": {
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/definitions/deviceProperties" },
+            { "$ref": "#/definitions/no_setup" },
+            { "$ref": "#/definitions/template_channels_with_int_address" },
+            { "$ref": "#/definitions/groups" }
+          ],
+          "properties": {
+            "protocol": {
+              "type": "string",
+              "enum": ["milur", "mercury230", "ivtm", "pulsar", "mercury200", "lls", "neva", "energomera_iec", "windeco", "dauerhaft", "energomera_ce"]
+            },
+            "parameters": { "not" : {} },
+            "subdevices": { "not" : {} }
+          },
+          "required": ["protocol"]
+        },
+
+        {
+          "allOf": [
+            { "$ref": "#/definitions/deviceProperties" },
+            { "$ref": "#/definitions/template_channels_with_int_address" },
+            { "$ref": "#/definitions/common_setup" },
+            { "$ref": "#/definitions/groups" }
+          ],
+          "properties": {
+            "protocol": {
+              "type": "string",
+              "enum": ["uniel", "s2k", "dooya", "a_ok"]
+            },
+            "parameters": { 
+              "$ref": "#/definitions/parameters"
+            },
+            "subdevices": { "not" : {} }
+          },
+          "required": ["protocol"]
+        },
+
+        {
+          "allOf": [
+            { "$ref": "#/definitions/deviceProperties" },
+            { "$ref": "#/definitions/no_setup" },
+            { "$ref": "#/definitions/template_channels_with_string_address" },
+            { "$ref": "#/definitions/groups" }
+          ],
+          "properties": {
+            "protocol": {
+              "type": "string",
+              "enum": ["energomera_iec_mode_c", "iec_mode_c"]
+            },
+            "parameters": { "not" : {} },
+            "subdevices": { "not" : {} }
+          },
+          "required": ["protocol"]
+        },
+
+        {
+          "allOf": [
+            { "$ref": "#/definitions/deviceProperties" },
+            { "$ref": "#/definitions/dlms_device_properties" },
+            { "$ref": "#/definitions/template_dlms_channels" },
+            { "$ref": "#/definitions/no_setup" },
+            { "$ref": "#/definitions/groups" }
+          ],
+          "properties": {
+            "protocol": {
+              "type": "string",
+              "enum": ["dlms"]
+            },
+            "parameters": { "not" : {} },
+            "subdevices": { "not" : {} }
+          },
+          "required": ["protocol"]
+        },
+
+        {
+          "allOf": [
+            { "$ref": "#/definitions/deviceProperties" },
+            { "$ref": "#/definitions/no_setup" },
+            { "$ref": "#/definitions/template_channels_with_int_address" },
+            { "$ref": "#/definitions/somfy_device_properties" },
+            { "$ref": "#/definitions/groups" }
+          ],
+          "properties": {
+            "protocol": {
+              "type": "string",
+              "enum": ["somfy"]
+            },
+            "parameters": { "not" : {} },
+            "subdevices": { "not" : {} }
+          },
+          "required": ["protocol"]
+        },
+
+        {
+          "allOf": [
+            {
+              "oneOf": [
+                {
+                  "not": {
+                    "required": ["protocol"]
+                  }
+                },
+                {
+                  "properties": {
+                    "protocol": {
+                      "type": "string",
+                      "enum": ["modbus",  "modbus_io"]
+                    }
+                  },
+                  "required": ["protocol"]
+                }
+              ]
+            },
+            { "$ref": "#/definitions/deviceProperties" },
+            { "$ref": "#/definitions/subdevice_device" },
+            { "$ref": "#/definitions/modbus_device_properties" }
+          ]
+        }
+      ]
+    },
+    "group": {
+      "type": "string"
+    }
+  },
+  "required": ["device_type", "device"]
+}

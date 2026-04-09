@@ -176,6 +176,19 @@ export async function validateRegisters(
   return res.json();
 }
 
+/** Валидация собранного шаблона по JSON-схеме wb-mqtt-serial */
+export async function validateSchema(
+  request: BuildRequest,
+): Promise<{ errors: string[]; error_count: number }> {
+  const res = await fetch('/api/validate-schema', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(getT()('api.validateError', { code: res.status }));
+  return res.json();
+}
+
 /** Исправление регистров через AI (SSE) */
 export async function fixRegisters(
   registers: Register[],

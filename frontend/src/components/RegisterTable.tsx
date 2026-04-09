@@ -17,7 +17,7 @@ import { LlmSettingsModal } from './LlmSettings';
 /** Props из App.tsx — файловые операции, перенесённые в тулбар */
 interface RegisterTableProps {
   onDownloadJson: () => void;
-  onDownloadJinja: () => Promise<void>;
+  onDownloadJinja: () => void | Promise<void>;
   downloadOpen: boolean;
   setDownloadOpen: (open: boolean) => void;
   downloadRef: React.RefObject<HTMLDivElement>;
