@@ -76,26 +76,27 @@ Usually 0. Examples:
      - Inverted relay (NC): scale=-1, offset=1 → raw 0 = 0×(-1)+1 = 1 (ON), raw 1 = 1×(-1)+1 = 0 (OFF)
      - No offset needed → offset = 0
    - `units`: physical units — use ONLY values from this list:
-     - `"V"` — voltage (volts)
-     - `"A"` — current (amperes)
-     - `"mA"` — current (milliamperes)
-     - `"W"` — power (watts)
-     - `"kWh"` — energy (kilowatt-hours)
-     - `"mAh"` — battery capacity (milliamp-hours)
+     - `"V"` — voltage, `"mV"` — millivolts
+     - `"A"` — current, `"mA"` — milliamperes
+     - `"W"` — power, `"kWh"` — energy, `"mAh"` — battery capacity
+     - `"Hz"` — frequency, `"rpm"` — revolutions per minute
+     - `"Ohm"` — resistance, `"mOhm"` — milliohms
+     - `"bar"` — pressure, `"mbar"` — millibar, `"Pa"` — pascals
      - `"deg C"` — temperature (degrees Celsius)
      - `"%"` — percentage (load, level, duty cycle)
      - `"RH"` — relative humidity
-     - `"Ohm"` — resistance (ohms)
-     - `"bar"` — pressure (bar)
-     - `"ppm"` — concentration (parts per million, e.g. CO2)
-     - `"ppb"` — concentration (parts per billion)
-     - `"lx"` — illuminance (lux)
-     - `"s"` — time (seconds)
-     - `"day"` — time (days)
-     - `"m^3"` — volume (cubic meters)
+     - `"ppm"` — parts per million (CO2), `"ppb"` — parts per billion
+     - `"lx"` — illuminance, `"dB"` — decibels
+     - `"s"` — seconds, `"min"` — minutes, `"h"` — hours, `"day"` — days
+     - `"m"` — meters, `"m/s"` — speed, `"mm/h"` — precipitation
+     - `"m^3"` — volume, `"m^3/h"` — flow rate
+     - `"g"` — grams, `"kg"` — kilograms
+     - `"Gcal/h"` — heat power, `"cal"` — calories, `"Gcal"` — gigacalories
+     - `"deg"` — degrees (angle), `"rad"` — radians
+     - `"mol"` — moles, `"cd"` — candela
      If the document specifies units, map them to the closest match from this list \
 (e.g. "°C" → "deg C", "kW" → "W" with scale=1000, "MWh" → "kWh" with scale=1000, \
-"mbar" → "bar" with scale=0.001, "%" or "% RH" → "RH" for humidity).
+"mbar" → "mbar", "%" or "% RH" → "RH" for humidity).
      If the document does NOT specify units but the register meaning is clear, \
 **infer the appropriate unit** from the list above (e.g. temperature register → "deg C", \
 voltage register → "V", power register → "W", humidity → "RH").
@@ -147,6 +148,9 @@ to read this register. Typical use: reset commands, trigger-only coils with no r
    - `"range"` — bounded numeric control with min/max (must set `min` and `max` fields)
    - `"text"` — string value (must set `string_data_size` = number of registers for string)
    - `"rgb"` — RGB color value (3-register color)
+
+   **Name-based hint**: registers with "Enable", "Disable", "On/Off" in the name \
+that have no enum are typically `"switch"` (or `"wo-switch"` if write-only).
 
    Do NOT use deprecated types like "temperature", "voltage", "current", "power", "humidity", "lux", etc. \
 Always use "value" with appropriate `units` instead.

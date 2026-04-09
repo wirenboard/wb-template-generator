@@ -1507,20 +1507,23 @@ function RegisterRow({
         ? (reg.is_parameter ? PARAMETER_CHANNEL_TYPES : getChannelTypesForRegType(reg.reg_type))
         : col.options;
       const currentValue = String(getDefaultValue(reg, col.field));
-      // Если текущее значение не в списке — добавляем его в начало
-      const allOptions = (options as readonly string[]).includes(currentValue)
-        ? options
-        : [currentValue, ...options];
+      // Если текущее значение не в списке — добавляем его в начало (помечаем как невалидное)
+      const isCurrentInvalid = !(options as readonly string[]).includes(currentValue);
+      const allOptions = isCurrentInvalid
+        ? [currentValue, ...options]
+        : options;
       return (ref) => (
         <select
           ref={ref}
           defaultValue={currentValue}
           onBlur={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
           onChange={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
-          className={inputClass}
+          className={`${inputClass}${isCurrentInvalid ? ' text-red-600 ring-1 ring-red-400' : ''}`}
         >
           {allOptions.map((opt) => (
-            <option key={opt} value={opt}>{opt || t('row.none')}</option>
+            <option key={opt} value={opt} className={opt === currentValue && isCurrentInvalid ? 'text-red-600' : ''}>
+              {opt || t('row.none')}{opt === currentValue && isCurrentInvalid ? ' ⚠' : ''}
+            </option>
           ))}
         </select>
       );

@@ -415,6 +415,40 @@ def validate_register(reg: Register) -> RegisterValidation:
                 message_params={"regType": reg.reg_type, "channelType": reg.channel_type},
             ))
 
+    # readonly и read_only конфликтуют
+    if (reg.readonly is not None and reg.read_only is not None
+            and reg.readonly != reg.read_only):
+        errors.append(FieldError(
+            field="readonly", severity=Severity.WARNING,
+            message_key="validation.readonlyConflict",
+        ))
+
+    # min > max
+    if reg.min is not None and reg.max is not None and reg.min > reg.max:
+        errors.append(FieldError(
+            field="min", severity=Severity.WARNING,
+            message_key="validation.minGreaterThanMax",
+            message_params={"min": reg.min, "max": reg.max},
+        ))
+
+    # Параметр отключён — полностью исключается из шаблона (в отличие от каналов)
+    if reg.is_parameter and not reg.enabled:
+        errors.append(FieldError(
+            field="enabled", severity=Severity.WARNING,
+            message_key="validation.disabledParameter",
+        ))
+
+    # Enable/Disable в имени, но channel_type=value без enum — вероятно должен быть switch
+    if (reg.channel_type == "value" and not reg.enum and not reg.enum_entries
+            and not reg.is_parameter and reg.reg_type not in BIT_REG_TYPES):
+        name_lower = reg.name.lower()
+        if re.search(r'\b(enable|disable|on[/_\s]off|вкл|выкл)\b', name_lower):
+            errors.append(FieldError(
+                field="channel_type", severity=Severity.WARNING,
+                message_key="validation.probablySwitch",
+                message_params={"name": reg.name},
+            ))
+
     return RegisterValidation(register_id=reg.id, errors=errors)
 
 
