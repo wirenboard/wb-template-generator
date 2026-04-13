@@ -20,6 +20,7 @@ from file_converter import (
     is_image_file,
     is_pdf_file,
 )
+from metrics import update_llm_metrics
 from models import AnalyzeResponse, DeviceInfo, Register
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
 from sse import sse_done, sse_error, sse_progress, sse_result
@@ -227,6 +228,8 @@ async def _call_llm(
         try:
             llm_start = time.monotonic()
             response = await client.chat.completions.create(**kwargs)
+            llm_duration = time.monotonic() - llm_start
+            
             # Логируем расход токенов и finish_reason
             usage = response.usage
             finish_reason = response.choices[0].finish_reason if response.choices else None
@@ -238,17 +241,29 @@ async def _call_llm(
                     usage.total_tokens or 0,
                     finish_reason,
                 )
+                # Обновляем метрики
+                update_llm_metrics(
+                    prompt_tokens=usage.prompt_tokens or 0,
+                    completion_tokens=usage.completion_tokens or 0,
+                    total_tokens=usage.total_tokens or 0,
+                    duration=llm_duration,
+                )
+            else:
+                # Обновляем метрики без токенов
+                update_llm_metrics(duration=llm_duration)
+                
             if finish_reason == "length":
                 logger.warning(
                     "Ответ LLM обрезан по лимиту токенов (finish_reason=length). "
                     "Увеличьте LLM_MAX_TOKENS или уберите ограничение (0)."
                 )
-            llm_duration = time.monotonic() - llm_start
             logger.info("LLM-запрос: %.1f сек", llm_duration)
             text = response.choices[0].message.content or ""
             return text, usage
         except Exception as e:
+            # Обновляем метрики при ошибке с текстом ошибки
             err_str = str(e)
+            update_llm_metrics(error=True, error_message=err_str)
             fixed = False
 
             # Фолбек max_tokens ↔ max_completion_tokens
@@ -531,6 +546,9 @@ async def analyze_document(
                 last_parse_error = result
         except LLMApiError as e:
             err_msg = str(e)
+            # Обновляем метрики при ошибке LLM API
+            update_llm_metrics(error=True, error_message=err_msg)
+            
             if _is_file_unsupported(err_msg):
                 yield sse_error(
                     f"Модель не поддерживает переданный формат файла. "
@@ -557,6 +575,12 @@ async def analyze_document(
         )
 
         device_info, registers, total_auto_fixed = _merge_batch_results(batch_results)
+        
+        # Обновляем метрики о количестве извлечённых регистров и авто-исправлений
+        update_llm_metrics(
+            registers_count=len(registers),
+            auto_fixes=total_auto_fixed,
+        )
 
         # --- Этап 5.1: финальная валидация ---
         if registers:
@@ -629,6 +653,8 @@ async def analyze_document(
 
     except Exception as e:
         logger.exception("Ошибка при анализе документа")
+        # Обновляем метрики при общей ошибке анализа  
+        update_llm_metrics(error=True, error_message=str(e))
         yield sse_error(f"Ошибка анализа: {e!s}", request_id=request_id)
 
 
@@ -735,6 +761,9 @@ async def _analyze_single_batch(
     status["attempt"] = 2
     status["retrying"] = True
     status["retry_reason"] = reason
+    
+    # Обновляем метрики о ретрае
+    update_llm_metrics(retry=True)
 
     # Повторная попытка: семантический retry (с ошибками) или упрощённый промпт
     try:
@@ -856,4 +885,6 @@ async def fix_registers(
 
     except Exception as e:
         logger.exception("Ошибка при исправлении регистров через AI")
+        # Обновляем метрики при ошибке
+        update_llm_metrics(error=True, error_message=str(e))
         yield sse_error(f"Ошибка: {e!s}", request_id=request_id)

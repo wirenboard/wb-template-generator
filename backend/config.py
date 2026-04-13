@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "*"  # Через запятую: "http://localhost:9080,https://app.example.com"
 
+    # Мониторинг и администрирование
+    ADMIN_TOKEN: str = ""  # Токен для доступа к админским метрикам (если пустой — админ-функции отключены)
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

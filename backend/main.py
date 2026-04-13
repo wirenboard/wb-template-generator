@@ -18,6 +18,7 @@ from openai import AsyncOpenAI
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_service import analyze_document, resolve_llm_credentials
+from metrics import get_all_metrics, get_public_metrics, get_admin_metrics, require_admin_access, update_basic_metrics, update_monitoring_metrics
 from models import BuildRequest, TranslateRequest, ValidateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
@@ -80,14 +81,6 @@ _start_time: float = time.monotonic()
 
 # Rate limiter: sliding window по IP
 _rate_limit_store: dict[str, deque[float]] = defaultdict(deque)
-
-# Метрики: in-memory счётчики
-_metrics = {
-    "analyze_requests": 0,
-    "analyze_errors": 0,
-    "rate_limit_hits": 0,
-    "durations": deque(maxlen=100),  # type: ignore[arg-type]
-}
 
 
 def _check_rate_limit(ip: str, max_requests: int, window: int) -> bool:
@@ -243,20 +236,29 @@ async def queue_status():
 
 @app.get("/api/metrics")
 async def metrics():
-    """In-memory метрики для мониторинга."""
-    durations = list(_metrics["durations"])
-    avg_duration = round(sum(durations) / len(durations), 1) if durations else None
-    return {
-        "counters": {
-            "analyze_requests": _metrics["analyze_requests"],
-            "analyze_errors": _metrics["analyze_errors"],
-            "rate_limit_hits": _metrics["rate_limit_hits"],
-        },
-        "histograms": {
-            "analyze_duration_avg": avg_duration,
-            "analyze_duration_count": len(durations),
-        },
-    }
+    """Публичные метрики для мониторинга (доступны всем)."""
+    return get_public_metrics()
+
+
+@app.get("/api/admin/metrics")
+async def admin_metrics(request: Request):
+    """Детальные админские метрики (требуют Authorization: Bearer <ADMIN_TOKEN>)."""
+    require_admin_access(request)
+    return get_admin_metrics()
+
+
+@app.get("/api/admin/metrics/all")
+async def admin_all_metrics(request: Request):
+    """Все метрики (публичные + админские) для админов."""
+    require_admin_access(request)
+    return get_all_metrics()
+
+
+@app.post("/api/metrics/page-view")
+async def track_page_view():
+    """Отслеживание просмотра страницы мониторинга."""
+    update_monitoring_metrics(page_view=True)
+    return {"status": "ok"}
 
 
 @app.get("/api/prompts")
@@ -336,7 +338,7 @@ async def analyze(
     # Rate limiting по IP
     client_ip = request.client.host if request.client else "unknown"
     if _check_rate_limit(client_ip, settings.RATE_LIMIT_REQUESTS, settings.RATE_LIMIT_WINDOW):
-        _metrics["rate_limit_hits"] += 1
+        update_basic_metrics(rate_limit_hit=True)
         limit_msg = (
             f"Превышен лимит запросов ({settings.RATE_LIMIT_REQUESTS} "
             f"за {settings.RATE_LIMIT_WINDOW} сек). Попробуйте позже."
@@ -346,7 +348,7 @@ async def analyze(
             content={"detail": limit_msg, "request_id": request_id},
         )
 
-    _metrics["analyze_requests"] += 1
+    update_basic_metrics(analyze_request=True)
 
     # Проверяем доступность LLM — нужен хотя бы один URL
     if not llm_api_url and not settings.LLM_API_URL:
@@ -479,12 +481,12 @@ async def analyze(
 
         except Exception as e:
             logger.exception("Ошибка в очереди/анализе")
-            _metrics["analyze_errors"] += 1
+            update_basic_metrics(analyze_error=True)
             yield sse_error(f"Ошибка: {e!s}", request_id=request_id)
 
         finally:
             duration = time.monotonic() - start_time
-            _metrics["durations"].append(duration)
+            update_basic_metrics(duration=duration)
             if queue:
                 queue.release(duration)
 
