@@ -1,11 +1,14 @@
 """Центральная система метрик для мониторинга приложения."""
 
 import time
+import logging
 from collections import deque
 from typing import Any
 
 from fastapi import HTTPException, Request
 from config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 # Метрики: in-memory счётчики
@@ -200,11 +203,6 @@ def get_admin_metrics() -> dict:
     llm_durations = list(_metrics["llm_durations"])
     avg_llm_duration = round(sum(llm_durations) / len(llm_durations), 1) if llm_durations else None
     
-    # Приблизительный расчёт стоимости (примерные цены для GPT-4o)
-    prompt_cost = _metrics["total_prompt_tokens"] * 0.0025 / 1000  # $2.50 per 1M tokens
-    completion_cost = _metrics["total_completion_tokens"] * 0.01 / 1000  # $10.00 per 1M tokens
-    total_cost = prompt_cost + completion_cost
-    
     # Статистика ошибок
     error_categories = dict(_metrics["error_categories"])
     recent_errors = list(_metrics["recent_errors"])
@@ -214,11 +212,6 @@ def get_admin_metrics() -> dict:
             "total_prompt_tokens": _metrics["total_prompt_tokens"],
             "total_completion_tokens": _metrics["total_completion_tokens"],
             "total_tokens": _metrics["total_tokens"],
-        },
-        "costs": {
-            "estimated_prompt_cost_usd": round(prompt_cost, 4),
-            "estimated_completion_cost_usd": round(completion_cost, 4),
-            "estimated_total_cost_usd": round(total_cost, 4),
         },
         "processing": {
             "registers_extracted": _metrics["registers_extracted"],
@@ -248,3 +241,90 @@ def get_all_metrics() -> dict:
     result["llm"].update(admin)
     
     return result
+
+
+# === Интеграция с персистентностью ===
+
+async def load_persisted_metrics() -> None:
+    """Загружает метрики из файлового хранилища при старте приложения."""
+    try:
+        from persistence import get_persistence
+        
+        persistence = get_persistence()
+        stored_data = await persistence.load_metrics()
+        
+        if stored_data:
+            # Восстанавливаем базовые метрики
+            if "basic" in stored_data:
+                basic = stored_data["basic"]
+                _metrics.update({
+                    "analyze_requests": basic.get("analyze_requests", 0),
+                    "analyze_errors": basic.get("analyze_errors", 0),
+                    "rate_limit_hits": basic.get("rate_limit_hits", 0),
+                    "monitoring_page_views": basic.get("monitoring_page_views", 0),
+                })
+            
+            # Восстанавливаем LLM метрики
+            if "llm" in stored_data:
+                llm = stored_data["llm"]
+                _metrics.update({
+                    "llm_requests": llm.get("llm_requests", 0),
+                    "llm_errors": llm.get("llm_errors", 0),
+                    "llm_retries": llm.get("llm_retries", 0),
+                    "total_prompt_tokens": llm.get("tokens", {}).get("total_prompt_tokens", 0),
+                    "total_completion_tokens": llm.get("tokens", {}).get("total_completion_tokens", 0),
+                    "total_tokens": llm.get("tokens", {}).get("total_tokens", 0),
+                    "registers_extracted": llm.get("processing", {}).get("registers_extracted", 0),
+                    "auto_fixes_applied": llm.get("processing", {}).get("auto_fixes_applied", 0),
+                })
+                
+                # Восстанавливаем категории ошибок
+                error_cats = llm.get("errors", {}).get("categories", {})
+                for cat, count in error_cats.items():
+                    if cat in _metrics["error_categories"]:
+                        _metrics["error_categories"][cat] = count
+            
+            logger.info(f"Метрики восстановлены из хранилища: {list(stored_data.keys())}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка загрузки сохраненных метрик: {e}")
+
+
+def get_metrics_for_persistence() -> dict:
+    """Возвращает метрики в формате для сохранения."""
+    return {
+        "basic": get_public_metrics()["basic"],
+        "llm": get_admin_metrics()
+    }
+
+
+async def start_metrics_persistence() -> None:
+    """Запускает автоматическое сохранение метрик."""
+    try:
+        from persistence import get_persistence
+        
+        persistence = get_persistence()
+        await persistence.start_auto_save(get_metrics_for_persistence)
+        logger.info("Автосохранение метрик запущено")
+        
+    except Exception as e:
+        logger.error(f"Ошибка запуска автосохранения метрик: {e}")
+
+
+async def stop_metrics_persistence() -> None:
+    """Останавливает автоматическое сохранение метрик."""
+    try:
+        from persistence import get_persistence
+        
+        persistence = get_persistence()
+        
+        # Финальное сохранение перед остановкой
+        await persistence.save_metrics(get_metrics_for_persistence())
+        
+        # Останавливаем автосохранение
+        await persistence.stop_auto_save()
+        
+        logger.info("Автосохранение метрик остановлено")
+        
+    except Exception as e:
+        logger.error(f"Ошибка остановки автосохранения метрик: {e}")

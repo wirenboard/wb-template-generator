@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
@@ -18,7 +18,8 @@ from openai import AsyncOpenAI
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_service import analyze_document, resolve_llm_credentials
-from metrics import get_all_metrics, get_public_metrics, get_admin_metrics, require_admin_access, update_basic_metrics, update_monitoring_metrics
+from metrics import get_all_metrics, get_public_metrics, get_admin_metrics, require_admin_access, update_basic_metrics, update_monitoring_metrics, load_persisted_metrics, start_metrics_persistence, stop_metrics_persistence
+from aggregation import start_metrics_aggregation, stop_metrics_aggregation, get_aggregator
 from models import BuildRequest, TranslateRequest, ValidateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
@@ -111,9 +112,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         custom_max=settings.QUEUE_CUSTOM_MAX_CONCURRENT,
         activation_delay=settings.QUEUE_ACTIVATION_DELAY,
     )
+    
+    # Инициализация системы метрик с персистентностью
+    try:
+        await load_persisted_metrics()
+        await start_metrics_persistence()
+        await start_metrics_aggregation(get_all_metrics)
+        logger.info("Система метрик с персистентностью и агрегацией инициализирована")
+    except Exception as e:
+        logger.error(f"Ошибка инициализации системы метрик: {e}")
+    
     logger.info("Приложение запущено")
     yield
     # Graceful shutdown
+    
+    # Останавливаем системы метрик
+    try:
+        await stop_metrics_aggregation()
+        await stop_metrics_persistence()
+    except Exception as e:
+        logger.error(f"Ошибка остановки системы метрик: {e}")
 
     cancelled = 0
     if server_queue:
@@ -259,6 +277,225 @@ async def track_page_view():
     """Отслеживание просмотра страницы мониторинга."""
     update_monitoring_metrics(page_view=True)
     return {"status": "ok"}
+
+
+@app.get("/api/admin/metrics/aggregation")
+async def admin_aggregation_status(request: Request):
+    """Статус системы агрегации метрик (только для админов)."""
+    require_admin_access(request)
+    aggregator = get_aggregator()
+    return aggregator.get_aggregation_status()
+
+
+@app.get("/api/metrics/history/hourly")
+async def get_hourly_metrics(hours: int = 24):
+    """Получить почасовые метрики за последние N часов (публичный доступ)."""
+    if hours < 1 or hours > 168:  # Максимум неделя
+        raise HTTPException(status_code=400, detail="hours должно быть от 1 до 168")
+    
+    aggregator = get_aggregator()
+    return await _get_hourly_data(aggregator, hours)
+
+
+@app.get("/api/admin/metrics/history/hourly")
+async def get_hourly_metrics_admin(request: Request, hours: int = 72):
+    """Получить детальные почасовые метрики (админский доступ)."""
+    require_admin_access(request)
+    
+    if hours < 1 or hours > 168:
+        raise HTTPException(status_code=400, detail="hours должно быть от 1 до 168")
+    
+    aggregator = get_aggregator()
+    return await _get_hourly_data(aggregator, hours, detailed=True)
+
+
+async def _get_hourly_data(aggregator, hours: int, detailed: bool = False):
+    """Вспомогательная функция для получения почасовых данных."""
+    try:
+        from pathlib import Path
+        import json
+        from datetime import datetime, timedelta
+        
+        # Определяем временной диапазон
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=hours)
+        
+        # Собираем файлы в указанном диапазоне
+        hourly_path = aggregator.hourly_path
+        result = {
+            "period": "hourly",
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "hours_requested": hours,
+            "data": []
+        }
+        
+        # Ищем файлы по паттерну
+        current_time = start_time
+        while current_time <= end_time:
+            hour_key = current_time.strftime("%Y-%m-%d_%H")
+            hour_file = hourly_path / f"{hour_key}.json"
+            
+            if hour_file.exists():
+                try:
+                    with open(hour_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        
+                        if detailed:
+                            # Админы получают полные данные
+                            result["data"].append(data)
+                        else:
+                            # Публичный доступ - только summary
+                            public_data = {
+                                "timestamp": data.get("timestamp"),
+                                "period_key": data.get("period_key"),
+                                "summary": data.get("summary", {})
+                            }
+                            result["data"].append(public_data)
+                            
+                except Exception as e:
+                    logger.warning(f"Ошибка чтения файла {hour_file}: {e}")
+            
+            current_time += timedelta(hours=1)
+        
+        result["hours_found"] = len(result["data"])
+        return result
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения почасовых данных: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/metrics/summary/latest")
+async def get_latest_summary():
+    """Получить последнюю сводку метрик (публичный доступ)."""
+    try:
+        aggregator = get_aggregator()
+        
+        # Сначала ищем самый свежий дневной файл
+        daily_files = list(aggregator.daily_path.glob("*.json"))
+        if daily_files:
+            latest_daily = sorted(daily_files)[-1]
+            
+            with open(latest_daily, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            return {
+                "type": "daily",
+                "timestamp": data.get("timestamp"),
+                "period_key": data.get("period_key"),
+                "date": data.get("date"),
+                "summary": data.get("summary", {}),
+                "hours_aggregated": data.get("hours_aggregated", 0)
+            }
+        
+        # Если дневных данных нет, ищем самый свежий почасовой файл
+        hourly_files = list(aggregator.hourly_path.glob("*.json"))
+        if not hourly_files:
+            return {"message": "Нет доступных данных"}
+        
+        # Сортируем по имени файла (содержит дату)
+        latest_file = sorted(hourly_files)[-1]
+        
+        with open(latest_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        return {
+            "type": "hourly",
+            "timestamp": data.get("timestamp"),
+            "period_key": data.get("period_key"), 
+            "summary": data.get("summary", {}),
+            "basic_stats": {
+                "uptime_hours": data.get("basic", {}).get("uptime_hours"),
+                "total_requests": data.get("basic", {}).get("analyze_requests"),
+                "error_rate": data.get("basic", {}).get("error_rate")
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения последней сводки: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/metrics/history/daily")
+async def get_daily_metrics(days: int = 30):
+    """Получить дневные метрики за последние N дней (публичный доступ)."""
+    if days < 1 or days > 90:  # Максимум 90 дней
+        raise HTTPException(status_code=400, detail="days должно быть от 1 до 90")
+    
+    aggregator = get_aggregator()
+    return await _get_daily_data(aggregator, days)
+
+
+@app.get("/api/admin/metrics/history/daily")
+async def get_daily_metrics_admin(request: Request, days: int = 90):
+    """Получить детальные дневные метрики (админский доступ)."""
+    require_admin_access(request)
+    
+    if days < 1 or days > 90:
+        raise HTTPException(status_code=400, detail="days должно быть от 1 до 90")
+    
+    aggregator = get_aggregator()
+    return await _get_daily_data(aggregator, days, detailed=True)
+
+
+async def _get_daily_data(aggregator, days: int, detailed: bool = False):
+    """Вспомогательная функция для получения дневных данных."""
+    try:
+        from pathlib import Path
+        import json
+        from datetime import datetime, timedelta, date
+        
+        # Определяем временной диапазон
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days)
+        
+        # Собираем файлы в указанном диапазоне
+        daily_path = aggregator.daily_path
+        result = {
+            "period": "daily",
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "days_requested": days,
+            "data": []
+        }
+        
+        # Ищем файлы по паттерну
+        current_date = start_date
+        while current_date <= end_date:
+            day_key = current_date.strftime("%Y-%m-%d")
+            day_file = daily_path / f"{day_key}.json"
+            
+            if day_file.exists():
+                try:
+                    with open(day_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        
+                        if detailed:
+                            # Админы получают полные данные включая почасовую разбивку
+                            result["data"].append(data)
+                        else:
+                            # Публичный доступ - только основная сводка
+                            public_data = {
+                                "date": data.get("date"),
+                                "period_key": data.get("period_key"),
+                                "timestamp": data.get("timestamp"),
+                                "hours_aggregated": data.get("hours_aggregated"),
+                                "summary": data.get("summary", {})
+                            }
+                            result["data"].append(public_data)
+                            
+                except Exception as e:
+                    logger.warning(f"Ошибка чтения файла {day_file}: {e}")
+            
+            current_date += timedelta(days=1)
+        
+        result["days_found"] = len(result["data"])
+        return result
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения дневных данных: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/prompts")

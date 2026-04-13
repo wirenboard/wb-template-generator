@@ -52,11 +52,6 @@ interface AdminMetrics {
     total_completion_tokens: number;
     total_tokens: number;
   };
-  costs: {
-    estimated_prompt_cost_usd: number;
-    estimated_completion_cost_usd: number;
-    estimated_total_cost_usd: number;
-  };
   processing: {
     registers_extracted: number;
     auto_fixes_applied: number;
@@ -785,12 +780,6 @@ export default function MonitoringPage() {
                     value={adminMetrics.tokens.total_tokens}
                     variant="default"
                   />
-                  <MetricCard 
-                    title="Оценка стоимости"
-                    value={`$${adminMetrics.costs.estimated_total_cost_usd.toFixed(4)}`}
-                    variant="warning"
-                    description="~GPT-4o тарифы"
-                  />
                 </div>
               </div>
 
@@ -815,12 +804,6 @@ export default function MonitoringPage() {
                     value={adminMetrics.performance.llm_duration_avg?.toFixed(1) || '—'}
                     unit="сек"
                     description={`${adminMetrics.performance.llm_duration_count} запросов`}
-                  />
-                  <MetricCard 
-                    title="Детальная стоимость"
-                    value={`P: $${adminMetrics.costs.estimated_prompt_cost_usd.toFixed(4)}`}
-                    variant="default"
-                    description={`C: $${adminMetrics.costs.estimated_completion_cost_usd.toFixed(4)}`}
                   />
                 </div>
               </div>
