@@ -206,10 +206,10 @@ export default function App() {
               📊 {t('nav.monitoring')}
             </button>
             <button
-              onClick={() => window.open('/metrics-dashboard.html', '_blank')}
+              onClick={() => window.location.href = '/analytics-dashboard.html'}
               className="px-2 py-1 text-xs rounded transition-colors text-gray-600 hover:bg-gray-100"
             >
-              📈 Analytics
+              📈 {t('nav.analytics')}
             </button>
           </div>
           

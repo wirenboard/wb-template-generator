@@ -24,6 +24,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // --- Navigation ---
     'nav.main': 'Главная',
     'nav.monitoring': 'Мониторинг',
+    'nav.analytics': 'Аналитика',
     'nav.editor': 'Редактор',
 
     // --- Monitoring ---
@@ -88,6 +89,11 @@ const translations: Record<Locale, Record<string, string>> = {
     // --- Units ---
     'units.sec': 'сек',
     'units.mb': 'МБ',
+
+    // --- Status ---
+    'status.backend': 'Бэкенд',
+    'status.frontend': 'Фронтенд',
+    'status.llmApi': 'LLM API',
 
     // --- Errors ---
     'errors.pageViewFailed': 'Не удалось отправить метрику просмотра:',
@@ -583,6 +589,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // --- Navigation ---
     'nav.main': 'Main',
     'nav.monitoring': 'Monitoring',
+    'nav.analytics': 'Analytics',
     'nav.editor': 'Editor',
 
     // --- Monitoring ---
@@ -1117,6 +1124,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // --- Navigation ---
     'nav.main': 'Басты',
     'nav.monitoring': 'Мониторинг',
+    'nav.analytics': 'Аналитика',
     'nav.editor': 'Редактор',
 
     // --- Monitoring ---
@@ -1650,6 +1658,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // --- Navigation ---
     'nav.main': 'Principale',
     'nav.monitoring': 'Monitoraggio',
+    'nav.analytics': 'Analisi',
     'nav.editor': 'Editor',
 
     // --- Monitoring ---
