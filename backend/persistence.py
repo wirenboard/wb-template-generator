@@ -25,7 +25,7 @@ class MetricsPersistence:
     def __init__(self, base_path: str = "data/metrics"):
         """
         Инициализация модуля персистентности.
-        
+
         Args:
             base_path: Базовая директория для хранения данных
         """
@@ -48,10 +48,10 @@ class MetricsPersistence:
     async def save_metrics(self, metrics_data: Dict[str, Any]) -> bool:
         """
         Сохраняет метрики в JSON файлы.
-        
+
         Args:
             metrics_data: Словарь с метриками (basic, llm)
-            
+
         Returns:
             True если сохранение прошло успешно
         """
@@ -85,7 +85,7 @@ class MetricsPersistence:
     async def load_metrics(self) -> Dict[str, Any]:
         """
         Загружает метрики из JSON файлов.
-        
+
         Returns:
             Словарь с загруженными метриками или пустой словарь
         """
@@ -117,7 +117,7 @@ class MetricsPersistence:
     async def _save_json_atomic(self, file_path: Path, data: Dict[str, Any]) -> None:
         """
         Атомарное сохранение JSON файла через временный файл.
-        
+
         Args:
             file_path: Путь к целевому файлу
             data: Данные для сохранения
@@ -148,10 +148,10 @@ class MetricsPersistence:
     async def _load_json(self, file_path: Path) -> Optional[Dict[str, Any]]:
         """
         Загрузка JSON файла.
-        
+
         Args:
             file_path: Путь к файлу
-            
+
         Returns:
             Загруженные данные или None если файл не найден/поврежден
         """
@@ -169,9 +169,10 @@ class MetricsPersistence:
     async def start_auto_save(self, get_metrics_func: Callable[[], Awaitable[Dict[str, Any]]]) -> None:
         """
         Запускает автоматическое периодическое сохранение метрик.
-        
+
         Args:
             get_metrics_func: Функция для получения текущих метрик
+            interval_seconds: Интервал сохранения в секундах (по умолчанию 300 = 5 минут)
         """
         if self._auto_save_task is not None:
             logger.warning("Автосохранение уже запущено")
@@ -213,7 +214,7 @@ class MetricsPersistence:
     def get_storage_info(self) -> Dict[str, Any]:
         """
         Возвращает информацию о хранилище метрик.
-        
+
         Returns:
             Словарь с информацией о файлах и размерах
         """

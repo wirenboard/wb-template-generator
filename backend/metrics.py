@@ -49,7 +49,7 @@ _metrics: dict[str, Any] = {
 
 def check_admin_access(request: Request) -> bool:
     """Проверяет, есть ли у запроса админский доступ.
-    
+
     Проверяет Authorization заголовок в формате 'Bearer <token>'.
     Возвращает True если токен правильный, False если нет доступа.
     """
@@ -226,7 +226,10 @@ def get_admin_metrics() -> dict:
         "errors": {
             "categories": error_categories,
             "recent": recent_errors,
-            "top_category": max(error_categories.items(), key=lambda x: x[1])[0] if any(error_categories.values()) else None,
+            "top_category": (
+                max(error_categories.items(), key=lambda x: x[1])[0]
+                if any(error_categories.values()) else None
+            ),
         }
     }
 

@@ -18,16 +18,17 @@ class ErrorInfo:
 
 def classify_llm_error(error_message: str, error_context: Optional[Dict[str, Any]] = None) -> ErrorInfo:
     """Классифицирует ошибку LLM и возвращает человекочитаемое описание.
-    
+
     Args:
         error_message: Сообщение об ошибке
         error_context: Дополнительный контекст (модель, timeout, токены и т.д.)
-    
+
     Returns:
         ErrorInfo с категорией, описанием и предложениями по исправлению
     """
     error_lower = error_message.lower()
-    context = error_context or {}
+    # Контекст пока не используется, но может понадобиться в будущем
+    _ = error_context or {}
     
     # 1. Ошибки аутентификации
     if any(keyword in error_lower for keyword in [
@@ -37,7 +38,10 @@ def classify_llm_error(error_message: str, error_context: Optional[Dict[str, Any
             category="auth",
             title="Ошибка авторизации",
             description="LLM API отклонил запрос из-за проблем с аутентификацией",
-            suggestion="Проверьте правильность API ключа и его активность. Возможно, ключ истек или достигнут лимит запросов.",
+            suggestion=(
+                "Проверьте правильность API ключа и его активность. "
+                "Возможно, ключ истек или достигнут лимит запросов."
+            ),
             severity="error",
             technical_details=error_message
         )
@@ -50,7 +54,10 @@ def classify_llm_error(error_message: str, error_context: Optional[Dict[str, Any
             category="network",
             title="Проблемы с сетью",
             description="Не удалось установить соединение с LLM API",
-            suggestion="Проверьте интернет-соединение, настройки прокси и доступность API. Попробуйте повторить запрос через несколько минут.",
+            suggestion=(
+                "Проверьте интернет-соединение, настройки прокси и доступность API. "
+                "Попробуйте повторить запрос через несколько минут."
+            ),
             severity="error",
             technical_details=error_message
         )
@@ -63,7 +70,10 @@ def classify_llm_error(error_message: str, error_context: Optional[Dict[str, Any
             category="quota",
             title="Превышены лимиты API",
             description="Достигнут лимит запросов или исчерпана квота",
-            suggestion="Подождите перед следующим запросом или обновите план подписки. Проверьте биллинг в панели провайдера.",
+            suggestion=(
+                "Подождите перед следующим запросом или обновите план подписки. "
+                "Проверьте биллинг в панели провайдера."
+            ),
             severity="warning",
             technical_details=error_message
         )
@@ -126,7 +136,10 @@ def classify_llm_error(error_message: str, error_context: Optional[Dict[str, Any
             category="empty",
             title="Пустой ответ LLM",
             description="Модель не вернула текстовый ответ",
-            suggestion="Возможно, модель потратила токены на внутренние рассуждения. Попробуйте убрать лимит токенов или изменить промпт.",
+            suggestion=(
+                "Возможно, модель потратила токены на внутренние рассуждения. "
+                "Попробуйте убрать лимит токенов или изменить промпт."
+            ),
             severity="warning",
             technical_details=error_message
         )

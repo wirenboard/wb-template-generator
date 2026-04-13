@@ -88,8 +88,9 @@ class TestMetricsAggregator:
     async def test_perform_hourly_aggregation(self, aggregator, sample_metrics, temp_dir):
         """Тест выполнения почасовой агрегации."""
         # Мокаем функцию получения метрик
-        get_metrics_func = lambda: sample_metrics
-        
+        def get_metrics_func():
+            return sample_metrics
+
         await aggregator._perform_hourly_aggregation(get_metrics_func)
         
         # Проверяем, что файл создался
