@@ -52,6 +52,7 @@ def _load_schema() -> dict:
 
 _CHANNEL_NAME_PATTERN = "does not match '^[^$#+\\\\/"
 
+
 def _humanize_error(path: str, msg: str) -> str:
     """Заменяет cryptic regex-сообщения на i18n-ключи с параметрами.
 

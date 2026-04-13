@@ -2,14 +2,15 @@
 
 import asyncio
 import json
-import pytest
-import tempfile
 import shutil
-from pathlib import Path
-from unittest.mock import patch, AsyncMock
-
 import sys
-sys.path.append('..')
+import tempfile
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+sys.path.append("..")
 
 from persistence import MetricsPersistence
 
@@ -34,57 +35,48 @@ class TestMetricsPersistence:
     def test_init_creates_directories(self, persistence, temp_dir):
         """Тест создания директорий при инициализации."""
         assert (temp_dir / "current").exists()
-        assert persistence.basic_metrics_file == temp_dir / "current" / "basic_metrics.json"
+        assert (
+            persistence.basic_metrics_file
+            == temp_dir / "current" / "basic_metrics.json"
+        )
         assert persistence.llm_metrics_file == temp_dir / "current" / "llm_metrics.json"
 
     @pytest.mark.asyncio
     async def test_save_metrics_basic(self, persistence, temp_dir):
         """Тест сохранения базовых метрик."""
         test_data = {
-            "basic": {
-                "counters": {
-                    "analyze_requests": 10,
-                    "analyze_errors": 2
-                }
-            }
+            "basic": {"counters": {"analyze_requests": 10, "analyze_errors": 2}}
         }
-        
+
         result = await persistence.save_metrics(test_data)
         assert result is True
-        
+
         # Проверяем, что файл создался
         basic_file = temp_dir / "current" / "basic_metrics.json"
         assert basic_file.exists()
-        
+
         # Проверяем содержимое
-        with open(basic_file, 'r', encoding='utf-8') as f:
+        with open(basic_file, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
-        
+
         assert "timestamp" in saved_data
         assert saved_data["data"] == test_data["basic"]
 
     @pytest.mark.asyncio
     async def test_save_metrics_llm(self, persistence, temp_dir):
         """Тест сохранения LLM метрик."""
-        test_data = {
-            "llm": {
-                "counters": {
-                    "llm_requests": 5,
-                    "llm_errors": 1
-                }
-            }
-        }
-        
+        test_data = {"llm": {"counters": {"llm_requests": 5, "llm_errors": 1}}}
+
         result = await persistence.save_metrics(test_data)
         assert result is True
-        
+
         # Проверяем файл
         llm_file = temp_dir / "current" / "llm_metrics.json"
         assert llm_file.exists()
-        
-        with open(llm_file, 'r', encoding='utf-8') as f:
+
+        with open(llm_file, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
-        
+
         assert saved_data["data"] == test_data["llm"]
 
     @pytest.mark.asyncio
@@ -99,15 +91,15 @@ class TestMetricsPersistence:
         # Создаем тестовые данные
         test_data = {
             "basic": {"counters": {"analyze_requests": 5}},
-            "llm": {"counters": {"llm_requests": 3}}
+            "llm": {"counters": {"llm_requests": 3}},
         }
-        
+
         # Сохраняем данные
         await persistence.save_metrics(test_data)
-        
+
         # Загружаем данные
         loaded_data = await persistence.load_metrics()
-        
+
         assert loaded_data["basic"] == test_data["basic"]
         assert loaded_data["llm"] == test_data["llm"]
         assert "basic_timestamp" in loaded_data
@@ -117,48 +109,49 @@ class TestMetricsPersistence:
     async def test_atomic_write(self, persistence, temp_dir):
         """Тест атомарной записи."""
         test_data = {"basic": {"test": "value"}}
-        
+
         result = await persistence.save_metrics(test_data)
         assert result is True
-        
+
         # Проверяем, что основной файл существует
         basic_file = temp_dir / "current" / "basic_metrics.json"
         assert basic_file.exists()
-        
+
         # Проверяем, что временных файлов нет
         temp_files = list(temp_dir.rglob("*.tmp"))
         assert len(temp_files) == 0
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_start_auto_save(self, persistence):
         """Тест запуска автосохранения."""
         # Создаем мок функции получения метрик
         test_metrics = {"basic": {"test": "data"}}
-        
+
         def mock_get_metrics():
             return test_metrics
-        
+
         await persistence.start_auto_save(mock_get_metrics)
-        
+
         assert persistence._auto_save_task is not None
         assert not persistence._auto_save_task.done()
-        
+
         # Останавливаем
         await persistence.stop_auto_save()
 
     @pytest.mark.asyncio
     async def test_stop_auto_save(self, persistence):
         """Тест остановки автосохранения."""
+
         # Создаем мок функции
         def mock_get_metrics():
             return {}
-        
+
         # Запускаем автосохранение
         await persistence.start_auto_save(mock_get_metrics)
-        
+
         # Останавливаем
         await persistence.stop_auto_save()
-        
+
         assert persistence._auto_save_task is None
 
     @pytest.mark.asyncio
@@ -166,7 +159,7 @@ class TestMetricsPersistence:
         """Тест обработки ошибок при сохранении."""
         # Используем некорректные данные
         test_data = {"basic": object()}  # object() не сериализуется в JSON
-        
+
         result = await persistence.save_metrics(test_data)
         assert result is False
 
@@ -182,13 +175,13 @@ class TestMetricsPersistence:
         """Тест создания временного файла при атомарной записи."""
         target_file = temp_dir / "test.json"
         test_data = {"key": "value"}
-        
+
         await persistence._save_json_atomic(target_file, test_data)
-        
+
         # Проверяем, что целевой файл создался
         assert target_file.exists()
-        
+
         # Проверяем содержимое
-        with open(target_file, 'r', encoding='utf-8') as f:
+        with open(target_file, "r", encoding="utf-8") as f:
             loaded_data = json.load(f)
         assert loaded_data == test_data

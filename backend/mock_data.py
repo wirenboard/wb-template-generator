@@ -21,7 +21,6 @@ def mock_registers() -> list[Register]:
             channel_type="value",
             group="power_meters",
             group_title="Power Meters",
-
             translations={"ru": {"name": "Напряжение"}},
         ),
         Register(
@@ -36,7 +35,6 @@ def mock_registers() -> list[Register]:
             channel_type="value",
             group="power_meters",
             group_title="Power Meters",
-
             translations={"ru": {"name": "Ток"}},
         ),
         Register(
@@ -51,7 +49,6 @@ def mock_registers() -> list[Register]:
             channel_type="value",
             group="power_meters",
             group_title="Power Meters",
-
             translations={"ru": {"name": "Активная мощность"}},
         ),
         Register(
@@ -66,11 +63,13 @@ def mock_registers() -> list[Register]:
             group="general",
             group_title="General",
             is_parameter=True,
-
             enum=[0, 1, 2, 5],
             enum_titles=["2400", "4800", "9600", "1200"],
             translations={
-                "ru": {"name": "Скорость обмена", "description": "Скорость порта: 0=2400, 1=4800, 2=9600, 5=1200"}
+                "ru": {
+                    "name": "Скорость обмена",
+                    "description": "Скорость порта: 0=2400, 1=4800, 2=9600, 5=1200",
+                }
             },
         ),
     ]

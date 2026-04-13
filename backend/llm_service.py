@@ -13,13 +13,8 @@ from openai import AsyncOpenAI
 from PIL import Image
 
 from config import Settings
-from file_converter import (
-    excel_to_text,
-    image_to_base64,
-    is_excel_file,
-    is_image_file,
-    is_pdf_file,
-)
+from file_converter import (excel_to_text, image_to_base64, is_excel_file,
+                            is_image_file, is_pdf_file)
 from metrics import update_llm_metrics
 from models import AnalyzeResponse, DeviceInfo, Register
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
@@ -38,6 +33,7 @@ class LLMApiError(Exception):
 # ---------------------------------------------------------------------------
 # Маршрутизация LLM-ключей (изоляция серверного ключа)
 # ---------------------------------------------------------------------------
+
 
 def resolve_llm_credentials(
     settings: Settings,
@@ -59,6 +55,7 @@ def resolve_llm_credentials(
 # ---------------------------------------------------------------------------
 # Парсинг JSON из ответа LLM
 # ---------------------------------------------------------------------------
+
 
 def _extract_json_from_response(text: str) -> dict:
     """Извлекает JSON из ответа LLM.
@@ -118,10 +115,16 @@ def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register], int]:
             fixed_reg, fixes = auto_fix_register(raw_reg)
             auto_fixed_count += len(fixes)
             if fixes:
-                fix_desc = ", ".join(f'{f.message_params.get("field", "")}: '
-                                     f'{f.message_params.get("from", "")}→{f.message_params.get("to", "")}'
-                                     for f in fixes)
-                logger.info("Авто-исправление регистра «%s»: %s", raw_reg.get("name", "?"), fix_desc)
+                fix_desc = ", ".join(
+                    f'{f.message_params.get("field", "")}: '
+                    f'{f.message_params.get("from", "")}→{f.message_params.get("to", "")}'
+                    for f in fixes
+                )
+                logger.info(
+                    "Авто-исправление регистра «%s»: %s",
+                    raw_reg.get("name", "?"),
+                    fix_desc,
+                )
             reg = Register(**fixed_reg)
             registers.append(reg)
         except Exception as e:
@@ -186,6 +189,7 @@ def _merge_batch_results(
 # Вызов LLM API (асинхронный)
 # ---------------------------------------------------------------------------
 
+
 async def _call_llm(
     client: AsyncOpenAI,
     model: str,
@@ -229,10 +233,12 @@ async def _call_llm(
             llm_start = time.monotonic()
             response = await client.chat.completions.create(**kwargs)
             llm_duration = time.monotonic() - llm_start
-            
+
             # Логируем расход токенов и finish_reason
             usage = response.usage
-            finish_reason = response.choices[0].finish_reason if response.choices else None
+            finish_reason = (
+                response.choices[0].finish_reason if response.choices else None
+            )
             if usage:
                 logger.info(
                     "Токены: prompt=%d, completion=%d, total=%d, finish_reason=%s",
@@ -251,7 +257,7 @@ async def _call_llm(
             else:
                 # Обновляем метрики без токенов
                 update_llm_metrics(duration=llm_duration)
-                
+
             if finish_reason == "length":
                 logger.warning(
                     "Ответ LLM обрезан по лимиту токенов (finish_reason=length). "
@@ -267,11 +273,15 @@ async def _call_llm(
             fixed = False
 
             # Фолбек max_tokens ↔ max_completion_tokens
-            if primary_key in kwargs and (fallback_key in err_str or primary_key in err_str):
+            if primary_key in kwargs and (
+                fallback_key in err_str or primary_key in err_str
+            ):
                 logger.warning(
                     "Модель %s не поддерживает %s, переключаемся на %s. "
                     "Совет: измените настройку «Параметр токенов» в UI.",
-                    model, primary_key, fallback_key,
+                    model,
+                    primary_key,
+                    fallback_key,
                 )
                 del kwargs[primary_key]
                 kwargs[fallback_key] = max_tokens
@@ -321,13 +331,16 @@ def _is_file_unsupported(error_msg: str) -> bool:
         "unrecognized content",
     ]
     has_keyword = any(kw in lower for kw in keywords)
-    has_context = "file" in lower or "pdf" in lower or "type" in lower or "xlsx" in lower
+    has_context = (
+        "file" in lower or "pdf" in lower or "type" in lower or "xlsx" in lower
+    )
     return has_keyword and has_context
 
 
 # ---------------------------------------------------------------------------
 # Основная функция анализа документа
 # ---------------------------------------------------------------------------
+
 
 async def analyze_document(
     files: list[tuple[str, bytes]],
@@ -365,8 +378,13 @@ async def analyze_document(
         SSE-строки с событиями прогресса, результата, завершения или ошибки.
     """
     try:
-        logger.info("[%s] Начало анализа: %d файл(ов), тип=%s, custom_llm=%s",
-                     request_id, len(files), template_type, is_custom_llm)
+        logger.info(
+            "[%s] Начало анализа: %d файл(ов), тип=%s, custom_llm=%s",
+            request_id,
+            len(files),
+            template_type,
+            is_custom_llm,
+        )
 
         # Изоляция: при серверной модели игнорируем пользовательский промпт
         if not is_custom_llm:
@@ -374,13 +392,21 @@ async def analyze_document(
 
         # Изоляция ключей: при пользовательском LLM НЕ фолбечим на серверный ключ
         effective_url, effective_key = resolve_llm_credentials(
-            settings, api_url if is_custom_llm else None, api_key if is_custom_llm else None,
+            settings,
+            api_url if is_custom_llm else None,
+            api_key if is_custom_llm else None,
         )
         effective_model = model or settings.LLM_MODEL
         effective_max_tokens = max_tokens or settings.LLM_MAX_TOKENS
         effective_timeout = timeout or settings.LLM_TIMEOUT
-        effective_legacy = legacy_max_tokens if legacy_max_tokens is not None else settings.LLM_LEGACY_MAX_TOKENS
-        effective_temperature = temperature if temperature != -1 else settings.LLM_TEMPERATURE
+        effective_legacy = (
+            legacy_max_tokens
+            if legacy_max_tokens is not None
+            else settings.LLM_LEGACY_MAX_TOKENS
+        )
+        effective_temperature = (
+            temperature if temperature != -1 else settings.LLM_TEMPERATURE
+        )
         soft_timeout = settings.LLM_SOFT_TIMEOUT
 
         # --- Этап 1: загрузка и классификация файлов ---
@@ -434,13 +460,16 @@ async def analyze_document(
         # --- Этап 2: подготовка LLM-клиента ---
         if custom_system_prompt:
             system_prompt = render_custom_prompt(
-                custom_system_prompt, template_type, translation_languages,
+                custom_system_prompt,
+                template_type,
+                translation_languages,
             )
         else:
             system_prompt = get_analyze_prompt(template_type, translation_languages)
         http_client = None
         if not is_custom_llm and settings.LLM_PROXY:
             import httpx
+
             http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
         # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
         client = AsyncOpenAI(
@@ -459,47 +488,66 @@ async def analyze_document(
 
         # Excel-данные как текст
         if text_parts:
-            llm_content.append({
-                "type": "text",
-                "text": "\n\n".join(text_parts),
-            })
+            llm_content.append(
+                {
+                    "type": "text",
+                    "text": "\n\n".join(text_parts),
+                }
+            )
 
         # PDF как file-content
         for filename, file_bytes in direct_files:
             mime = _get_file_mime(filename)
             b64_data = base64.b64encode(file_bytes).decode("ascii")
-            llm_content.append({
-                "type": "file",
-                "file": {
-                    "filename": filename,
-                    "file_data": f"data:{mime};base64,{b64_data}",
-                },
-            })
+            llm_content.append(
+                {
+                    "type": "file",
+                    "file": {
+                        "filename": filename,
+                        "file_data": f"data:{mime};base64,{b64_data}",
+                    },
+                }
+            )
 
         # Изображения как image_url
         for img in all_images:
             b64 = image_to_base64(img)
-            llm_content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{b64}",
-                    "detail": "high",
-                },
-            })
+            llm_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{b64}",
+                        "detail": "high",
+                    },
+                }
+            )
 
         if not llm_content:
-            yield sse_error("Нет данных для анализа. Загрузите PDF, Excel или изображение.", request_id=request_id)
+            yield sse_error(
+                "Нет данных для анализа. Загрузите PDF, Excel или изображение.",
+                request_id=request_id,
+            )
             return
 
         file_names = ", ".join(fn for fn, _ in files)
-        yield sse_progress("analyzing", f"Отправка в LLM: {file_names}...", request_id=request_id)
+        yield sse_progress(
+            "analyzing", f"Отправка в LLM: {file_names}...", request_id=request_id
+        )
 
         batch_status: dict = {}
-        task = asyncio.create_task(_analyze_single_batch(
-            client, effective_model, system_prompt, llm_content,
-            effective_timeout, effective_max_tokens, effective_legacy,
-            effective_temperature, status=batch_status,
-        ))
+        task = asyncio.create_task(
+            _analyze_single_batch(
+                client,
+                effective_model,
+                system_prompt,
+                llm_content,
+                effective_timeout,
+                effective_max_tokens,
+                effective_legacy,
+                effective_temperature,
+                status=batch_status,
+            )
+        )
         start_time = time.monotonic()
         soft_sent = False
         retry_notified = False
@@ -548,7 +596,7 @@ async def analyze_document(
             err_msg = str(e)
             # Обновляем метрики при ошибке LLM API
             update_llm_metrics(error=True, error_message=err_msg)
-            
+
             if _is_file_unsupported(err_msg):
                 yield sse_error(
                     f"Модель не поддерживает переданный формат файла. "
@@ -575,7 +623,7 @@ async def analyze_document(
         )
 
         device_info, registers, total_auto_fixed = _merge_batch_results(batch_results)
-        
+
         # Обновляем метрики о количестве извлечённых регистров и авто-исправлений
         update_llm_metrics(
             registers_count=len(registers),
@@ -595,12 +643,15 @@ async def analyze_document(
             if total_auto_fixed:
                 logger.info(
                     "[%s] Авто-исправлено %d полей в регистрах",
-                    request_id, total_auto_fixed,
+                    request_id,
+                    total_auto_fixed,
                 )
             if final_validation.error_count or final_validation.warning_count:
                 logger.info(
                     "[%s] Валидация: %d ошибок, %d предупреждений",
-                    request_id, final_validation.error_count, final_validation.warning_count,
+                    request_id,
+                    final_validation.error_count,
+                    final_validation.warning_count,
                 )
 
         # Стрипаем переводы если языки не запрошены
@@ -617,19 +668,20 @@ async def analyze_document(
             for reg in registers:
                 if reg.translations:
                     reg.translations = {
-                        k: v for k, v in reg.translations.items()
-                        if k in _allowed
+                        k: v for k, v in reg.translations.items() if k in _allowed
                     } or None
                 if reg.group_title_translations:
                     reg.group_title_translations = {
-                        k: v for k, v in reg.group_title_translations.items()
+                        k: v
+                        for k, v in reg.group_title_translations.items()
                         if k in _allowed
                     } or None
                 if reg.enum_entries:
                     for entry in reg.enum_entries:
                         if entry.translations:
                             entry.translations = {
-                                k: v for k, v in entry.translations.items()
+                                k: v
+                                for k, v in entry.translations.items()
                                 if k in _allowed
                             } or None
 
@@ -653,7 +705,7 @@ async def analyze_document(
 
     except Exception as e:
         logger.exception("Ошибка при анализе документа")
-        # Обновляем метрики при общей ошибке анализа  
+        # Обновляем метрики при общей ошибке анализа
         update_llm_metrics(error=True, error_message=str(e))
         yield sse_error(f"Ошибка анализа: {e!s}", request_id=request_id)
 
@@ -696,7 +748,14 @@ async def _analyze_single_batch(
     try:
         # Первая попытка
         raw_response, _usage = await _call_llm(
-            client, model, system_prompt, content, timeout, max_tokens, legacy_max_tokens, temperature,
+            client,
+            model,
+            system_prompt,
+            content,
+            timeout,
+            max_tokens,
+            legacy_max_tokens,
+            temperature,
         )
     except Exception as e:
         raise LLMApiError(str(e)) from e
@@ -711,7 +770,10 @@ async def _analyze_single_batch(
             )
         else:
             reason = "LLM вернул пустой ответ"
-        logger.warning("Пустой ответ от LLM (completion_tokens=%d), повторная попытка", completion_tokens)
+        logger.warning(
+            "Пустой ответ от LLM (completion_tokens=%d), повторная попытка",
+            completion_tokens,
+        )
     else:
         try:
             raw_data = _extract_json_from_response(raw_response)
@@ -719,10 +781,8 @@ async def _analyze_single_batch(
 
             # --- Валидация: проверяем качество ответа ---
             from prompts import get_validation_retry_prompt
-            from register_validator import (
-                format_validation_errors,
-                validate_registers,
-            )
+            from register_validator import (format_validation_errors,
+                                            validate_registers)
 
             device_info, registers, auto_fixed = result
             if registers:
@@ -736,7 +796,9 @@ async def _analyze_single_batch(
                     )
                     logger.warning(
                         "Высокий процент ошибок (%.0f%%, %d из %d), семантический retry",
-                        error_rate * 100, validation.error_count, len(registers),
+                        error_rate * 100,
+                        validation.error_count,
+                        len(registers),
                     )
                     error_desc = format_validation_errors(validation, registers)
                     # Переходим к retry ниже
@@ -746,7 +808,8 @@ async def _analyze_single_batch(
                     if validation.error_count:
                         logger.info(
                             "Валидация: %d ошибок, %d предупреждений (ниже порога retry)",
-                            validation.error_count, validation.warning_count,
+                            validation.error_count,
+                            validation.warning_count,
                         )
                     return result
             else:
@@ -761,7 +824,7 @@ async def _analyze_single_batch(
     status["attempt"] = 2
     status["retrying"] = True
     status["retry_reason"] = reason
-    
+
     # Обновляем метрики о ретрае
     update_llm_metrics(retry=True)
 
@@ -778,7 +841,14 @@ async def _analyze_single_batch(
                 {"type": "text", "text": get_retry_prompt()},
             ]
         raw_response, _usage = await _call_llm(
-            client, model, system_prompt, retry_content, timeout, max_tokens, legacy_max_tokens, temperature,
+            client,
+            model,
+            system_prompt,
+            retry_content,
+            timeout,
+            max_tokens,
+            legacy_max_tokens,
+            temperature,
         )
     except Exception as e:
         status["failed"] = True
@@ -805,6 +875,7 @@ async def _analyze_single_batch(
 # Исправление регистров через AI (кнопка "Исправить через AI")
 # ---------------------------------------------------------------------------
 
+
 async def fix_registers(
     registers: list[Register],
     error_descriptions: str,
@@ -827,13 +898,18 @@ async def fix_registers(
     from register_validator import validate_registers as _validate_regs
 
     try:
-        yield sse_progress("analyzing", "Отправка в LLM для исправления...", request_id=request_id)
+        yield sse_progress(
+            "analyzing", "Отправка в LLM для исправления...", request_id=request_id
+        )
 
         # Сериализуем регистры в JSON для промпта
         registers_json = json.dumps(
-            {"device_info": {"name": "device", "id": "device"},
-             "registers": [r.model_dump(exclude_none=True) for r in registers]},
-            ensure_ascii=False, indent=2,
+            {
+                "device_info": {"name": "device", "id": "device"},
+                "registers": [r.model_dump(exclude_none=True) for r in registers],
+            },
+            ensure_ascii=False,
+            indent=2,
         )
 
         prompt = get_fix_registers_prompt(registers_json, error_descriptions)
@@ -843,6 +919,7 @@ async def fix_registers(
         http_client = None
         if proxy:
             import httpx
+
             http_client = httpx.AsyncClient(proxy=proxy)
         client = AsyncOpenAI(
             base_url=effective_url,
@@ -851,12 +928,19 @@ async def fix_registers(
             max_retries=2,
         )
 
-        yield sse_progress("analyzing", "LLM исправляет ошибки...", request_id=request_id)
+        yield sse_progress(
+            "analyzing", "LLM исправляет ошибки...", request_id=request_id
+        )
 
         raw_response, _usage = await _call_llm(
-            client, effective_model,
+            client,
+            effective_model,
             "You are a Modbus device template validator.",
-            content, effective_timeout, max_tokens, legacy_max_tokens, temperature,
+            content,
+            effective_timeout,
+            max_tokens,
+            legacy_max_tokens,
+            temperature,
         )
 
         if not raw_response or not raw_response.strip():
@@ -871,12 +955,17 @@ async def fix_registers(
             return
 
         # Валидация результата
-        yield sse_progress("validating", "Проверка исправленных регистров...", request_id=request_id)
+        yield sse_progress(
+            "validating", "Проверка исправленных регистров...", request_id=request_id
+        )
         validation = _validate_regs(fixed_registers)
         logger.info(
             "[%s] Fix-registers: %d регистров, %d ошибок, %d предупреждений, %d авто-исправлений",
-            request_id, len(fixed_registers), validation.error_count,
-            validation.warning_count, auto_fixed,
+            request_id,
+            len(fixed_registers),
+            validation.error_count,
+            validation.warning_count,
+            auto_fixed,
         )
 
         response = AnalyzeResponse(device_info=device_info, registers=fixed_registers)

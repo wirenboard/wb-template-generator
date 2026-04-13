@@ -7,14 +7,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from models import Register
-from register_validator import (
-    Severity,
-    auto_fix_and_validate,
-    auto_fix_register,
-    format_validation_errors,
-    validate_register,
-    validate_registers,
-)
+from register_validator import (Severity, auto_fix_and_validate,
+                                auto_fix_register, format_validation_errors,
+                                validate_register, validate_registers)
 
 # --- Хелперы ---
 
@@ -247,14 +242,18 @@ class TestValidateRegister:
     def test_enum_length_mismatch_error(self):
         reg = _reg(enum=[0, 1, 2], enum_titles=["Off", "On"])
         result = validate_register(reg)
-        errors = [e for e in result.errors if e.message_key == "validation.enumLengthMismatch"]
+        errors = [
+            e for e in result.errors if e.message_key == "validation.enumLengthMismatch"
+        ]
         assert len(errors) == 1
         assert errors[0].severity == Severity.ERROR
 
     def test_enum_matching_length_ok(self):
         reg = _reg(enum=[0, 1], enum_titles=["Off", "On"])
         result = validate_register(reg)
-        errors = [e for e in result.errors if e.message_key == "validation.enumLengthMismatch"]
+        errors = [
+            e for e in result.errors if e.message_key == "validation.enumLengthMismatch"
+        ]
         assert len(errors) == 0
 
     def test_invalid_word_order_error(self):
@@ -275,151 +274,217 @@ class TestValidateRegister:
     def test_parameter_channel_type_warning(self):
         reg = _reg(is_parameter=True, channel_type="switch")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.parameterChannelType"]
+        warnings = [
+            e
+            for e in result.errors
+            if e.message_key == "validation.parameterChannelType"
+        ]
         assert len(warnings) == 1
         assert warnings[0].severity == Severity.WARNING
 
     def test_parameter_value_channel_no_warning(self):
         reg = _reg(is_parameter=True, channel_type="value")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.parameterChannelType"]
+        warnings = [
+            e
+            for e in result.errors
+            if e.message_key == "validation.parameterChannelType"
+        ]
         assert len(warnings) == 0
 
     def test_switch_with_enum_warning(self):
         reg = _reg(channel_type="switch", enum=[0, 1])
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.switchWithEnum"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.switchWithEnum"
+        ]
         assert len(warnings) == 1
 
     def test_wo_switch_not_write_warning(self):
         reg = _reg(channel_type="wo-switch", access="read")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.woSwitchNotWriteOnly"]
+        warnings = [
+            e
+            for e in result.errors
+            if e.message_key == "validation.woSwitchNotWriteOnly"
+        ]
         assert len(warnings) == 1
 
     def test_wo_switch_write_no_warning(self):
         reg = _reg(channel_type="wo-switch", access="write")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.woSwitchNotWriteOnly"]
+        warnings = [
+            e
+            for e in result.errors
+            if e.message_key == "validation.woSwitchNotWriteOnly"
+        ]
         assert len(warnings) == 0
 
     def test_multi_reg_format_without_word_order_warning(self):
         reg = _reg(format="u32", word_order=None)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.missingWordOrder"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.missingWordOrder"
+        ]
         assert len(warnings) == 1
 
     def test_multi_reg_format_with_word_order_no_warning(self):
         reg = _reg(format="u32", word_order="big_endian")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.missingWordOrder"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.missingWordOrder"
+        ]
         assert len(warnings) == 0
 
     def test_string_without_data_size_warning(self):
         reg = _reg(format="string", string_data_size=None)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.missingStringDataSize"]
+        warnings = [
+            e
+            for e in result.errors
+            if e.message_key == "validation.missingStringDataSize"
+        ]
         assert len(warnings) == 1
 
     def test_string_with_data_size_no_warning(self):
         reg = _reg(format="string", string_data_size=10)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.missingStringDataSize"]
+        warnings = [
+            e
+            for e in result.errors
+            if e.message_key == "validation.missingStringDataSize"
+        ]
         assert len(warnings) == 0
 
     def test_coil_with_range_channel_warning(self):
         reg = _reg(reg_type="coil", channel_type="range")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.bitRegNotSwitch"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.bitRegNotSwitch"
+        ]
         assert len(warnings) == 1
 
     def test_coil_with_switch_no_warning(self):
         reg = _reg(reg_type="coil", channel_type="switch")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.bitRegNotSwitch"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.bitRegNotSwitch"
+        ]
         assert len(warnings) == 0
 
     def test_min_greater_than_max_warning(self):
         reg = _reg(min=100, max=50)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.minGreaterThanMax"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.minGreaterThanMax"
+        ]
         assert len(warnings) == 1
 
     def test_min_less_than_max_no_warning(self):
         reg = _reg(min=10, max=100)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.minGreaterThanMax"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.minGreaterThanMax"
+        ]
         assert len(warnings) == 0
 
     def test_disabled_parameter_warning(self):
         reg = _reg(is_parameter=True, enabled=False)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.disabledParameter"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.disabledParameter"
+        ]
         assert len(warnings) == 1
 
     def test_enabled_parameter_no_warning(self):
         reg = _reg(is_parameter=True, enabled=True)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.disabledParameter"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.disabledParameter"
+        ]
         assert len(warnings) == 0
 
     def test_disabled_channel_no_warning(self):
         reg = _reg(is_parameter=False, enabled=False)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.disabledParameter"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.disabledParameter"
+        ]
         assert len(warnings) == 0
 
     def test_readonly_conflict_warning(self):
         reg = _reg(readonly=True, read_only=False)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.readonlyConflict"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.readonlyConflict"
+        ]
         assert len(warnings) == 1
 
     def test_readonly_no_conflict(self):
         reg = _reg(readonly=True, read_only=True)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.readonlyConflict"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.readonlyConflict"
+        ]
         assert len(warnings) == 0
 
     def test_enable_in_name_value_no_enum_warning(self):
         reg = _reg(name="Anti-Freezing Enable", channel_type="value")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.probablySwitch"
+        ]
         assert len(warnings) == 1
 
     def test_enable_in_name_switch_no_warning(self):
         reg = _reg(name="Anti-Freezing Enable", channel_type="switch")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.probablySwitch"
+        ]
         assert len(warnings) == 0
 
     def test_enable_in_name_with_enum_no_warning(self):
-        reg = _reg(name="Mode Enable", channel_type="value", enum=[0, 1, 2], enum_titles=["Off", "On", "Auto"])
+        reg = _reg(
+            name="Mode Enable",
+            channel_type="value",
+            enum=[0, 1, 2],
+            enum_titles=["Off", "On", "Auto"],
+        )
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.probablySwitch"
+        ]
         assert len(warnings) == 0
 
     def test_enable_in_name_parameter_no_warning(self):
         reg = _reg(name="Feature Enable", channel_type="value", is_parameter=True)
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.probablySwitch"
+        ]
         assert len(warnings) == 0
 
     def test_disable_in_name_warning(self):
         reg = _reg(name="Alarm Disable", channel_type="value")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.probablySwitch"
+        ]
         assert len(warnings) == 1
 
     def test_on_off_in_name_warning(self):
         reg = _reg(name="Pump On/Off", channel_type="value")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
+        warnings = [
+            e for e in result.errors if e.message_key == "validation.probablySwitch"
+        ]
         assert len(warnings) == 1
 
     def test_all_valid_formats_pass(self):
         """Каждый валидный формат должен проходить без ошибок."""
         from register_validator import VALID_FORMATS
+
         for fmt in VALID_FORMATS:
             reg = _reg(format=fmt)
             result = validate_register(reg)
@@ -429,6 +494,7 @@ class TestValidateRegister:
     def test_all_valid_reg_types_pass(self):
         """Каждый валидный тип регистра должен проходить без ошибок."""
         from register_validator import VALID_REG_TYPES
+
         for rt in VALID_REG_TYPES:
             reg = _reg(reg_type=rt)
             result = validate_register(reg)
@@ -438,6 +504,7 @@ class TestValidateRegister:
     def test_all_valid_channel_types_pass(self):
         """Каждый валидный тип канала должен проходить без ошибок."""
         from register_validator import VALID_CHANNEL_TYPES
+
         for ct in VALID_CHANNEL_TYPES:
             reg = _reg(channel_type=ct)
             result = validate_register(reg)
@@ -460,7 +527,9 @@ class TestValidateRegisters:
         ]
         result = validate_registers(regs)
         dup_warnings = [
-            e for rv in result.registers for e in rv.errors
+            e
+            for rv in result.registers
+            for e in rv.errors
             if e.message_key == "validation.duplicateAddress"
         ]
         assert len(dup_warnings) == 1  # только у второго
@@ -472,7 +541,9 @@ class TestValidateRegisters:
         ]
         result = validate_registers(regs)
         dup_warnings = [
-            e for rv in result.registers for e in rv.errors
+            e
+            for rv in result.registers
+            for e in rv.errors
             if e.message_key == "validation.duplicateAddress"
         ]
         assert len(dup_warnings) == 0

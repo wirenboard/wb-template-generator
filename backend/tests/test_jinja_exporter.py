@@ -6,14 +6,10 @@ import os
 import jinja2
 import pytest
 
-from jinja_exporter import (
-    _detect_channel_patterns,
-    _detect_group_patterns,
-    _detect_param_patterns,
-    _detect_string_channel_patterns,
-    _detect_translation_patterns,
-    build_jinja_template,
-)
+from jinja_exporter import (_detect_channel_patterns, _detect_group_patterns,
+                            _detect_param_patterns,
+                            _detect_string_channel_patterns,
+                            _detect_translation_patterns, build_jinja_template)
 
 # Путь к директории с фикстурами
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -31,8 +27,22 @@ class TestNoPatterns:
                 "id": "test",
                 "groups": [{"title": "Main", "id": "main"}],
                 "channels": [
-                    {"name": "Voltage", "address": 0, "reg_type": "input", "type": "value", "format": "float", "group": "main"},
-                    {"name": "Current", "address": 2, "reg_type": "input", "type": "value", "format": "float", "group": "main"},
+                    {
+                        "name": "Voltage",
+                        "address": 0,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "float",
+                        "group": "main",
+                    },
+                    {
+                        "name": "Current",
+                        "address": 2,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "float",
+                        "group": "main",
+                    },
                 ],
                 "parameters": {},
                 "translations": {},
@@ -46,7 +56,14 @@ class TestNoPatterns:
     def test_single_channel_not_pattern(self):
         """Один канал -- не паттерн."""
         channels = [
-            {"name": "Ch 1", "address": 0, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
+            {
+                "name": "Ch 1",
+                "address": 0,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 0
@@ -54,8 +71,22 @@ class TestNoPatterns:
     def test_non_sequential_numbers(self):
         """Непоследовательные номера -- не паттерн."""
         channels = [
-            {"name": "Ch 1", "address": 0, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
-            {"name": "Ch 3", "address": 2, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
+            {
+                "name": "Ch 1",
+                "address": 0,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
+            {
+                "name": "Ch 3",
+                "address": 2,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 0
@@ -63,8 +94,22 @@ class TestNoPatterns:
     def test_different_fields_not_pattern(self):
         """Разные поля -- не паттерн."""
         channels = [
-            {"name": "Ch 1", "address": 0, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
-            {"name": "Ch 2", "address": 1, "reg_type": "input", "type": "value", "format": "u16", "group": "main"},
+            {
+                "name": "Ch 1",
+                "address": 0,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
+            {
+                "name": "Ch 2",
+                "address": 1,
+                "reg_type": "input",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 0
@@ -76,14 +121,16 @@ class TestSimpleChannelPattern:
     def _make_template(self, count=4, base_addr=100, step=1):
         channels = []
         for i in range(1, count + 1):
-            channels.append({
-                "name": f"Ch {i}",
-                "address": base_addr + (i - 1) * step,
-                "reg_type": "holding",
-                "type": "value",
-                "format": "u16",
-                "group": "main",
-            })
+            channels.append(
+                {
+                    "name": f"Ch {i}",
+                    "address": base_addr + (i - 1) * step,
+                    "reg_type": "holding",
+                    "type": "value",
+                    "format": "u16",
+                    "group": "main",
+                }
+            )
         return {
             "device_type": "test",
             "title": "test_title",
@@ -108,8 +155,22 @@ class TestSimpleChannelPattern:
     def test_two_channels_detected(self):
         """Два канала -- минимальный паттерн (порог = 2)."""
         channels = [
-            {"name": "Ch 1", "address": 0, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
-            {"name": "Ch 2", "address": 1, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
+            {
+                "name": "Ch 1",
+                "address": 0,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
+            {
+                "name": "Ch 2",
+                "address": 1,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 1
@@ -140,8 +201,22 @@ class TestMiddleNumberPattern:
     def test_input_n_state(self):
         """'Input 1 state', 'Input 2 state' -- число в середине."""
         channels = [
-            {"name": "Input 1 state", "address": 0, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Input 2 state", "address": 1, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
+            {
+                "name": "Input 1 state",
+                "address": 0,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Input 2 state",
+                "address": 1,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 1
@@ -152,9 +227,30 @@ class TestMiddleNumberPattern:
     def test_middle_number_three_channels(self):
         """Три канала с числом в середине."""
         channels = [
-            {"name": "Temperature DS18B20 Input 1", "address": 7, "reg_type": "input", "type": "value", "format": "s16", "group": "g"},
-            {"name": "Temperature DS18B20 Input 2", "address": 8, "reg_type": "input", "type": "value", "format": "s16", "group": "g"},
-            {"name": "Temperature DS18B20 Input 3", "address": 9, "reg_type": "input", "type": "value", "format": "s16", "group": "g"},
+            {
+                "name": "Temperature DS18B20 Input 1",
+                "address": 7,
+                "reg_type": "input",
+                "type": "value",
+                "format": "s16",
+                "group": "g",
+            },
+            {
+                "name": "Temperature DS18B20 Input 2",
+                "address": 8,
+                "reg_type": "input",
+                "type": "value",
+                "format": "s16",
+                "group": "g",
+            },
+            {
+                "name": "Temperature DS18B20 Input 3",
+                "address": 9,
+                "reg_type": "input",
+                "type": "value",
+                "format": "s16",
+                "group": "g",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 1
@@ -165,8 +261,22 @@ class TestMiddleNumberPattern:
     def test_model_number_not_confused(self):
         """Числа в названии модели (DS18B20) не путаются с индексом."""
         channels = [
-            {"name": "DS18B20 Sensor 1 OK", "address": 16, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "DS18B20 Sensor 2 OK", "address": 17, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
+            {
+                "name": "DS18B20 Sensor 1 OK",
+                "address": 16,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "DS18B20 Sensor 2 OK",
+                "address": 17,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 1
@@ -177,9 +287,30 @@ class TestMiddleNumberPattern:
     def test_middle_number_jinja_renders(self):
         """Jinja с числом в середине рендерится корректно."""
         channels = [
-            {"name": "Input 1 state", "address": 0, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Input 2 state", "address": 1, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Input 3 state", "address": 2, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
+            {
+                "name": "Input 1 state",
+                "address": 0,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Input 2 state",
+                "address": 1,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Input 3 state",
+                "address": 2,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
         ]
         template = {
             "device_type": "test",
@@ -207,10 +338,38 @@ class TestMiddleNumberPattern:
     def test_multiple_middle_patterns(self):
         """Несколько разных паттернов с числом в середине."""
         channels = [
-            {"name": "Input 1 state", "address": 0, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Input 2 state", "address": 1, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Input 1 counter", "address": 277, "reg_type": "input", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Input 2 counter", "address": 278, "reg_type": "input", "type": "value", "format": "u16", "group": "g"},
+            {
+                "name": "Input 1 state",
+                "address": 0,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Input 2 state",
+                "address": 1,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Input 1 counter",
+                "address": 277,
+                "reg_type": "input",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Input 2 counter",
+                "address": 278,
+                "reg_type": "input",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 2
@@ -224,7 +383,14 @@ class TestAddressArithmetic:
 
     def test_step_1(self):
         channels = [
-            {"name": f"Input {i}", "address": 100 + i - 1, "reg_type": "input", "type": "value", "format": "u16", "group": "g"}
+            {
+                "name": f"Input {i}",
+                "address": 100 + i - 1,
+                "reg_type": "input",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            }
             for i in range(1, 5)
         ]
         patterns = _detect_channel_patterns(channels)
@@ -233,7 +399,14 @@ class TestAddressArithmetic:
 
     def test_step_2(self):
         channels = [
-            {"name": f"Sensor {i}", "address": 100 + (i - 1) * 2, "reg_type": "input", "type": "value", "format": "float", "group": "g"}
+            {
+                "name": f"Sensor {i}",
+                "address": 100 + (i - 1) * 2,
+                "reg_type": "input",
+                "type": "value",
+                "format": "float",
+                "group": "g",
+            }
             for i in range(1, 5)
         ]
         patterns = _detect_channel_patterns(channels)
@@ -243,9 +416,30 @@ class TestAddressArithmetic:
     def test_non_arithmetic_addresses(self):
         """Непостоянный шаг адресов -- не паттерн."""
         channels = [
-            {"name": "Ch 1", "address": 0, "reg_type": "holding", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Ch 2", "address": 5, "reg_type": "holding", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Ch 3", "address": 7, "reg_type": "holding", "type": "value", "format": "u16", "group": "g"},
+            {
+                "name": "Ch 1",
+                "address": 0,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Ch 2",
+                "address": 5,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Ch 3",
+                "address": 7,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 0
@@ -257,8 +451,22 @@ class TestVarNameGeneration:
     def test_leading_digit_prefixed(self):
         """Переменная не может начинаться с цифры."""
         channels = [
-            {"name": "1-Wire Input 1", "address": 16, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "1-Wire Input 2", "address": 17, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
+            {
+                "name": "1-Wire Input 1",
+                "address": 16,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "1-Wire Input 2",
+                "address": 17,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 1
@@ -267,10 +475,38 @@ class TestVarNameGeneration:
     def test_unique_var_names(self):
         """Разные паттерны получают разные имена переменных."""
         channels = [
-            {"name": "Input 1 state", "address": 0, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Input 2 state", "address": 1, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Output 1 value", "address": 100, "reg_type": "holding", "type": "value", "format": "u16", "group": "g"},
-            {"name": "Output 2 value", "address": 101, "reg_type": "holding", "type": "value", "format": "u16", "group": "g"},
+            {
+                "name": "Input 1 state",
+                "address": 0,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Input 2 state",
+                "address": 1,
+                "reg_type": "discrete",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Output 1 value",
+                "address": 100,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
+            {
+                "name": "Output 2 value",
+                "address": 101,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "g",
+            },
         ]
         patterns = _detect_channel_patterns(channels)
         var_names = [p["var_name"] for p in patterns]
@@ -282,19 +518,35 @@ class TestMixedChannels:
 
     def test_mixed(self):
         channels = [
-            {"name": "Status", "address": 0, "reg_type": "input", "type": "value", "format": "u16", "group": "main"},
-        ]
-        for i in range(1, 5):
-            channels.append({
-                "name": f"Ch {i}",
-                "address": 10 + i - 1,
-                "reg_type": "holding",
+            {
+                "name": "Status",
+                "address": 0,
+                "reg_type": "input",
                 "type": "value",
                 "format": "u16",
                 "group": "main",
-            })
+            },
+        ]
+        for i in range(1, 5):
+            channels.append(
+                {
+                    "name": f"Ch {i}",
+                    "address": 10 + i - 1,
+                    "reg_type": "holding",
+                    "type": "value",
+                    "format": "u16",
+                    "group": "main",
+                }
+            )
         channels.append(
-            {"name": "Error", "address": 99, "reg_type": "input", "type": "value", "format": "u16", "group": "main"},
+            {
+                "name": "Error",
+                "address": 99,
+                "reg_type": "input",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
         )
 
         template = {
@@ -323,12 +575,44 @@ class TestEndToEndJinja:
         """Шаблон типа WB-M1W2: 2 входа, несколько типов каналов на каждый."""
         channels = []
         for i in range(1, 3):  # 2 входа
-            channels.extend([
-                {"name": f"Input {i} state", "address": i - 1, "reg_type": "discrete", "type": "value", "format": "u16", "group": "g_io"},
-                {"name": f"Input {i} counter", "address": 277 + i - 1, "reg_type": "input", "type": "value", "format": "u16", "group": "g_io"},
-                {"name": f"Short press counter Input {i}", "address": 464 + i - 1, "reg_type": "input", "type": "value", "format": "u16", "group": "g_io"},
-                {"name": f"Temperature DS18B20 Input {i}", "address": 7 + i - 1, "reg_type": "input", "type": "value", "format": "s16", "group": "g_env", "units": "deg C", "scale": 0.0625},
-            ])
+            channels.extend(
+                [
+                    {
+                        "name": f"Input {i} state",
+                        "address": i - 1,
+                        "reg_type": "discrete",
+                        "type": "value",
+                        "format": "u16",
+                        "group": "g_io",
+                    },
+                    {
+                        "name": f"Input {i} counter",
+                        "address": 277 + i - 1,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "u16",
+                        "group": "g_io",
+                    },
+                    {
+                        "name": f"Short press counter Input {i}",
+                        "address": 464 + i - 1,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "u16",
+                        "group": "g_io",
+                    },
+                    {
+                        "name": f"Temperature DS18B20 Input {i}",
+                        "address": 7 + i - 1,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "s16",
+                        "group": "g_env",
+                        "units": "deg C",
+                        "scale": 0.0625,
+                    },
+                ]
+            )
         template = {
             "device_type": "test",
             "title": "test_title",
@@ -490,10 +774,7 @@ class TestGroupPatterns:
 
     def test_simple_group_pattern(self):
         """Группы g_in1...g_in4 с title Input 1...Input 4."""
-        groups = [
-            {"title": f"Input {i}", "id": f"g_in{i}"}
-            for i in range(1, 5)
-        ]
+        groups = [{"title": f"Input {i}", "id": f"g_in{i}"} for i in range(1, 5)]
         patterns = _detect_group_patterns(groups)
         assert len(patterns) == 1
         p = patterns[0]
@@ -519,10 +800,7 @@ class TestGroupPatterns:
 
     def test_group_pattern_renders_jinja(self):
         """Группы-паттерны рендерятся в Jinja с for-циклом."""
-        groups = [
-            {"title": f"Input {i}", "id": f"g_in{i}"}
-            for i in range(1, 5)
-        ]
+        groups = [{"title": f"Input {i}", "id": f"g_in{i}"} for i in range(1, 5)]
         # Добавляем статическую группу
         groups.append({"title": "General", "id": "g_general"})
 
@@ -534,7 +812,14 @@ class TestGroupPatterns:
                 "id": "test",
                 "groups": groups,
                 "channels": [
-                    {"name": "Status", "address": 0, "reg_type": "input", "type": "value", "format": "u16", "group": "g_general"},
+                    {
+                        "name": "Status",
+                        "address": 0,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "u16",
+                        "group": "g_general",
+                    },
                 ],
                 "parameters": {},
                 "translations": {},
@@ -631,7 +916,14 @@ class TestParamPatterns:
                 "id": "test",
                 "groups": [],
                 "channels": [
-                    {"name": "Status", "address": 0, "reg_type": "input", "type": "value", "format": "u16", "group": "g_general"},
+                    {
+                        "name": "Status",
+                        "address": 0,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "u16",
+                        "group": "g_general",
+                    },
                 ],
                 "parameters": params,
                 "translations": {},
@@ -661,31 +953,37 @@ class TestAllSectionsIntegration:
         groups = []
         for i in range(1, count + 1):
             groups.append({"title": f"Input {i}", "id": f"g_in{i}"})
-            groups.append({
-                "title": "Channels",
-                "id": f"gg_in{i}_channels",
-                "group": f"g_in{i}",
-            })
+            groups.append(
+                {
+                    "title": "Channels",
+                    "id": f"gg_in{i}_channels",
+                    "group": f"g_in{i}",
+                }
+            )
         groups.append({"title": "General", "id": "g_general"})
 
         channels = []
         for i in range(1, count + 1):
-            channels.append({
-                "name": f"Input {i} freq",
-                "address": 40 + (i - 1) * 2,
-                "reg_type": "input",
-                "type": "value",
-                "format": "u32",
-                "group": f"gg_in{i}_channels",
-                "condition": f"in{i}_mode==0",
-            })
-        channels.append({
-            "name": "Reset all counters",
-            "address": 100,
-            "reg_type": "holding",
-            "type": "pushbutton",
-            "group": "g_general",
-        })
+            channels.append(
+                {
+                    "name": f"Input {i} freq",
+                    "address": 40 + (i - 1) * 2,
+                    "reg_type": "input",
+                    "type": "value",
+                    "format": "u32",
+                    "group": f"gg_in{i}_channels",
+                    "condition": f"in{i}_mode==0",
+                }
+            )
+        channels.append(
+            {
+                "name": "Reset all counters",
+                "address": 100,
+                "reg_type": "holding",
+                "type": "pushbutton",
+                "group": "g_general",
+            }
+        )
 
         params = {}
         for i in range(1, count + 1):
@@ -731,7 +1029,9 @@ class TestAllSectionsIntegration:
         parsed = json.loads(rendered)
 
         # Проверяем количества
-        assert len(parsed["device"]["groups"]) == count * 2 + 1  # 4*2 подгруппы + General
+        assert (
+            len(parsed["device"]["groups"]) == count * 2 + 1
+        )  # 4*2 подгруппы + General
         assert len(parsed["device"]["channels"]) == count + 1  # 4 + Reset
         assert len(parsed["device"]["parameters"]) == count + 1  # 4 + baud_rate
 
@@ -757,24 +1057,28 @@ class TestTwoDifferentPatterns:
         channels = []
         # 8 входов
         for i in range(1, 9):
-            channels.append({
-                "name": f"Input {i} freq",
-                "address": 40 + (i - 1) * 2,
-                "reg_type": "input",
-                "type": "value",
-                "format": "u32",
-                "group": f"gg_in{i}_channels",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i} freq",
+                    "address": 40 + (i - 1) * 2,
+                    "reg_type": "input",
+                    "type": "value",
+                    "format": "u32",
+                    "group": f"gg_in{i}_channels",
+                }
+            )
         # 3 энкодера
         for i in range(1, 4):
-            channels.append({
-                "name": f"Encoder {i} position",
-                "address": 368 + (i - 1) * 2,
-                "reg_type": "holding",
-                "type": "value",
-                "format": "s32",
-                "group": "gg_encoder_channels",
-            })
+            channels.append(
+                {
+                    "name": f"Encoder {i} position",
+                    "address": 368 + (i - 1) * 2,
+                    "reg_type": "holding",
+                    "type": "value",
+                    "format": "s32",
+                    "group": "gg_encoder_channels",
+                }
+            )
 
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 2
@@ -791,23 +1095,27 @@ class TestTwoDifferentPatterns:
         """Два паттерна с разными count рендерятся корректно."""
         channels = []
         for i in range(1, 5):
-            channels.append({
-                "name": f"Input {i} freq",
-                "address": 40 + (i - 1) * 2,
-                "reg_type": "input",
-                "type": "value",
-                "format": "u32",
-                "group": f"gg_in{i}_channels",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i} freq",
+                    "address": 40 + (i - 1) * 2,
+                    "reg_type": "input",
+                    "type": "value",
+                    "format": "u32",
+                    "group": f"gg_in{i}_channels",
+                }
+            )
         for i in range(1, 3):
-            channels.append({
-                "name": f"Encoder {i} position",
-                "address": 368 + (i - 1) * 2,
-                "reg_type": "holding",
-                "type": "value",
-                "format": "s32",
-                "group": "gg_encoder_channels",
-            })
+            channels.append(
+                {
+                    "name": f"Encoder {i} position",
+                    "address": 368 + (i - 1) * 2,
+                    "reg_type": "holding",
+                    "type": "value",
+                    "format": "s32",
+                    "group": "gg_encoder_channels",
+                }
+            )
 
         template = {
             "device_type": "test",
@@ -847,24 +1155,28 @@ class TestSporadicVariants:
         """Два варианта (sporadic false/true) для каждого номера -- обнаруживаются."""
         channels = []
         for i in range(1, 4):
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "discrete",
-                "type": "switch",
-                "sporadic": False,
-                "condition": f"isDefined(in{i}_mode)==0||in{i}_mode==0",
-                "group": f"gg_in{i}_channels",
-            })
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "discrete",
-                "type": "switch",
-                "sporadic": True,
-                "condition": f"isDefined(in{i}_mode)&&in{i}_mode!=0",
-                "group": f"gg_in{i}_channels",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "discrete",
+                    "type": "switch",
+                    "sporadic": False,
+                    "condition": f"isDefined(in{i}_mode)==0||in{i}_mode==0",
+                    "group": f"gg_in{i}_channels",
+                }
+            )
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "discrete",
+                    "type": "switch",
+                    "sporadic": True,
+                    "condition": f"isDefined(in{i}_mode)&&in{i}_mode!=0",
+                    "group": f"gg_in{i}_channels",
+                }
+            )
 
         patterns = _detect_channel_patterns(channels)
         assert len(patterns) == 1
@@ -879,24 +1191,28 @@ class TestSporadicVariants:
         """Вариантные каналы рендерятся в валидный JSON с правильным количеством."""
         channels = []
         for i in range(1, 4):
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "discrete",
-                "type": "switch",
-                "sporadic": False,
-                "condition": f"isDefined(in{i}_mode)==0||in{i}_mode==0",
-                "group": f"gg_in{i}_channels",
-            })
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "discrete",
-                "type": "switch",
-                "sporadic": True,
-                "condition": f"isDefined(in{i}_mode)&&in{i}_mode!=0",
-                "group": f"gg_in{i}_channels",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "discrete",
+                    "type": "switch",
+                    "sporadic": False,
+                    "condition": f"isDefined(in{i}_mode)==0||in{i}_mode==0",
+                    "group": f"gg_in{i}_channels",
+                }
+            )
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "discrete",
+                    "type": "switch",
+                    "sporadic": True,
+                    "condition": f"isDefined(in{i}_mode)&&in{i}_mode!=0",
+                    "group": f"gg_in{i}_channels",
+                }
+            )
 
         template = {
             "device_type": "test",
@@ -936,33 +1252,39 @@ class TestSporadicVariants:
         channels = []
         for i in range(1, 3):
             # Вариантные каналы
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "discrete",
-                "type": "switch",
-                "sporadic": False,
-                "condition": f"cond_a{i}",
-                "group": f"g{i}",
-            })
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "discrete",
-                "type": "switch",
-                "sporadic": True,
-                "condition": f"cond_b{i}",
-                "group": f"g{i}",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "discrete",
+                    "type": "switch",
+                    "sporadic": False,
+                    "condition": f"cond_a{i}",
+                    "group": f"g{i}",
+                }
+            )
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "discrete",
+                    "type": "switch",
+                    "sporadic": True,
+                    "condition": f"cond_b{i}",
+                    "group": f"g{i}",
+                }
+            )
             # Обычные каналы (без sporadic вариантов)
-            channels.append({
-                "name": f"Input {i} freq",
-                "address": 40 + (i - 1) * 2,
-                "reg_type": "input",
-                "type": "value",
-                "format": "u32",
-                "group": f"g{i}",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i} freq",
+                    "address": 40 + (i - 1) * 2,
+                    "reg_type": "input",
+                    "type": "value",
+                    "format": "u32",
+                    "group": f"g{i}",
+                }
+            )
 
         template = {
             "device_type": "test",
@@ -989,24 +1311,28 @@ class TestSporadicVariants:
         """Условия вариантов содержат числовой индекс -- шаблонизируются."""
         channels = []
         for i in range(1, 4):
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "discrete",
-                "type": "switch",
-                "sporadic": False,
-                "condition": f"isDefined(in{i}_mode)==0||in{i}_mode==0",
-                "group": "g",
-            })
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "discrete",
-                "type": "switch",
-                "sporadic": True,
-                "condition": f"isDefined(in{i}_mode)&&in{i}_mode!=0",
-                "group": "g",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "discrete",
+                    "type": "switch",
+                    "sporadic": False,
+                    "condition": f"isDefined(in{i}_mode)==0||in{i}_mode==0",
+                    "group": "g",
+                }
+            )
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "discrete",
+                    "type": "switch",
+                    "sporadic": True,
+                    "condition": f"isDefined(in{i}_mode)&&in{i}_mode!=0",
+                    "group": "g",
+                }
+            )
 
         template = {
             "device_type": "test",
@@ -1028,14 +1354,16 @@ class TestSporadicVariants:
 
         # Проверяем что условия корректно подставлены
         ch1_false = [
-            ch for ch in parsed["device"]["channels"]
+            ch
+            for ch in parsed["device"]["channels"]
             if ch["name"] == "Input 1" and ch["sporadic"] is False
         ]
         assert len(ch1_false) == 1
         assert "in1_mode" in ch1_false[0]["condition"]
 
         ch3_true = [
-            ch for ch in parsed["device"]["channels"]
+            ch
+            for ch in parsed["device"]["channels"]
             if ch["name"] == "Input 3" and ch["sporadic"] is True
         ]
         assert len(ch3_true) == 1
@@ -1125,22 +1453,26 @@ class TestTranslationPatterns:
         """Несколько паттернов в translations (Input N + Input N counter)."""
         channels = []
         for i in range(1, 4):
-            channels.append({
-                "name": f"Input {i}",
-                "address": i - 1,
-                "reg_type": "input",
-                "type": "value",
-                "format": "u16",
-                "group": "g",
-            })
-            channels.append({
-                "name": f"Input {i} counter",
-                "address": 60 + (i - 1) * 2,
-                "reg_type": "input",
-                "type": "value",
-                "format": "u32",
-                "group": "g",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": i - 1,
+                    "reg_type": "input",
+                    "type": "value",
+                    "format": "u16",
+                    "group": "g",
+                }
+            )
+            channels.append(
+                {
+                    "name": f"Input {i} counter",
+                    "address": 60 + (i - 1) * 2,
+                    "reg_type": "input",
+                    "type": "value",
+                    "format": "u32",
+                    "group": "g",
+                }
+            )
 
         translations = {
             "ru": {
@@ -1198,8 +1530,22 @@ class TestParametersAsList:
                 "id": "test",
                 "groups": [],
                 "channels": [
-                    {"name": "Ch 1", "address": 0, "reg_type": "input", "type": "value", "format": "u16", "group": "g"},
-                    {"name": "Ch 2", "address": 1, "reg_type": "input", "type": "value", "format": "u16", "group": "g"},
+                    {
+                        "name": "Ch 1",
+                        "address": 0,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "u16",
+                        "group": "g",
+                    },
+                    {
+                        "name": "Ch 2",
+                        "address": 1,
+                        "reg_type": "input",
+                        "type": "value",
+                        "format": "u16",
+                        "group": "g",
+                    },
                 ],
                 "parameters": [
                     {"id": "baud_rate", "title": "Baud Rate", "address": 110},
@@ -1260,9 +1606,9 @@ class TestMCM8EndToEnd:
         jinja_output = build_jinja_template(original_parsed)
 
         # Шаг 6: проверяем наличие for-циклов (паттерны обнаружены)
-        assert "{% for" in jinja_output, (
-            "build_jinja_template не обнаружил паттерны в MCM8 шаблоне"
-        )
+        assert (
+            "{% for" in jinja_output
+        ), "build_jinja_template не обнаружил паттерны в MCM8 шаблоне"
         assert "{% set" in jinja_output
 
         # Шаг 4: рендерим результат
@@ -1275,15 +1621,15 @@ class TestMCM8EndToEnd:
         result_groups = result_parsed["device"]["groups"]
 
         # Шаг 5: сравниваем количества
-        assert len(result_channels) == len(original_channels), (
-            f"Количество каналов не совпадает: {len(result_channels)} != {len(original_channels)}"
-        )
-        assert len(result_params) == len(original_params), (
-            f"Количество параметров не совпадает: {len(result_params)} != {len(original_params)}"
-        )
-        assert len(result_groups) == len(original_groups), (
-            f"Количество групп не совпадает: {len(result_groups)} != {len(original_groups)}"
-        )
+        assert len(result_channels) == len(
+            original_channels
+        ), f"Количество каналов не совпадает: {len(result_channels)} != {len(original_channels)}"
+        assert len(result_params) == len(
+            original_params
+        ), f"Количество параметров не совпадает: {len(result_params)} != {len(original_params)}"
+        assert len(result_groups) == len(
+            original_groups
+        ), f"Количество групп не совпадает: {len(result_groups)} != {len(original_groups)}"
 
         # Дополнительные проверки содержимого
         result_channel_names = {ch["name"] for ch in result_channels}
@@ -1294,9 +1640,9 @@ class TestMCM8EndToEnd:
             f"Лишние: {result_channel_names - original_channel_names}"
         )
 
-        assert set(result_params.keys()) == set(original_params.keys()), (
-            "Ключи параметров не совпадают"
-        )
+        assert set(result_params.keys()) == set(
+            original_params.keys()
+        ), "Ключи параметров не совпадают"
 
 
 class TestUPSEndToEnd:
@@ -1341,12 +1687,12 @@ class TestUPSEndToEnd:
         result_groups = result_parsed["device"]["groups"]
 
         # Сравниваем количества
-        assert len(result_channels) == len(original_channels), (
-            f"Количество каналов не совпадает: {len(result_channels)} != {len(original_channels)}"
-        )
-        assert len(result_groups) == len(original_groups), (
-            f"Количество групп не совпадает: {len(result_groups)} != {len(original_groups)}"
-        )
+        assert len(result_channels) == len(
+            original_channels
+        ), f"Количество каналов не совпадает: {len(result_channels)} != {len(original_channels)}"
+        assert len(result_groups) == len(
+            original_groups
+        ), f"Количество групп не совпадает: {len(result_groups)} != {len(original_groups)}"
 
         # Имена каналов совпадают
         result_channel_names = [ch["name"] for ch in result_channels]
@@ -1363,9 +1709,9 @@ class TestUPSEndToEnd:
         jinja_output = build_jinja_template(original_parsed)
 
         # Должен быть хотя бы 1 for-цикл
-        assert "{% for" in jinja_output, (
-            "build_jinja_template не обнаружил строковые паттерны в UPS v3"
-        )
+        assert (
+            "{% for" in jinja_output
+        ), "build_jinja_template не обнаружил строковые паттерны в UPS v3"
         # Должна быть переменная со списком строк (кнопки)
         assert "BUTTON_PRESS_COUNTER_VALUES" in jinja_output
         assert '"single"' in jinja_output
@@ -1387,10 +1733,38 @@ class TestStringPatternDetection:
     def test_simple_string_pattern_detected(self):
         """4 канала с общим prefix/suffix и разным словом -- обнаруживаются."""
         channels = [
-            {"name": "Button Single Press Counter", "address": 464, "reg_type": "press_counter", "sporadic": True, "enabled": False, "group": "g_button"},
-            {"name": "Button Long Press Counter", "address": 480, "reg_type": "press_counter", "sporadic": True, "enabled": False, "group": "g_button"},
-            {"name": "Button Double Press Counter", "address": 496, "reg_type": "press_counter", "sporadic": True, "enabled": False, "group": "g_button"},
-            {"name": "Button Shortlong Press Counter", "address": 512, "reg_type": "press_counter", "sporadic": True, "enabled": False, "group": "g_button"},
+            {
+                "name": "Button Single Press Counter",
+                "address": 464,
+                "reg_type": "press_counter",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
+            {
+                "name": "Button Long Press Counter",
+                "address": 480,
+                "reg_type": "press_counter",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
+            {
+                "name": "Button Double Press Counter",
+                "address": 496,
+                "reg_type": "press_counter",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
+            {
+                "name": "Button Shortlong Press Counter",
+                "address": 512,
+                "reg_type": "press_counter",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
         ]
         patterns = _detect_string_channel_patterns(channels, set())
         assert len(patterns) == 1
@@ -1405,8 +1779,20 @@ class TestStringPatternDetection:
     def test_two_channels_not_enough_for_string_pattern(self):
         """Два канала -- недостаточно для строкового паттерна (минимум 3)."""
         channels = [
-            {"name": "Charger State", "address": 9, "reg_type": "discrete", "type": "switch", "group": "g"},
-            {"name": "Discharger State", "address": 10, "reg_type": "discrete", "type": "switch", "group": "g"},
+            {
+                "name": "Charger State",
+                "address": 9,
+                "reg_type": "discrete",
+                "type": "switch",
+                "group": "g",
+            },
+            {
+                "name": "Discharger State",
+                "address": 10,
+                "reg_type": "discrete",
+                "type": "switch",
+                "group": "g",
+            },
         ]
         patterns = _detect_string_channel_patterns(channels, set())
         assert len(patterns) == 0
@@ -1414,9 +1800,30 @@ class TestStringPatternDetection:
     def test_numeric_only_not_detected_as_string(self):
         """Каналы с чисто числовыми различиями не обнаруживаются как строковые."""
         channels = [
-            {"name": "Ch 1", "address": 0, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
-            {"name": "Ch 2", "address": 1, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
-            {"name": "Ch 3", "address": 2, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
+            {
+                "name": "Ch 1",
+                "address": 0,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
+            {
+                "name": "Ch 2",
+                "address": 1,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
+            {
+                "name": "Ch 3",
+                "address": 2,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
         ]
         patterns = _detect_string_channel_patterns(channels, set())
         assert len(patterns) == 0
@@ -1424,9 +1831,30 @@ class TestStringPatternDetection:
     def test_different_fields_not_string_pattern(self):
         """Каналы с разными другими полями -- не строковой паттерн."""
         channels = [
-            {"name": "Mode Auto", "address": 0, "reg_type": "holding", "type": "value", "format": "u16", "group": "main"},
-            {"name": "Mode Manual", "address": 1, "reg_type": "holding", "type": "switch", "format": "u16", "group": "main"},
-            {"name": "Mode Remote", "address": 2, "reg_type": "holding", "type": "value", "format": "u32", "group": "main"},
+            {
+                "name": "Mode Auto",
+                "address": 0,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u16",
+                "group": "main",
+            },
+            {
+                "name": "Mode Manual",
+                "address": 1,
+                "reg_type": "holding",
+                "type": "switch",
+                "format": "u16",
+                "group": "main",
+            },
+            {
+                "name": "Mode Remote",
+                "address": 2,
+                "reg_type": "holding",
+                "type": "value",
+                "format": "u32",
+                "group": "main",
+            },
         ]
         patterns = _detect_string_channel_patterns(channels, set())
         assert len(patterns) == 0
@@ -1434,9 +1862,27 @@ class TestStringPatternDetection:
     def test_already_used_indices_excluded(self):
         """Каналы уже использованные числовыми паттернами -- пропускаются."""
         channels = [
-            {"name": "Button Single Press", "address": 0, "reg_type": "input", "type": "value", "group": "g"},
-            {"name": "Button Long Press", "address": 1, "reg_type": "input", "type": "value", "group": "g"},
-            {"name": "Button Double Press", "address": 2, "reg_type": "input", "type": "value", "group": "g"},
+            {
+                "name": "Button Single Press",
+                "address": 0,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
+            {
+                "name": "Button Long Press",
+                "address": 1,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
+            {
+                "name": "Button Double Press",
+                "address": 2,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
         ]
         # Все индексы уже использованы
         patterns = _detect_string_channel_patterns(channels, {0, 1, 2})
@@ -1445,9 +1891,27 @@ class TestStringPatternDetection:
     def test_non_arithmetic_addresses_not_pattern(self):
         """Непостоянный шаг адресов -- не строковой паттерн."""
         channels = [
-            {"name": "Sensor Alpha Value", "address": 0, "reg_type": "input", "type": "value", "group": "g"},
-            {"name": "Sensor Beta Value", "address": 5, "reg_type": "input", "type": "value", "group": "g"},
-            {"name": "Sensor Gamma Value", "address": 7, "reg_type": "input", "type": "value", "group": "g"},
+            {
+                "name": "Sensor Alpha Value",
+                "address": 0,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
+            {
+                "name": "Sensor Beta Value",
+                "address": 5,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
+            {
+                "name": "Sensor Gamma Value",
+                "address": 7,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
         ]
         patterns = _detect_string_channel_patterns(channels, set())
         assert len(patterns) == 0
@@ -1459,12 +1923,58 @@ class TestStringPatternRendering:
     def _make_button_template(self):
         """Шаблон с 4 кнопками (как UPS v3)."""
         channels = [
-            {"name": "Button State", "address": 0, "reg_type": "discrete", "type": "switch", "sporadic": True, "enabled": False, "group": "g_button"},
-            {"name": "Button Single Press Counter", "id": "button_single_press_counter", "address": 464, "reg_type": "press_counter", "sporadic": True, "enabled": False, "group": "g_button"},
-            {"name": "Button Long Press Counter", "id": "button_long_press_counter", "address": 480, "reg_type": "press_counter", "sporadic": True, "enabled": False, "group": "g_button"},
-            {"name": "Button Double Press Counter", "id": "button_double_press_counter", "address": 496, "reg_type": "press_counter", "sporadic": True, "enabled": False, "group": "g_button"},
-            {"name": "Button Shortlong Press Counter", "id": "button_shortlong_press_counter", "address": 512, "reg_type": "press_counter", "sporadic": True, "enabled": False, "group": "g_button"},
-            {"name": "Voltage", "address": 100, "reg_type": "input", "type": "value", "group": "g_ups"},
+            {
+                "name": "Button State",
+                "address": 0,
+                "reg_type": "discrete",
+                "type": "switch",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
+            {
+                "name": "Button Single Press Counter",
+                "id": "button_single_press_counter",
+                "address": 464,
+                "reg_type": "press_counter",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
+            {
+                "name": "Button Long Press Counter",
+                "id": "button_long_press_counter",
+                "address": 480,
+                "reg_type": "press_counter",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
+            {
+                "name": "Button Double Press Counter",
+                "id": "button_double_press_counter",
+                "address": 496,
+                "reg_type": "press_counter",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
+            {
+                "name": "Button Shortlong Press Counter",
+                "id": "button_shortlong_press_counter",
+                "address": 512,
+                "reg_type": "press_counter",
+                "sporadic": True,
+                "enabled": False,
+                "group": "g_button",
+            },
+            {
+                "name": "Voltage",
+                "address": 100,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g_ups",
+            },
         ]
         return {
             "device_type": "test-ups",
@@ -1529,8 +2039,7 @@ class TestStringPatternRendering:
         parsed = json.loads(rendered)
 
         button_channels = [
-            ch for ch in parsed["device"]["channels"]
-            if "Press Counter" in ch["name"]
+            ch for ch in parsed["device"]["channels"] if "Press Counter" in ch["name"]
         ]
         addresses = [ch["address"] for ch in button_channels]
         assert addresses == [464, 480, 496, 512]
@@ -1545,8 +2054,7 @@ class TestStringPatternRendering:
         parsed = json.loads(rendered)
 
         button_channels = [
-            ch for ch in parsed["device"]["channels"]
-            if "Press Counter" in ch["name"]
+            ch for ch in parsed["device"]["channels"] if "Press Counter" in ch["name"]
         ]
         for ch in button_channels:
             assert ch["reg_type"] == "press_counter"
@@ -1564,8 +2072,7 @@ class TestStringPatternRendering:
         parsed = json.loads(rendered)
 
         button_channels = [
-            ch for ch in parsed["device"]["channels"]
-            if "Press Counter" in ch["name"]
+            ch for ch in parsed["device"]["channels"] if "Press Counter" in ch["name"]
         ]
         ids = [ch["id"] for ch in button_channels]
         assert "button_single_press_counter" in ids
@@ -1576,30 +2083,48 @@ class TestStringPatternRendering:
     def test_string_pattern_mixed_with_static_and_numeric(self):
         """Строковой паттерн совместно с числовыми паттернами и статическими каналами."""
         channels = [
-            {"name": "Status", "address": 0, "reg_type": "input", "type": "value", "group": "g"},
+            {
+                "name": "Status",
+                "address": 0,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
         ]
         # Числовые каналы
         for i in range(1, 4):
-            channels.append({
-                "name": f"Input {i}",
-                "address": 10 + i - 1,
-                "reg_type": "input",
-                "type": "value",
-                "format": "u16",
-                "group": "g",
-            })
+            channels.append(
+                {
+                    "name": f"Input {i}",
+                    "address": 10 + i - 1,
+                    "reg_type": "input",
+                    "type": "value",
+                    "format": "u16",
+                    "group": "g",
+                }
+            )
         # Строковые каналы
         for val, addr in [("Alpha", 100), ("Beta", 110), ("Gamma", 120)]:
-            channels.append({
-                "name": f"Sensor {val} Value",
-                "id": f"sensor_{val.lower()}_value",
-                "address": addr,
+            channels.append(
+                {
+                    "name": f"Sensor {val} Value",
+                    "id": f"sensor_{val.lower()}_value",
+                    "address": addr,
+                    "reg_type": "input",
+                    "type": "value",
+                    "format": "float",
+                    "group": "g_sensors",
+                }
+            )
+        channels.append(
+            {
+                "name": "Error",
+                "address": 200,
                 "reg_type": "input",
                 "type": "value",
-                "format": "float",
-                "group": "g_sensors",
-            })
-        channels.append({"name": "Error", "address": 200, "reg_type": "input", "type": "value", "group": "g"})
+                "group": "g",
+            }
+        )
 
         template = {
             "device_type": "test",
@@ -1635,9 +2160,27 @@ class TestStringPatternRendering:
     def test_string_pattern_capitalize_filter(self):
         """Capitalize фильтр применяется когда варьирующиеся части -- capitalize слова."""
         channels = [
-            {"name": "Sensor Alpha Reading", "address": 0, "reg_type": "input", "type": "value", "group": "g"},
-            {"name": "Sensor Beta Reading", "address": 1, "reg_type": "input", "type": "value", "group": "g"},
-            {"name": "Sensor Gamma Reading", "address": 2, "reg_type": "input", "type": "value", "group": "g"},
+            {
+                "name": "Sensor Alpha Reading",
+                "address": 0,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
+            {
+                "name": "Sensor Beta Reading",
+                "address": 1,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
+            {
+                "name": "Sensor Gamma Reading",
+                "address": 2,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
         ]
         patterns = _detect_string_channel_patterns(channels, set())
         assert len(patterns) == 1
@@ -1649,9 +2192,27 @@ class TestStringPatternRendering:
     def test_string_pattern_no_common_prefix_suffix(self):
         """Полностью разные имена без общего prefix/suffix -- не паттерн."""
         channels = [
-            {"name": "Voltage", "address": 0, "reg_type": "input", "type": "value", "group": "g"},
-            {"name": "Current", "address": 1, "reg_type": "input", "type": "value", "group": "g"},
-            {"name": "Power", "address": 2, "reg_type": "input", "type": "value", "group": "g"},
+            {
+                "name": "Voltage",
+                "address": 0,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
+            {
+                "name": "Current",
+                "address": 1,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
+            {
+                "name": "Power",
+                "address": 2,
+                "reg_type": "input",
+                "type": "value",
+                "group": "g",
+            },
         ]
         patterns = _detect_string_channel_patterns(channels, set())
         assert len(patterns) == 0

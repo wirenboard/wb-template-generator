@@ -25,7 +25,8 @@ import yaml  # noqa: E402
 from openai import AsyncOpenAI  # noqa: E402
 
 from config import Settings  # noqa: E402
-from llm_service import _call_llm, _extract_json_from_response, _parse_registers  # noqa: E402
+from llm_service import (_call_llm, _extract_json_from_response,  # noqa: E402
+                         _parse_registers)
 from prompts import get_analyze_prompt  # noqa: E402
 
 CASES_DIR = Path(__file__).parent / "cases"
@@ -132,8 +133,14 @@ async def run_case(
 
     try:
         raw_response, _usage = await _call_llm(
-            client, model, system_prompt, content,
-            timeout, max_tokens, legacy_max_tokens, temperature,
+            client,
+            model,
+            system_prompt,
+            content,
+            timeout,
+            max_tokens,
+            legacy_max_tokens,
+            temperature,
         )
     except Exception as e:
         print(f"  {_RED}ОШИБКА LLM API: {e}{_RESET}")
@@ -212,6 +219,7 @@ async def main():
     http_client = None
     if settings.LLM_PROXY:
         import httpx
+
         http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
 
     client = AsyncOpenAI(
@@ -230,7 +238,9 @@ async def main():
     try:
         for case_id, case_text in cases:
             if case_id not in expectations:
-                print(f"\n{_YELLOW}ПРОПУСК: {case_id} — нет ожиданий в expectations.yaml{_RESET}")
+                print(
+                    f"\n{_YELLOW}ПРОПУСК: {case_id} — нет ожиданий в expectations.yaml{_RESET}"
+                )
                 skipped += 1
                 continue
 
@@ -256,7 +266,10 @@ async def main():
     # Итог
     print(f"\n{'='*60}")
     color = _GREEN if total_failed == 0 else _RED
-    print(f"  {_BOLD}ИТОГО: {color}{total_passed} PASS, {total_failed} FAIL{_RESET}", end="")
+    print(
+        f"  {_BOLD}ИТОГО: {color}{total_passed} PASS, {total_failed} FAIL{_RESET}",
+        end="",
+    )
     if skipped:
         print(f", {_YELLOW}{skipped} SKIP{_RESET}", end="")
     print()

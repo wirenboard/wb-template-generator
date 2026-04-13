@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class QueueItem:
     """Элемент очереди."""
+
     request_id: str
     created_at: float = field(default_factory=time.monotonic)
     ready_event: asyncio.Event = field(default_factory=asyncio.Event)
@@ -27,7 +28,9 @@ class AnalyzeQueue:
         activation_delay: задержка (сек) между активациями из очереди (антиспам).
     """
 
-    def __init__(self, max_concurrent: int = 1, name: str = "queue", activation_delay: float = 0):
+    def __init__(
+        self, max_concurrent: int = 1, name: str = "queue", activation_delay: float = 0
+    ):
         self._max_concurrent = max_concurrent
         self._name = name
         self._activation_delay = activation_delay
@@ -51,8 +54,13 @@ class AnalyzeQueue:
         """
         if self._active < self._max_concurrent:
             self._active += 1
-            logger.info("[%s] %s: слот свободен, запускаем сразу (%d/%d)",
-                        self._name, item.request_id, self._active, self._max_concurrent)
+            logger.info(
+                "[%s] %s: слот свободен, запускаем сразу (%d/%d)",
+                self._name,
+                item.request_id,
+                self._active,
+                self._max_concurrent,
+            )
             return True
 
         # Добавляем в очередь ожидания
@@ -68,8 +76,13 @@ class AnalyzeQueue:
             return False
 
         self._active += 1
-        logger.info("[%s] %s: дождался слота (%d/%d)",
-                    self._name, item.request_id, self._active, self._max_concurrent)
+        logger.info(
+            "[%s] %s: дождался слота (%d/%d)",
+            self._name,
+            item.request_id,
+            self._active,
+            self._max_concurrent,
+        )
         return True
 
     def release(self, duration: float | None = None) -> None:
@@ -87,15 +100,25 @@ class AnalyzeQueue:
             if self._activation_delay > 0:
                 loop = asyncio.get_running_loop()
                 loop.call_later(self._activation_delay, next_item.ready_event.set)
-                logger.info("[%s] %s: активация через %.1fс",
-                            self._name, next_item.request_id, self._activation_delay)
+                logger.info(
+                    "[%s] %s: активация через %.1fс",
+                    self._name,
+                    next_item.request_id,
+                    self._activation_delay,
+                )
             else:
                 next_item.ready_event.set()
-                logger.info("[%s] %s: активирован из очереди", self._name, next_item.request_id)
+                logger.info(
+                    "[%s] %s: активирован из очереди", self._name, next_item.request_id
+                )
             return
 
-        logger.debug("[%s] Слот освобождён, очередь пуста (%d/%d)",
-                     self._name, self._active, self._max_concurrent)
+        logger.debug(
+            "[%s] Слот освобождён, очередь пуста (%d/%d)",
+            self._name,
+            self._active,
+            self._max_concurrent,
+        )
 
     def cancel(self, request_id: str) -> bool:
         """Отменить ожидание запроса в очереди.
@@ -136,7 +159,11 @@ class AnalyzeQueue:
             "max_concurrent": self._max_concurrent,
             "active": self._active,
             "waiting": self.waiting_count,
-            "avg_duration": round(sum(self._durations) / len(self._durations), 1) if self._durations else None,
+            "avg_duration": (
+                round(sum(self._durations) / len(self._durations), 1)
+                if self._durations
+                else None
+            ),
         }
 
     def cancel_all(self) -> int:
@@ -156,9 +183,20 @@ server_queue: AnalyzeQueue | None = None
 custom_queue: AnalyzeQueue | None = None
 
 
-def init_queues(server_max: int = 1, custom_max: int = 5, activation_delay: float = 0) -> None:
+def init_queues(
+    server_max: int = 1, custom_max: int = 5, activation_delay: float = 0
+) -> None:
     """Инициализация глобальных очередей с настройками из конфига."""
     global server_queue, custom_queue
-    server_queue = AnalyzeQueue(max_concurrent=server_max, name="server", activation_delay=activation_delay)
-    custom_queue = AnalyzeQueue(max_concurrent=custom_max, name="custom", activation_delay=activation_delay)
-    logger.info("Очереди: server(max=%d), custom(max=%d), delay=%.1fs", server_max, custom_max, activation_delay)
+    server_queue = AnalyzeQueue(
+        max_concurrent=server_max, name="server", activation_delay=activation_delay
+    )
+    custom_queue = AnalyzeQueue(
+        max_concurrent=custom_max, name="custom", activation_delay=activation_delay
+    )
+    logger.info(
+        "Очереди: server(max=%d), custom(max=%d), delay=%.1fs",
+        server_max,
+        custom_max,
+        activation_delay,
+    )

@@ -41,6 +41,7 @@ _VARIANT_FIELDS = {"sporadic", "condition"}
 # Обобщённая детекция паттернов
 # ---------------------------------------------------------------------------
 
+
 def _extract_number_variants(text: str) -> list[tuple[str, int, int, int]]:
     """Извлекает все варианты замены числа на placeholder в тексте.
 
@@ -55,8 +56,9 @@ def _extract_number_variants(text: str) -> list[tuple[str, int, int, int]]:
     return variants
 
 
-def _make_signature(item: dict, skip_fields: set[str],
-                    templated_fields: set[str], num: int) -> str | None:
+def _make_signature(
+    item: dict, skip_fields: set[str], templated_fields: set[str], num: int
+) -> str | None:
     """Создаёт сигнатуру элемента для группировки.
 
     В шаблонизируемых полях заменяет число num на placeholder.
@@ -75,8 +77,9 @@ def _make_signature(item: dict, skip_fields: set[str],
     return "|".join(parts)
 
 
-def _detect_templated_fields(items: list[tuple[Any, int, dict]],
-                             templated_fields_candidates: set[str]) -> dict[str, str]:
+def _detect_templated_fields(
+    items: list[tuple[Any, int, dict]], templated_fields_candidates: set[str]
+) -> dict[str, str]:
     """Определяет какие поля содержат варьирующийся номер.
 
     Возвращает dict: имя_поля -> шаблон (с placeholder вместо числа).
@@ -107,8 +110,9 @@ def _detect_templated_fields(items: list[tuple[Any, int, dict]],
     return result
 
 
-def _validate_address_progression(items: list[tuple[Any, int, dict]],
-                                  address_field: str = "address") -> tuple[bool, int, int]:
+def _validate_address_progression(
+    items: list[tuple[Any, int, dict]], address_field: str = "address"
+) -> tuple[bool, int, int]:
     """Проверяет арифметическую прогрессию адресов.
 
     Возвращает (valid, base_address, step).
@@ -365,14 +369,16 @@ def _detect_patterns_generic(
         if has_duplicates:
             # Пробуем мультивариантный паттерн
             variant_result = _try_detect_variants(
-                group_items, skip_fields, templated_fields_candidates,
+                group_items,
+                skip_fields,
+                templated_fields_candidates,
                 require_address_progression,
             )
             if variant_result is not None:
                 # Разбиваем шаблон на prefix + suffix
                 pos = template.index(_PLACEHOLDER)
                 name_prefix = template[:pos]
-                name_suffix = template[pos + len(_PLACEHOLDER):]
+                name_suffix = template[pos + len(_PLACEHOLDER) :]
                 var_name = _generate_var_name(template, used_var_names)
 
                 variant_result["var_name"] = var_name
@@ -385,14 +391,18 @@ def _detect_patterns_generic(
             continue
 
         # Простой случай: уникальные номера
-        if unique_nums != list(range(unique_nums[0], unique_nums[0] + len(unique_nums))):
+        if unique_nums != list(
+            range(unique_nums[0], unique_nums[0] + len(unique_nums))
+        ):
             continue
 
         # Список для сигнатурной проверки: (key, num, item_dict)
         items_for_check = [(it[0], it[1], it[2]) for it in group_items]
 
         # Определяем шаблонизируемые поля
-        tpl_fields = _detect_templated_fields(items_for_check, templated_fields_candidates)
+        tpl_fields = _detect_templated_fields(
+            items_for_check, templated_fields_candidates
+        )
 
         # Проверяем совпадение сигнатур (все поля кроме skip + шаблонизируемые)
         effective_skip = skip_fields | set(tpl_fields.keys())
@@ -407,7 +417,9 @@ def _detect_patterns_generic(
         base_address = 0
         address_step = 0
         if require_address_progression:
-            valid, base_address, address_step = _validate_address_progression(items_for_check)
+            valid, base_address, address_step = _validate_address_progression(
+                items_for_check
+            )
             if not valid:
                 continue
 
@@ -419,26 +431,28 @@ def _detect_patterns_generic(
         # Разбиваем шаблон на prefix + suffix
         pos = template.index(_PLACEHOLDER)
         name_prefix = template[:pos]
-        name_suffix = template[pos + len(_PLACEHOLDER):]
+        name_suffix = template[pos + len(_PLACEHOLDER) :]
 
         var_name = _generate_var_name(template, used_var_names)
 
         prototype = items_for_check[0][2]
 
-        patterns.append({
-            "var_name": var_name,
-            "count": len(items_for_check),
-            "start_num": nums[0],
-            "base_address": base_address,
-            "address_step": address_step,
-            "name_prefix": name_prefix,
-            "name_suffix": name_suffix,
-            "indices": indices,
-            "prototype": prototype,
-            "templated_fields": tpl_fields,
-            "key_template": template,
-            "keys": keys,
-        })
+        patterns.append(
+            {
+                "var_name": var_name,
+                "count": len(items_for_check),
+                "start_num": nums[0],
+                "base_address": base_address,
+                "address_step": address_step,
+                "name_prefix": name_prefix,
+                "name_suffix": name_suffix,
+                "indices": indices,
+                "prototype": prototype,
+                "templated_fields": tpl_fields,
+                "key_template": template,
+                "keys": keys,
+            }
+        )
 
     return patterns
 
@@ -446,6 +460,7 @@ def _detect_patterns_generic(
 # ---------------------------------------------------------------------------
 # Детекция для каждой секции
 # ---------------------------------------------------------------------------
+
 
 def _detect_channel_patterns(channels: list[dict]) -> list[dict]:
     """Обнаруживает группы каналов с повторяющимися паттернами.
@@ -548,7 +563,7 @@ def _find_common_prefix_suffix(names: list[str]) -> tuple[str, str, list[str]] |
         # Ищем последний пробел
         last_space = prefix.rfind(" ")
         if last_space >= 0:
-            prefix = prefix[:last_space + 1]
+            prefix = prefix[: last_space + 1]
         else:
             # Нет пробела в prefix -- вся строка prefix + varying, что
             # означает варьирующаяся часть начинается с начала, плохо
@@ -565,9 +580,9 @@ def _find_common_prefix_suffix(names: list[str]) -> tuple[str, str, list[str]] |
     # Извлекаем варьирующиеся части
     varying = []
     for n in names:
-        middle = n[len(prefix):]
+        middle = n[len(prefix) :]
         if suffix:
-            middle = middle[:-len(suffix)]
+            middle = middle[: -len(suffix)]
         varying.append(middle)
 
     # Варьирующиеся части должны быть непустыми и уникальными
@@ -685,7 +700,9 @@ def _detect_string_channel_patterns(
         # Генерируем имя переменной
         # Берём из prefix/suffix значимые слова
         clean_parts = (prefix.strip() + " " + suffix.strip()).strip()
-        var_name = re.sub(r"[^A-Z0-9]+", "_", clean_parts.upper()).strip("_") + "_VALUES"
+        var_name = (
+            re.sub(r"[^A-Z0-9]+", "_", clean_parts.upper()).strip("_") + "_VALUES"
+        )
         if var_name and var_name[0].isdigit():
             var_name = "_" + var_name
         # Убираем двойные подчёркивания
@@ -709,8 +726,7 @@ def _detect_string_channel_patterns(
         # Сравниваем оригинальные части с lower().capitalize()
         # Если все части — capitalize от lower-версии, используем | capitalize
         needs_capitalize = all(
-            v == v.lower().capitalize() or v == v.lower()
-            for v in varying_parts
+            v == v.lower().capitalize() or v == v.lower() for v in varying_parts
         )
 
         # Определяем шаблон name: как подставляются значения
@@ -726,19 +742,21 @@ def _detect_string_channel_patterns(
             name_filter = ""
             string_values = varying_parts  # как есть
 
-        patterns.append({
-            "type": "string_loop",
-            "var_name": var_name,
-            "string_values": string_values,
-            "name_prefix": prefix,
-            "name_suffix": suffix,
-            "name_filter": name_filter,
-            "base_address": base_address,
-            "address_step": address_step,
-            "indices": indices,
-            "prototype": group_items[0][1],
-            "count": len(group_items),
-        })
+        patterns.append(
+            {
+                "type": "string_loop",
+                "var_name": var_name,
+                "string_values": string_values,
+                "name_prefix": prefix,
+                "name_suffix": suffix,
+                "name_filter": name_filter,
+                "base_address": base_address,
+                "address_step": address_step,
+                "indices": indices,
+                "prototype": group_items[0][1],
+                "count": len(group_items),
+            }
+        )
 
     return patterns
 
@@ -746,6 +764,7 @@ def _detect_string_channel_patterns(
 # ---------------------------------------------------------------------------
 # Детекция паттернов в translations
 # ---------------------------------------------------------------------------
+
 
 def _detect_translation_patterns(
     translations: dict[str, dict[str, str]],
@@ -799,7 +818,9 @@ def _detect_translation_patterns(
     used_var_names: set[str] = {p["var_name"] for p in all_patterns}
 
     # Сортируем по размеру группы (большие сначала)
-    sorted_key_groups = sorted(key_groups.items(), key=lambda x: len(x[1]), reverse=True)
+    sorted_key_groups = sorted(
+        key_groups.items(), key=lambda x: len(x[1]), reverse=True
+    )
 
     for template, keys_and_nums in sorted_key_groups:
         # Убираем уже использованные ключи
@@ -815,7 +836,9 @@ def _detect_translation_patterns(
         # Проверяем уникальность и последовательность
         if len(nums) != len(unique_nums):
             continue
-        if unique_nums != list(range(unique_nums[0], unique_nums[0] + len(unique_nums))):
+        if unique_nums != list(
+            range(unique_nums[0], unique_nums[0] + len(unique_nums))
+        ):
             continue
 
         count = len(unique_nums)
@@ -859,14 +882,16 @@ def _detect_translation_patterns(
         actual_keys = {k for k, _ in keys_and_nums}
         used_keys.update(actual_keys)
 
-        result_patterns.append({
-            "var_name": var_name,
-            "count": count,
-            "start_num": start_num,
-            "key_template": template,
-            "value_tpls": value_tpls,
-            "used_keys": actual_keys,
-        })
+        result_patterns.append(
+            {
+                "var_name": var_name,
+                "count": count,
+                "start_num": start_num,
+                "key_template": template,
+                "value_tpls": value_tpls,
+                "used_keys": actual_keys,
+            }
+        )
 
     return result_patterns
 
@@ -874,6 +899,7 @@ def _detect_translation_patterns(
 # ---------------------------------------------------------------------------
 # Унификация переменных
 # ---------------------------------------------------------------------------
+
 
 def _unify_variables(
     channel_patterns: list[dict],
@@ -940,9 +966,16 @@ def _unify_variables(
 # Рендеринг Jinja
 # ---------------------------------------------------------------------------
 
-def _render_field_value(key: str, value: Any, templated_fields: dict[str, str],
-                        num: int, start_num: int, var_name: str,
-                        indent: str) -> str:
+
+def _render_field_value(
+    key: str,
+    value: Any,
+    templated_fields: dict[str, str],
+    num: int,
+    start_num: int,
+    var_name: str,
+    indent: str,
+) -> str:
     """Рендерит значение поля, заменяя номер на {{ i }} в шаблонизируемых полях."""
     if key in templated_fields:
         # Заменяем placeholder на {{ i }}
@@ -956,14 +989,17 @@ def _render_field_value(key: str, value: Any, templated_fields: dict[str, str],
             dumped = json.dumps(value, indent=4, ensure_ascii=False)
             lines = dumped.split("\n")
             if len(lines) > 1:
-                dumped = lines[0] + "\n" + "\n".join(
-                    f"{indent}    {line}" for line in lines[1:]
+                dumped = (
+                    lines[0]
+                    + "\n"
+                    + "\n".join(f"{indent}    {line}" for line in lines[1:])
                 )
         return f'"{key}": {dumped}'
 
 
-def _render_address_expr(base_address: int, step: int,
-                         start_num: int, var_name: str) -> str:
+def _render_address_expr(
+    base_address: int, step: int, start_num: int, var_name: str
+) -> str:
     """Рендерит выражение адреса в Jinja."""
     if step == 0:
         return str(base_address)
@@ -1010,11 +1046,11 @@ def _render_channel_jinja(
     variant_fields = pattern.get("variant_fields", set())
 
     lines = []
-    lines.append(f'{{% for i in range({start}, {var} + {start}) -%}}')
+    lines.append(f"{{% for i in range({start}, {var} + {start}) -%}}")
 
     if variants_data:
         # Сохраняем ссылку на внешний loop для условных запятых
-        lines.append('{% set outer_loop = loop -%}')
+        lines.append("{% set outer_loop = loop -%}")
         # Вложенный цикл по вариантам
         # Строим список кортежей для внутреннего for
         variant_field_names = sorted(variant_fields)
@@ -1073,10 +1109,10 @@ def _render_channel_jinja(
             variant_tuples.append(f"({', '.join(vals)})")
 
         var_names_str = ", ".join(f"{fn}_val" for fn in variant_field_names)
-        lines.append(f'{{% for {var_names_str} in [')
+        lines.append(f"{{% for {var_names_str} in [")
         for vi, vt in enumerate(variant_tuples):
-            lines.append(f'    {vt},')
-        lines.append('] -%}')
+            lines.append(f"    {vt},")
+        lines.append("] -%}")
 
         # Строим JSON канала
         ch_fields: list[str] = []
@@ -1113,8 +1149,12 @@ def _render_channel_jinja(
                     dumped = json.dumps(value, indent=4, ensure_ascii=False)
                     dump_lines = dumped.split("\n")
                     if len(dump_lines) > 1:
-                        dumped = dump_lines[0] + "\n" + "\n".join(
-                            f"{indent}    {line}" for line in dump_lines[1:]
+                        dumped = (
+                            dump_lines[0]
+                            + "\n"
+                            + "\n".join(
+                                f"{indent}    {line}" for line in dump_lines[1:]
+                            )
                         )
                 ch_fields.append(f'"{key}": {dumped}')
 
@@ -1149,8 +1189,9 @@ def _render_channel_jinja(
         for key, value in proto.items():
             if key in skip_fields:
                 continue
-            rendered = _render_field_value(key, value, tpl_fields, 0, start, var,
-                                           indent + "    ")
+            rendered = _render_field_value(
+                key, value, tpl_fields, 0, start, var, indent + "    "
+            )
             ch_fields.append(rendered)
 
         ch_json = ",\n".join(f"{indent}    {f}" for f in ch_fields)
@@ -1165,8 +1206,7 @@ def _render_channel_jinja(
         lines.append("{% endfor -%}")
 
     return "\n".join(
-        f"{indent}{line}" if not line.startswith(indent) else line
-        for line in lines
+        f"{indent}{line}" if not line.startswith(indent) else line for line in lines
     )
 
 
@@ -1202,16 +1242,16 @@ def _render_string_channel_jinja(
 
     # Объявление переменной со списком строк
     values_str = ", ".join(f'"{v}"' for v in string_values)
-    lines.append(f'{{% set {var_name} = [{values_str}] -%}}')
+    lines.append(f"{{% set {var_name} = [{values_str}] -%}}")
 
     # Открываем цикл
-    lines.append(f'{{% for val in {var_name} -%}}')
+    lines.append(f"{{% for val in {var_name} -%}}")
 
     # Строим JSON канала
     ch_fields: list[str] = []
 
     # name с подстановкой val
-    name_tpl = f'{name_prefix}{{{{ val{name_filter} }}}}{name_suffix}'
+    name_tpl = f"{name_prefix}{{{{ val{name_filter} }}}}{name_suffix}"
     ch_fields.append(f'"name": "{name_tpl}"')
 
     # Адрес через loop.index0
@@ -1252,8 +1292,10 @@ def _render_string_channel_jinja(
             dumped = json.dumps(value, indent=4, ensure_ascii=False)
             dump_lines = dumped.split("\n")
             if len(dump_lines) > 1:
-                dumped = dump_lines[0] + "\n" + "\n".join(
-                    f"{indent}    {line}" for line in dump_lines[1:]
+                dumped = (
+                    dump_lines[0]
+                    + "\n"
+                    + "\n".join(f"{indent}    {line}" for line in dump_lines[1:])
                 )
         ch_fields.append(f'"{key}": {dumped}')
 
@@ -1267,8 +1309,7 @@ def _render_string_channel_jinja(
     lines.append("{% endfor -%}")
 
     return "\n".join(
-        f"{indent}{line}" if not line.startswith(indent) else line
-        for line in lines
+        f"{indent}{line}" if not line.startswith(indent) else line for line in lines
     )
 
 
@@ -1371,26 +1412,22 @@ def _render_group_jinja(
     result_parts: list[str] = []
 
     for fi, fragment in enumerate(fragments):
-        is_last = (fi == len(fragments) - 1)
+        is_last = fi == len(fragments) - 1
 
         if fragment[0] == "for":
             _, var, same_var_patterns = fragment
             start = same_var_patterns[0]["start_num"]
 
             lines = []
-            lines.append(
-                f"{indent}{{% for i in range({start}, {var} + {start}) -%}}"
-            )
+            lines.append(f"{indent}{{% for i in range({start}, {var} + {start}) -%}}")
 
             for pi, p in enumerate(same_var_patterns):
                 obj_text = _render_group_object(p, indent)
-                is_last_obj_in_for = (pi == len(same_var_patterns) - 1)
+                is_last_obj_in_for = pi == len(same_var_patterns) - 1
 
                 if is_last and is_last_obj_in_for:
                     # Последний объект в последнем for -- условная запятая
-                    lines.append(
-                        f"{obj_text}{{% if not loop.last %}},{{% endif %}}"
-                    )
+                    lines.append(f"{obj_text}{{% if not loop.last %}},{{% endif %}}")
                 else:
                     lines.append(f"{obj_text},")
 
@@ -1399,9 +1436,7 @@ def _render_group_jinja(
         else:
             _, g = fragment
             g_json = json.dumps(g, indent=4, ensure_ascii=False)
-            indented = "\n".join(
-                f"{indent}{line}" for line in g_json.split("\n")
-            )
+            indented = "\n".join(f"{indent}{line}" for line in g_json.split("\n"))
             result_parts.append(indented)
 
     # Соединяем: между for->static и static->static ставим запятую.
@@ -1461,8 +1496,11 @@ def _render_param_jinja(
                 rendered_vars.add(var)
                 same_var_patterns = by_var[var]
                 same_var_patterns.sort(
-                    key=lambda p: all_keys.index(p["indices"][0])
-                    if p["indices"][0] in all_keys else 0
+                    key=lambda p: (
+                        all_keys.index(p["indices"][0])
+                        if p["indices"][0] in all_keys
+                        else 0
+                    )
                 )
                 fragments.append(("for", var, same_var_patterns))
             i += 1
@@ -1474,16 +1512,14 @@ def _render_param_jinja(
     result_parts: list[str] = []
 
     for fi, fragment in enumerate(fragments):
-        is_last = (fi == len(fragments) - 1)
+        is_last = fi == len(fragments) - 1
 
         if fragment[0] == "for":
             _, var, same_var_patterns = fragment
             start = same_var_patterns[0]["start_num"]
 
             lines = []
-            lines.append(
-                f"{indent}{{% for i in range({start}, {var} + {start}) -%}}"
-            )
+            lines.append(f"{indent}{{% for i in range({start}, {var} + {start}) -%}}")
 
             for pi, p in enumerate(same_var_patterns):
                 tpl_fields = p.get("templated_fields", {})
@@ -1500,21 +1536,18 @@ def _render_param_jinja(
                     if fkey in {"address", "enabled", "id"}:
                         continue
                     rendered = _render_field_value(
-                        fkey, fvalue, tpl_fields, 0, start, var,
-                        indent + "        "
+                        fkey, fvalue, tpl_fields, 0, start, var, indent + "        "
                     )
                     obj_fields.append(f"{indent}        {rendered}")
 
-                is_last_obj_in_for = (pi == len(same_var_patterns) - 1)
+                is_last_obj_in_for = pi == len(same_var_patterns) - 1
 
                 lines.append(f'{indent}"{key_tpl}": {{')
                 lines.append(",\n".join(obj_fields))
 
                 if is_last and is_last_obj_in_for:
                     # Последний объект в последнем for -- условная запятая
-                    lines.append(
-                        f"{indent}}}{{% if not loop.last %}},{{% endif %}}"
-                    )
+                    lines.append(f"{indent}}}{{% if not loop.last %}},{{% endif %}}")
                 else:
                     lines.append(f"{indent}}},")
 
@@ -1525,9 +1558,9 @@ def _render_param_jinja(
             param_json = json.dumps(value, indent=4, ensure_ascii=False)
             indented_lines = param_json.split("\n")
             indented = indented_lines[0] + (
-                "\n" + "\n".join(
-                    f"{indent}    {line}" for line in indented_lines[1:]
-                ) if len(indented_lines) > 1 else ""
+                "\n" + "\n".join(f"{indent}    {line}" for line in indented_lines[1:])
+                if len(indented_lines) > 1
+                else ""
             )
             result_parts.append(f'{indent}"{key}": {indented}')
 
@@ -1572,7 +1605,7 @@ def _render_translations_jinja(
 
     lang_items = list(translations.items())
     for li, (lang, lang_data) in enumerate(lang_items):
-        is_last_lang = (li == len(lang_items) - 1)
+        is_last_lang = li == len(lang_items) - 1
         if not isinstance(lang_data, dict):
             dumped = json.dumps(lang_data, ensure_ascii=False)
             comma = "" if is_last_lang else ","
@@ -1601,7 +1634,7 @@ def _render_translations_jinja(
         # Рендерим фрагменты
         frag_parts: list[str] = []
         for fi, frag in enumerate(fragments):
-            is_last_frag = (fi == len(fragments) - 1)
+            is_last_frag = fi == len(fragments) - 1
 
             if frag[0] == "for":
                 tp = frag[1]
@@ -1628,23 +1661,30 @@ def _render_translations_jinja(
                 if value_tpl is not None:
                     # Значение тоже шаблонизируется
                     value_jinja = value_tpl.replace(_PLACEHOLDER, "{{ i }}")
-                    flines.append(f'{inner_indent}"{key_jinja}": "{value_jinja}"{comma_expr}')
+                    flines.append(
+                        f'{inner_indent}"{key_jinja}": "{value_jinja}"{comma_expr}'
+                    )
                 else:
                     # Значение статическое -- берём из данных
                     # (для случая когда значение не содержит число)
                     # Используем первый ключ для получения значения
                     first_key = None
                     for k, n in sorted(
-                        [(k, n) for k in tp["used_keys"]
-                         for _, n, _, _ in _extract_number_variants(k)
-                         if k.replace(str(n), _PLACEHOLDER) == key_tpl],
-                        key=lambda x: x[1]
+                        [
+                            (k, n)
+                            for k in tp["used_keys"]
+                            for _, n, _, _ in _extract_number_variants(k)
+                            if k.replace(str(n), _PLACEHOLDER) == key_tpl
+                        ],
+                        key=lambda x: x[1],
                     ):
                         first_key = k
                         break
                     if first_key and first_key in lang_data:
                         val = lang_data[first_key]
-                        flines.append(f'{inner_indent}"{key_jinja}": {json.dumps(val, ensure_ascii=False)}{comma_expr}')
+                        flines.append(
+                            f'{inner_indent}"{key_jinja}": {json.dumps(val, ensure_ascii=False)}{comma_expr}'
+                        )
                     else:
                         flines.append(f'{inner_indent}"{key_jinja}": ""{comma_expr}')
 
@@ -1669,15 +1709,16 @@ def _render_translations_jinja(
         parts.append("".join(output_frag_lines))
 
         comma = "" if is_last_lang else ","
-        parts.append(f'{lang_indent}}}{comma}')
+        parts.append(f"{lang_indent}}}{comma}")
 
-    parts.append(f'{indent[:-4]}}}')
+    parts.append(f"{indent[:-4]}}}")
     return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
 # Основная функция
 # ---------------------------------------------------------------------------
+
 
 def build_jinja_template(template: dict) -> str:
     """Принимает JSON-шаблон (из build_template()), генерирует .json.jinja строку.
@@ -1760,7 +1801,8 @@ def build_jinja_template(template: dict) -> str:
 
     # device поля (не channels, не parameters, не translations, не groups)
     device_simple = {
-        k: v for k, v in device.items()
+        k: v
+        for k, v in device.items()
         if k not in ("channels", "parameters", "translations", "groups")
     }
     for key, value in device_simple.items():
@@ -1794,7 +1836,9 @@ def build_jinja_template(template: dict) -> str:
 
     lines.append('        "channels": [')
 
-    ch_fragments: list[tuple] = []  # ("for", pattern), ("string_for", pattern) или ("static", channel_dict)
+    ch_fragments: list[tuple] = (
+        []
+    )  # ("for", pattern), ("string_for", pattern) или ("static", channel_dict)
     rendered_patterns: set[int] = set()
 
     for i in range(len(channels)):
@@ -1816,11 +1860,13 @@ def build_jinja_template(template: dict) -> str:
     ch_indent = "            "
 
     for fi, fragment in enumerate(ch_fragments):
-        is_last = (fi == len(ch_fragments) - 1)
+        is_last = fi == len(ch_fragments) - 1
 
         if fragment[0] == "for":
             _, p = fragment
-            jinja_block = _render_channel_jinja(p, indent=ch_indent, is_last_in_array=is_last)
+            jinja_block = _render_channel_jinja(
+                p, indent=ch_indent, is_last_in_array=is_last
+            )
             ch_result_parts.append(jinja_block)
         elif fragment[0] == "string_for":
             _, p = fragment
@@ -1831,9 +1877,7 @@ def build_jinja_template(template: dict) -> str:
         else:
             _, ch = fragment
             ch_json = json.dumps(ch, indent=4, ensure_ascii=False)
-            indented = "\n".join(
-                f"{ch_indent}{line}" for line in ch_json.split("\n")
-            )
+            indented = "\n".join(f"{ch_indent}{line}" for line in ch_json.split("\n"))
             ch_result_parts.append(indented)
 
     # Соединяем: for-блоки (числовые и строковые) уже управляют trailing comma,

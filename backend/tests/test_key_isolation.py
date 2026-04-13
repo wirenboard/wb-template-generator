@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import Settings  # noqa: E402, I001
 from llm_service import analyze_document, resolve_llm_credentials  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Фикстуры
 # ---------------------------------------------------------------------------
@@ -65,6 +64,7 @@ async def _collect_events(gen) -> list[str]:
 # analyze_document: изоляция ключей
 # ---------------------------------------------------------------------------
 
+
 class TestAnalyzeKeyIsolation:
     """Изоляция серверного ключа в analyze_document (llm_service.py)."""
 
@@ -80,26 +80,32 @@ class TestAnalyzeKeyIsolation:
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
-            mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
+            mock_client.chat.completions.create = AsyncMock(
+                return_value=_mock_llm_response()
+            )
             mock_image.open.return_value = MagicMock()
 
-            await _collect_events(analyze_document(
-                files=[("test.png", b"fake-png-data")],
-                template_type="full",
-                settings=settings,
-                api_url=USER_URL,
-                api_key=USER_KEY,
-                is_custom_llm=True,
-            ))
+            await _collect_events(
+                analyze_document(
+                    files=[("test.png", b"fake-png-data")],
+                    template_type="full",
+                    settings=settings,
+                    api_url=USER_URL,
+                    api_key=USER_KEY,
+                    is_custom_llm=True,
+                )
+            )
 
-            assert mock_openai.call_count == 1, "AsyncOpenAI должен быть создан ровно 1 раз"
+            assert (
+                mock_openai.call_count == 1
+            ), "AsyncOpenAI должен быть создан ровно 1 раз"
             call_kwargs = mock_openai.call_args
             actual_key = call_kwargs.kwargs.get("api_key")
             actual_url = call_kwargs.kwargs.get("base_url")
 
-            assert actual_key == USER_KEY, (
-                f"Утечка серверного ключа! Ожидали {USER_KEY!r}, получили {actual_key!r}"
-            )
+            assert (
+                actual_key == USER_KEY
+            ), f"Утечка серверного ключа! Ожидали {USER_KEY!r}, получили {actual_key!r}"
             assert actual_url == USER_URL
             assert SERVER_KEY not in str(call_kwargs)
 
@@ -115,17 +121,21 @@ class TestAnalyzeKeyIsolation:
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
-            mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
+            mock_client.chat.completions.create = AsyncMock(
+                return_value=_mock_llm_response()
+            )
             mock_image.open.return_value = MagicMock()
 
-            await _collect_events(analyze_document(
-                files=[("test.png", b"fake-png-data")],
-                template_type="full",
-                settings=settings,
-                api_url=USER_URL,
-                api_key=None,
-                is_custom_llm=True,
-            ))
+            await _collect_events(
+                analyze_document(
+                    files=[("test.png", b"fake-png-data")],
+                    template_type="full",
+                    settings=settings,
+                    api_url=USER_URL,
+                    api_key=None,
+                    is_custom_llm=True,
+                )
+            )
 
             assert mock_openai.call_count == 1
             actual_key = mock_openai.call_args.kwargs.get("api_key")
@@ -148,27 +158,32 @@ class TestAnalyzeKeyIsolation:
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
-            mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
+            mock_client.chat.completions.create = AsyncMock(
+                return_value=_mock_llm_response()
+            )
             mock_image.open.return_value = MagicMock()
 
-            await _collect_events(analyze_document(
-                files=[("test.png", b"fake-png-data")],
-                template_type="full",
-                settings=settings,
-                is_custom_llm=False,
-            ))
+            await _collect_events(
+                analyze_document(
+                    files=[("test.png", b"fake-png-data")],
+                    template_type="full",
+                    settings=settings,
+                    is_custom_llm=False,
+                )
+            )
 
             assert mock_openai.call_count == 1
             actual_key = mock_openai.call_args.kwargs.get("api_key")
 
-            assert actual_key == SERVER_KEY, (
-                f"В серверном режиме ожидали серверный ключ, получили {actual_key!r}"
-            )
+            assert (
+                actual_key == SERVER_KEY
+            ), f"В серверном режиме ожидали серверный ключ, получили {actual_key!r}"
 
 
 # ---------------------------------------------------------------------------
 # analyze_document: изоляция системного промпта
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyzePromptIsolation:
     """Пользовательский промпт НЕ применяется в серверном режиме."""
@@ -186,24 +201,28 @@ class TestAnalyzePromptIsolation:
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
-            mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
+            mock_client.chat.completions.create = AsyncMock(
+                return_value=_mock_llm_response()
+            )
             mock_image.open.return_value = MagicMock()
 
-            await _collect_events(analyze_document(
-                files=[("test.png", b"fake-png-data")],
-                template_type="full",
-                settings=settings,
-                custom_system_prompt=malicious_prompt,
-                is_custom_llm=False,
-            ))
+            await _collect_events(
+                analyze_document(
+                    files=[("test.png", b"fake-png-data")],
+                    template_type="full",
+                    settings=settings,
+                    custom_system_prompt=malicious_prompt,
+                    is_custom_llm=False,
+                )
+            )
 
             create_call = mock_client.chat.completions.create.call_args
             messages = create_call.kwargs.get("messages")
             system_content = messages[0]["content"]
 
-            assert malicious_prompt not in system_content, (
-                "Пользовательский промпт попал в серверный режим!"
-            )
+            assert (
+                malicious_prompt not in system_content
+            ), "Пользовательский промпт попал в серверный режим!"
 
     @pytest.mark.asyncio
     async def test_custom_llm_can_use_custom_prompt(self):
@@ -218,29 +237,34 @@ class TestAnalyzePromptIsolation:
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
-            mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
+            mock_client.chat.completions.create = AsyncMock(
+                return_value=_mock_llm_response()
+            )
             mock_image.open.return_value = MagicMock()
 
-            await _collect_events(analyze_document(
-                files=[("test.png", b"fake-png-data")],
-                template_type="full",
-                settings=settings,
-                custom_system_prompt=custom_prompt,
-                is_custom_llm=True,
-            ))
+            await _collect_events(
+                analyze_document(
+                    files=[("test.png", b"fake-png-data")],
+                    template_type="full",
+                    settings=settings,
+                    custom_system_prompt=custom_prompt,
+                    is_custom_llm=True,
+                )
+            )
 
             create_call = mock_client.chat.completions.create.call_args
             messages = create_call.kwargs.get("messages")
             system_content = messages[0]["content"]
 
-            assert "Custom prompt" in system_content, (
-                "Пользовательский промпт не применился в custom-режиме"
-            )
+            assert (
+                "Custom prompt" in system_content
+            ), "Пользовательский промпт не применился в custom-режиме"
 
 
 # ---------------------------------------------------------------------------
 # analyze_document: изоляция прокси
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyzeProxyIsolation:
     """Серверный прокси НЕ используется при пользовательском LLM."""
@@ -257,28 +281,33 @@ class TestAnalyzeProxyIsolation:
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
-            mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
+            mock_client.chat.completions.create = AsyncMock(
+                return_value=_mock_llm_response()
+            )
             mock_image.open.return_value = MagicMock()
 
-            await _collect_events(analyze_document(
-                files=[("test.png", b"fake-png-data")],
-                template_type="full",
-                settings=settings,
-                api_url=USER_URL,
-                api_key=USER_KEY,
-                is_custom_llm=True,
-            ))
+            await _collect_events(
+                analyze_document(
+                    files=[("test.png", b"fake-png-data")],
+                    template_type="full",
+                    settings=settings,
+                    api_url=USER_URL,
+                    api_key=USER_KEY,
+                    is_custom_llm=True,
+                )
+            )
 
             # http_client должен быть None (прокси не используется)
             actual_http_client = mock_openai.call_args.kwargs.get("http_client")
-            assert actual_http_client is None, (
-                "Серверный прокси утёк в пользовательский LLM-клиент!"
-            )
+            assert (
+                actual_http_client is None
+            ), "Серверный прокси утёк в пользовательский LLM-клиент!"
 
 
 # ---------------------------------------------------------------------------
 # /api/models: изоляция ключей (unit-тест логики)
 # ---------------------------------------------------------------------------
+
 
 class TestModelsKeyIsolation:
     """Изоляция серверного ключа через resolve_llm_credentials (/api/models)."""
@@ -288,7 +317,9 @@ class TestModelsKeyIsolation:
         settings = _make_settings()
 
         effective_url, effective_key = resolve_llm_credentials(
-            settings, USER_URL, None,
+            settings,
+            USER_URL,
+            None,
         )
 
         assert effective_key != SERVER_KEY, "Утечка серверного ключа!"
@@ -300,7 +331,9 @@ class TestModelsKeyIsolation:
         settings = _make_settings()
 
         effective_url, effective_key = resolve_llm_credentials(
-            settings, None, None,
+            settings,
+            None,
+            None,
         )
 
         assert effective_key == SERVER_KEY
@@ -311,6 +344,7 @@ class TestModelsKeyIsolation:
 # /api/translate: изоляция ключей (unit-тест логики)
 # ---------------------------------------------------------------------------
 
+
 class TestTranslateKeyIsolation:
     """Изоляция серверного ключа через resolve_llm_credentials (/api/translate)."""
 
@@ -319,7 +353,9 @@ class TestTranslateKeyIsolation:
         settings = _make_settings()
 
         effective_url, effective_key = resolve_llm_credentials(
-            settings, USER_URL, None,
+            settings,
+            USER_URL,
+            None,
         )
 
         assert effective_key != SERVER_KEY, "Утечка серверного ключа!"
@@ -331,7 +367,9 @@ class TestTranslateKeyIsolation:
         settings = _make_settings()
 
         effective_url, effective_key = resolve_llm_credentials(
-            settings, USER_URL, USER_KEY,
+            settings,
+            USER_URL,
+            USER_KEY,
         )
 
         assert effective_key == USER_KEY

@@ -17,6 +17,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 # --- Хелперы ---
 
+
 def _load_fixture(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text())
 
@@ -27,6 +28,7 @@ def _make_request(fixture_name: str = "sdm230_registers.json") -> BuildRequest:
 
 
 # --- Тесты вспомогательных функций ---
+
 
 class TestMakeGroupId:
     def test_simple(self):
@@ -54,6 +56,7 @@ class TestMakeParamId:
 
 
 # --- Тест с эталонной фикстурой SDM-230 ---
+
 
 class TestBuildTemplateSDM230:
     @pytest.fixture
@@ -94,7 +97,11 @@ class TestBuildTemplateSDM230:
 
     def test_disabled_register_included_with_flag(self, result):
         """Disabled канал включается в шаблон с enabled: false."""
-        disabled = [ch for ch in result["device"]["channels"] if ch.get("name") == "Disabled Register"]
+        disabled = [
+            ch
+            for ch in result["device"]["channels"]
+            if ch.get("name") == "Disabled Register"
+        ]
         assert len(disabled) == 1
         assert disabled[0]["enabled"] is False
 
@@ -154,6 +161,7 @@ class TestBuildTemplateSDM230:
 
 
 # --- Граничные случаи ---
+
 
 class TestEdgeCases:
     def test_empty_registers(self):
@@ -225,8 +233,11 @@ class TestEdgeCases:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Brightness",
-                    channel_type="range", min=0, max=100,
+                    address=0,
+                    name="Brightness",
+                    channel_type="range",
+                    min=0,
+                    max=100,
                 ),
             ],
         )
@@ -241,8 +252,10 @@ class TestEdgeCases:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Energy",
-                    format="float", word_order="little_endian",
+                    address=0,
+                    name="Energy",
+                    format="float",
+                    word_order="little_endian",
                 ),
             ],
         )
@@ -267,14 +280,19 @@ class TestEdgeCases:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Safety Mode",
-                    is_parameter=True, enum=[0, 1],
+                    address=0,
+                    name="Safety Mode",
+                    is_parameter=True,
+                    enum=[0, 1],
                     enum_titles=["Off", "On"],
                 ),
                 Register(
-                    address=1, name="Safety Threshold",
-                    is_parameter=True, condition="safety_mode==1",
-                    min=0, max=100,
+                    address=1,
+                    name="Safety Threshold",
+                    is_parameter=True,
+                    condition="safety_mode==1",
+                    min=0,
+                    max=100,
                 ),
             ],
         )
@@ -284,6 +302,7 @@ class TestEdgeCases:
 
 
 # --- Тесты: группы из запроса ---
+
 
 class TestRequestGroups:
     def test_groups_from_request(self):
@@ -329,7 +348,9 @@ class TestRequestGroups:
             registers=[Register(address=0, name="R1", group="power")],
             groups=[
                 RegisterGroup(
-                    id="power", title="Power Meters", order=0,
+                    id="power",
+                    title="Power Meters",
+                    order=0,
                     translations={"ru": {"title": "Измерения"}},
                 ),
             ],
@@ -358,7 +379,9 @@ class TestRequestGroups:
             registers=[Register(address=0, name="R1", group="power")],
             groups=[
                 RegisterGroup(
-                    id="power", title="Power", order=0,
+                    id="power",
+                    title="Power",
+                    order=0,
                     description="Power measurement channels",
                 ),
             ],
@@ -374,9 +397,16 @@ class TestRequestGroups:
             registers=[Register(address=0, name="R1", group="power")],
             groups=[
                 RegisterGroup(
-                    id="power", title="Power", order=0,
+                    id="power",
+                    title="Power",
+                    order=0,
                     description="Power measurement channels",
-                    translations={"ru": {"title": "Мощность", "description": "Каналы измерений мощности"}},
+                    translations={
+                        "ru": {
+                            "title": "Мощность",
+                            "description": "Каналы измерений мощности",
+                        }
+                    },
                 ),
             ],
         )
@@ -387,6 +417,7 @@ class TestRequestGroups:
 
 # --- Тесты: enum_entries ---
 
+
 class TestEnumEntries:
     def test_enum_entries_priority(self):
         """enum_entries имеет приоритет над enum + enum_titles."""
@@ -394,7 +425,9 @@ class TestEnumEntries:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Mode", is_parameter=True,
+                    address=0,
+                    name="Mode",
+                    is_parameter=True,
                     enum=[0, 1],
                     enum_titles=["Old Off", "Old On"],
                     enum_entries=[
@@ -415,7 +448,9 @@ class TestEnumEntries:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Mode", is_parameter=True,
+                    address=0,
+                    name="Mode",
+                    is_parameter=True,
                     enum_entries=[
                         EnumEntry(value=0, title="Off", translations={"ru": "Выкл"}),
                         EnumEntry(value=1, title="On", translations={"ru": "Вкл"}),
@@ -435,6 +470,7 @@ class TestEnumEntries:
 
 
 # --- Тесты: новые поля ---
+
 
 class TestNewFields:
     def test_round_to_channel(self):
@@ -467,8 +503,11 @@ class TestNewFields:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Switch",
-                    channel_type="switch", on_value=0xFF00, off_value=0x0000,
+                    address=0,
+                    name="Switch",
+                    channel_type="switch",
+                    on_value=0xFF00,
+                    off_value=0x0000,
                 ),
             ],
         )
@@ -483,8 +522,12 @@ class TestNewFields:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Threshold", is_parameter=True,
-                    default_value=42.0, min=0, max=100,
+                    address=0,
+                    name="Threshold",
+                    is_parameter=True,
+                    default_value=42.0,
+                    min=0,
+                    max=100,
                 ),
             ],
         )
@@ -498,9 +541,13 @@ class TestNewFields:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Mode", is_parameter=True,
+                    address=0,
+                    name="Mode",
+                    is_parameter=True,
                     description="Operating mode",
-                    translations={"ru": {"name": "Режим", "description": "Режим работы"}},
+                    translations={
+                        "ru": {"name": "Режим", "description": "Режим работы"}
+                    },
                 ),
             ],
         )
@@ -517,9 +564,16 @@ class TestNewFields:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Voltage", is_parameter=False,
+                    address=0,
+                    name="Voltage",
+                    is_parameter=False,
                     description="Line voltage measurement",
-                    translations={"ru": {"name": "Напряжение", "description": "Измерение напряжения"}},
+                    translations={
+                        "ru": {
+                            "name": "Напряжение",
+                            "description": "Измерение напряжения",
+                        }
+                    },
                 ),
             ],
         )
@@ -552,6 +606,7 @@ class TestNewFields:
 
 
 # --- Тесты: побитовый адрес ---
+
 
 class TestBitAddress:
     def test_bitwise_address_string(self):
@@ -597,8 +652,10 @@ class TestBitAddress:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="FW Version",
-                    is_parameter=True, readonly=True,
+                    address=0,
+                    name="FW Version",
+                    is_parameter=True,
+                    readonly=True,
                 ),
             ],
         )
@@ -609,11 +666,13 @@ class TestBitAddress:
 
 # --- Тесты: обратная совместимость legacy-формата ---
 
+
 class TestLegacyCompat:
     def test_register_name_ru_migration(self):
         """Legacy name_ru/description_ru мигрирует в translations."""
         reg = Register(
-            address=0, name="Voltage",
+            address=0,
+            name="Voltage",
             name_ru="Напряжение",
             description="Line voltage",
             description_ru="Напряжение сети",
@@ -650,6 +709,7 @@ class TestLegacyCompat:
 
 # --- Тесты: множество языков ---
 
+
 class TestMultiLanguage:
     def test_multiple_languages(self):
         """Несколько языков переводов собираются в translations."""
@@ -657,7 +717,8 @@ class TestMultiLanguage:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Temperature",
+                    address=0,
+                    name="Temperature",
                     translations={
                         "ru": {"name": "Температура"},
                         "de": {"name": "Temperatur"},
@@ -689,7 +750,8 @@ class TestMultiLanguage:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="R1",
+                    address=0,
+                    name="R1",
                     translations={"de": {}},
                 ),
             ],
@@ -702,6 +764,7 @@ class TestMultiLanguage:
 
 # --- Тесты: конфликты переводов ---
 
+
 class TestTranslationConflicts:
     def test_enum_conflict_warning(self):
         """Конфликтующие переводы enum генерируют предупреждение."""
@@ -709,14 +772,18 @@ class TestTranslationConflicts:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Mode1", is_parameter=True,
+                    address=0,
+                    name="Mode1",
+                    is_parameter=True,
                     enum_entries=[
                         EnumEntry(value=0, title="Off", translations={"ru": "Выкл"}),
                     ],
                     translations={"ru": {"name": "Режим 1"}},
                 ),
                 Register(
-                    address=1, name="Mode2", is_parameter=True,
+                    address=1,
+                    name="Mode2",
+                    is_parameter=True,
                     enum_entries=[
                         EnumEntry(value=0, title="Off", translations={"ru": "Откл"}),
                     ],
@@ -735,7 +802,9 @@ class TestTranslationConflicts:
             device_info=DeviceInfo(name="Test", id="test"),
             registers=[
                 Register(
-                    address=0, name="Mode", is_parameter=True,
+                    address=0,
+                    name="Mode",
+                    is_parameter=True,
                     enum_entries=[
                         EnumEntry(value=0, title="Off", translations={"ru": "Выкл"}),
                         EnumEntry(value=1, title="On", translations={"ru": "Вкл"}),

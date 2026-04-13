@@ -7,21 +7,22 @@
 - Логирования операций сохранения/загрузки
 """
 
-import os
-import json
 import asyncio
+import json
 import logging
+import os
+import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, Callable, Awaitable
-import tempfile
-import shutil
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+
 class MetricsPersistence:
     """Класс для управления персистентностью метрик."""
-    
+
     def __init__(self, base_path: str = "data/metrics"):
         """
         Инициализация модуля персистентности.
@@ -31,20 +32,20 @@ class MetricsPersistence:
         """
         self.base_path = Path(base_path)
         self.current_path = self.base_path / "current"
-        
+
         # Создаем директории если их нет
         self.current_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Пути к основным файлам
         self.basic_metrics_file = self.current_path / "basic_metrics.json"
         self.llm_metrics_file = self.current_path / "llm_metrics.json"
-        
+
         # Флаг активности автосохранения
         self._auto_save_task: Optional[asyncio.Task[None]] = None
         self._save_interval = 300  # 5 минут в секундах
-        
+
         logger.info(f"Инициализация персистентности метрик в {self.base_path}")
-    
+
     async def save_metrics(self, metrics_data: Dict[str, Any]) -> bool:
         """
         Сохраняет метрики в JSON файлы.
@@ -58,30 +59,24 @@ class MetricsPersistence:
         try:
             # Добавляем timestamp
             timestamp = datetime.now().isoformat()
-            
+
             # Сохраняем базовые метрики
             if "basic" in metrics_data:
-                basic_data = {
-                    "timestamp": timestamp,
-                    "data": metrics_data["basic"]
-                }
+                basic_data = {"timestamp": timestamp, "data": metrics_data["basic"]}
                 await self._save_json_atomic(self.basic_metrics_file, basic_data)
-            
-            # Сохраняем LLM метрики  
+
+            # Сохраняем LLM метрики
             if "llm" in metrics_data:
-                llm_data = {
-                    "timestamp": timestamp,
-                    "data": metrics_data["llm"]
-                }
+                llm_data = {"timestamp": timestamp, "data": metrics_data["llm"]}
                 await self._save_json_atomic(self.llm_metrics_file, llm_data)
-            
+
             logger.debug(f"Метрики сохранены в {timestamp}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Ошибка сохранения метрик: {e}")
             return False
-    
+
     async def load_metrics(self) -> Dict[str, Any]:
         """
         Загружает метрики из JSON файлов.
@@ -90,30 +85,30 @@ class MetricsPersistence:
             Словарь с загруженными метриками или пустой словарь
         """
         result = {}
-        
+
         try:
             # Загружаем базовые метрики
             basic_data = await self._load_json(self.basic_metrics_file)
             if basic_data and "data" in basic_data:
                 result["basic"] = basic_data["data"]
                 result["basic_timestamp"] = basic_data.get("timestamp")
-            
+
             # Загружаем LLM метрики
             llm_data = await self._load_json(self.llm_metrics_file)
             if llm_data and "data" in llm_data:
                 result["llm"] = llm_data["data"]
                 result["llm_timestamp"] = llm_data.get("timestamp")
-            
+
             if result:
                 logger.info(f"Метрики успешно загружены: {list(result.keys())}")
             else:
                 logger.info("Файлы метрик не найдены, начинаем с чистого состояния")
-                
+
         except Exception as e:
             logger.error(f"Ошибка загрузки метрик: {e}")
-            
+
         return result
-    
+
     async def _save_json_atomic(self, file_path: Path, data: Dict[str, Any]) -> None:
         """
         Атомарное сохранение JSON файла через временный файл.
@@ -123,20 +118,17 @@ class MetricsPersistence:
             data: Данные для сохранения
         """
         # Создаем временный файл в той же директории
-        temp_fd, temp_path = tempfile.mkstemp(
-            suffix=".json.tmp",
-            dir=file_path.parent
-        )
-        
+        temp_fd, temp_path = tempfile.mkstemp(suffix=".json.tmp", dir=file_path.parent)
+
         try:
-            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+            with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(f.fileno())  # Принудительная запись на диск
-            
+
             # Атомарное переименование
             shutil.move(temp_path, file_path)
-            
+
         except Exception:
             # Очищаем временный файл при ошибке
             try:
@@ -144,7 +136,7 @@ class MetricsPersistence:
             except OSError:
                 pass
             raise
-    
+
     async def _load_json(self, file_path: Path) -> Optional[Dict[str, Any]]:
         """
         Загрузка JSON файла.
@@ -157,16 +149,18 @@ class MetricsPersistence:
         """
         if not file_path.exists():
             return None
-            
+
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 return data if isinstance(data, dict) else None
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Не удалось загрузить {file_path}: {e}")
             return None
-    
-    async def start_auto_save(self, get_metrics_func: Callable[[], Awaitable[Dict[str, Any]]]) -> None:
+
+    async def start_auto_save(
+        self, get_metrics_func: Callable[[], Awaitable[Dict[str, Any]]]
+    ) -> None:
         """
         Запускает автоматическое периодическое сохранение метрик.
 
@@ -177,29 +171,31 @@ class MetricsPersistence:
         if self._auto_save_task is not None:
             logger.warning("Автосохранение уже запущено")
             return
-        
+
         async def auto_save_loop() -> None:
-            logger.info(f"Запуск автосохранения метрик каждые {self._save_interval} секунд")
-            
+            logger.info(
+                f"Запуск автосохранения метрик каждые {self._save_interval} секунд"
+            )
+
             while True:
                 try:
                     await asyncio.sleep(self._save_interval)
-                    
+
                     # Получаем текущие метрики
                     current_metrics = get_metrics_func()
-                    
+
                     # Сохраняем
                     await self.save_metrics(current_metrics)
-                    
+
                 except asyncio.CancelledError:
                     logger.info("Автосохранение метрик остановлено")
                     break
                 except Exception as e:
                     logger.error(f"Ошибка в автосохранении метрик: {e}")
                     # Продолжаем работу несмотря на ошибку
-        
+
         self._auto_save_task = asyncio.create_task(auto_save_loop())
-    
+
     async def stop_auto_save(self) -> None:
         """Останавливает автоматическое сохранение."""
         if self._auto_save_task is not None:
@@ -210,7 +206,7 @@ class MetricsPersistence:
                 pass
             self._auto_save_task = None
             logger.info("Автосохранение метрик остановлено")
-    
+
     def get_storage_info(self) -> Dict[str, Any]:
         """
         Возвращает информацию о хранилище метрик.
@@ -221,32 +217,31 @@ class MetricsPersistence:
         info: Dict[str, Any] = {
             "base_path": str(self.base_path),
             "files": {},
-            "total_size_bytes": 0
+            "total_size_bytes": 0,
         }
-        
+
         # Проверяем основные файлы
         for name, path in [
             ("basic_metrics", self.basic_metrics_file),
-            ("llm_metrics", self.llm_metrics_file)
+            ("llm_metrics", self.llm_metrics_file),
         ]:
             if path.exists():
                 stat = path.stat()
                 info["files"][name] = {
                     "path": str(path),
                     "size_bytes": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 }
                 info["total_size_bytes"] += stat.st_size
             else:
-                info["files"][name] = {
-                    "path": str(path),
-                    "exists": False
-                }
-        
+                info["files"][name] = {"path": str(path), "exists": False}
+
         return info
+
 
 # Глобальный экземпляр для использования в приложении
 _persistence: Optional[MetricsPersistence] = None
+
 
 def get_persistence() -> MetricsPersistence:
     """Возвращает глобальный экземпляр MetricsPersistence."""
@@ -255,11 +250,13 @@ def get_persistence() -> MetricsPersistence:
         _persistence = MetricsPersistence()
     return _persistence
 
+
 async def initialize_persistence() -> None:
     """Инициализация модуля персистентности."""
     get_persistence()  # Создаем экземпляр для инициализации
     logger.info("Модуль персистентности инициализирован")
-    
+
+
 async def cleanup_persistence() -> None:
     """Очистка ресурсов при завершении работы."""
     persistence = get_persistence()

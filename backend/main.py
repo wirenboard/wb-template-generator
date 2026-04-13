@@ -15,11 +15,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
 
+from aggregation import (get_aggregator, start_metrics_aggregation,
+                         stop_metrics_aggregation)
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_service import analyze_document, resolve_llm_credentials
-from metrics import get_all_metrics, get_public_metrics, get_admin_metrics, require_admin_access, update_basic_metrics, update_monitoring_metrics, load_persisted_metrics, start_metrics_persistence, stop_metrics_persistence
-from aggregation import start_metrics_aggregation, stop_metrics_aggregation, get_aggregator
+from metrics import (get_admin_metrics, get_all_metrics, get_public_metrics,
+                     load_persisted_metrics, require_admin_access,
+                     start_metrics_persistence, stop_metrics_persistence,
+                     update_basic_metrics, update_monitoring_metrics)
 from models import BuildRequest, TranslateRequest, ValidateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
@@ -32,7 +36,10 @@ from template_importer import detect_and_import
 def get_version() -> str:
     """Парсит последнюю released-версию из CHANGELOG.md (единственный источник истины)."""
     _version_re = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
-    for candidate in (Path(__file__).resolve().parent / "../CHANGELOG.md", Path("CHANGELOG.md")):
+    for candidate in (
+        Path(__file__).resolve().parent / "../CHANGELOG.md",
+        Path("CHANGELOG.md"),
+    ):
         try:
             text = Path(candidate).resolve().read_text(encoding="utf-8")
             m = _version_re.search(text)
@@ -46,11 +53,13 @@ def get_version() -> str:
 # Допустимые расширения загружаемых файлов
 _ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".webp"}
 
+
 # Структурированное логирование с request_id
 class RequestIdFilter(logging.Filter):
     def filter(self, record):
         record.request_id = get_request_id() or "-"
         return True
+
 
 def _setup_logging() -> None:
     """Настройка логирования: text (dev) или json (prod)."""
@@ -60,18 +69,24 @@ def _setup_logging() -> None:
 
     if settings.LOG_FORMAT == "json":
         from pythonjsonlogger.json import JsonFormatter
-        handler.setFormatter(JsonFormatter(
-            "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s",
-            rename_fields={"asctime": "timestamp", "levelname": "level"},
-        ))
+
+        handler.setFormatter(
+            JsonFormatter(
+                "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s",
+                rename_fields={"asctime": "timestamp", "levelname": "level"},
+            )
+        )
     else:
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)s [%(request_id)s] %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)s [%(request_id)s] %(name)s: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
 
     logging.root.handlers = [handler]
     logging.root.setLevel(logging.INFO)
+
 
 _setup_logging()
 
@@ -101,6 +116,7 @@ def _check_rate_limit(ip: str, max_requests: int, window: int) -> bool:
 # Lifespan: инициализация и graceful shutdown
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Инициализация при старте, очистка при остановке."""
@@ -112,7 +128,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         custom_max=settings.QUEUE_CUSTOM_MAX_CONCURRENT,
         activation_delay=settings.QUEUE_ACTIVATION_DELAY,
     )
-    
+
     # Инициализация системы метрик с персистентностью
     try:
         await load_persisted_metrics()
@@ -121,11 +137,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Система метрик с персистентностью и агрегацией инициализирована")
     except Exception as e:
         logger.error(f"Ошибка инициализации системы метрик: {e}")
-    
+
     logger.info("Приложение запущено")
     yield
     # Graceful shutdown
-    
+
     # Останавливаем системы метрик
     try:
         await stop_metrics_aggregation()
@@ -177,6 +193,7 @@ app.add_middleware(
 # Middleware: Request ID
 # ---------------------------------------------------------------------------
 
+
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     """Генерирует request_id для каждого запроса, пробрасывает в ContextVar и заголовок."""
@@ -187,13 +204,20 @@ async def request_id_middleware(request: Request, call_next):
     response = await call_next(request)
     duration_ms = (time.monotonic() - start) * 1000
     response.headers["X-Request-Id"] = rid
-    logger.info("%s %s → %d (%.0f мс)", request.method, request.url.path, response.status_code, duration_ms)
+    logger.info(
+        "%s %s → %d (%.0f мс)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
     return response
 
 
 # ---------------------------------------------------------------------------
 # Глобальный обработчик необработанных ошибок
 # ---------------------------------------------------------------------------
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -212,6 +236,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ---------------------------------------------------------------------------
 # API-эндпоинты
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/health")
 async def health():
@@ -292,7 +317,7 @@ async def get_hourly_metrics(hours: int = 24):
     """Получить почасовые метрики за последние N часов (публичный доступ)."""
     if hours < 1 or hours > 168:  # Максимум неделя
         raise HTTPException(status_code=400, detail="hours должно быть от 1 до 168")
-    
+
     aggregator = get_aggregator()
     return await _get_hourly_data(aggregator, hours)
 
@@ -301,10 +326,10 @@ async def get_hourly_metrics(hours: int = 24):
 async def get_hourly_metrics_admin(request: Request, hours: int = 72):
     """Получить детальные почасовые метрики (админский доступ)."""
     require_admin_access(request)
-    
+
     if hours < 1 or hours > 168:
         raise HTTPException(status_code=400, detail="hours должно быть от 1 до 168")
-    
+
     aggregator = get_aggregator()
     return await _get_hourly_data(aggregator, hours, detailed=True)
 
@@ -312,14 +337,14 @@ async def get_hourly_metrics_admin(request: Request, hours: int = 72):
 async def _get_hourly_data(aggregator, hours: int, detailed: bool = False):
     """Вспомогательная функция для получения почасовых данных."""
     try:
-        from pathlib import Path
         import json
         from datetime import datetime, timedelta
-        
+        from pathlib import Path
+
         # Определяем временной диапазон
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=hours)
-        
+
         # Собираем файлы в указанном диапазоне
         hourly_path = aggregator.hourly_path
         result = {
@@ -327,20 +352,20 @@ async def _get_hourly_data(aggregator, hours: int, detailed: bool = False):
             "start_time": start_time.isoformat(),
             "end_time": end_time.isoformat(),
             "hours_requested": hours,
-            "data": []
+            "data": [],
         }
-        
+
         # Ищем файлы по паттерну
         current_time = start_time
         while current_time <= end_time:
             hour_key = current_time.strftime("%Y-%m-%d_%H")
             hour_file = hourly_path / f"{hour_key}.json"
-            
+
             if hour_file.exists():
                 try:
-                    with open(hour_file, 'r', encoding='utf-8') as f:
+                    with open(hour_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                        
+
                         if detailed:
                             # Админы получают полные данные
                             result["data"].append(data)
@@ -349,18 +374,18 @@ async def _get_hourly_data(aggregator, hours: int, detailed: bool = False):
                             public_data = {
                                 "timestamp": data.get("timestamp"),
                                 "period_key": data.get("period_key"),
-                                "summary": data.get("summary", {})
+                                "summary": data.get("summary", {}),
                             }
                             result["data"].append(public_data)
-                            
+
                 except Exception as e:
                     logger.warning(f"Ошибка чтения файла {hour_file}: {e}")
-            
+
             current_time += timedelta(hours=1)
-        
+
         result["hours_found"] = len(result["data"])
         return result
-        
+
     except Exception as e:
         logger.error(f"Ошибка получения почасовых данных: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -371,47 +396,47 @@ async def get_latest_summary():
     """Получить последнюю сводку метрик (публичный доступ)."""
     try:
         aggregator = get_aggregator()
-        
+
         # Сначала ищем самый свежий дневной файл
         daily_files = list(aggregator.daily_path.glob("*.json"))
         if daily_files:
             latest_daily = sorted(daily_files)[-1]
-            
-            with open(latest_daily, 'r', encoding='utf-8') as f:
+
+            with open(latest_daily, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
+
             return {
                 "type": "daily",
                 "timestamp": data.get("timestamp"),
                 "period_key": data.get("period_key"),
                 "date": data.get("date"),
                 "summary": data.get("summary", {}),
-                "hours_aggregated": data.get("hours_aggregated", 0)
+                "hours_aggregated": data.get("hours_aggregated", 0),
             }
-        
+
         # Если дневных данных нет, ищем самый свежий почасовой файл
         hourly_files = list(aggregator.hourly_path.glob("*.json"))
         if not hourly_files:
             return {"message": "Нет доступных данных"}
-        
+
         # Сортируем по имени файла (содержит дату)
         latest_file = sorted(hourly_files)[-1]
-        
-        with open(latest_file, 'r', encoding='utf-8') as f:
+
+        with open(latest_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-        
+
         return {
             "type": "hourly",
             "timestamp": data.get("timestamp"),
-            "period_key": data.get("period_key"), 
+            "period_key": data.get("period_key"),
             "summary": data.get("summary", {}),
             "basic_stats": {
                 "uptime_hours": data.get("basic", {}).get("uptime_hours"),
                 "total_requests": data.get("basic", {}).get("analyze_requests"),
-                "error_rate": data.get("basic", {}).get("error_rate")
-            }
+                "error_rate": data.get("basic", {}).get("error_rate"),
+            },
         }
-        
+
     except Exception as e:
         logger.error(f"Ошибка получения последней сводки: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -422,7 +447,7 @@ async def get_daily_metrics(days: int = 30):
     """Получить дневные метрики за последние N дней (публичный доступ)."""
     if days < 1 or days > 90:  # Максимум 90 дней
         raise HTTPException(status_code=400, detail="days должно быть от 1 до 90")
-    
+
     aggregator = get_aggregator()
     return await _get_daily_data(aggregator, days)
 
@@ -431,10 +456,10 @@ async def get_daily_metrics(days: int = 30):
 async def get_daily_metrics_admin(request: Request, days: int = 90):
     """Получить детальные дневные метрики (админский доступ)."""
     require_admin_access(request)
-    
+
     if days < 1 or days > 90:
         raise HTTPException(status_code=400, detail="days должно быть от 1 до 90")
-    
+
     aggregator = get_aggregator()
     return await _get_daily_data(aggregator, days, detailed=True)
 
@@ -442,14 +467,14 @@ async def get_daily_metrics_admin(request: Request, days: int = 90):
 async def _get_daily_data(aggregator, days: int, detailed: bool = False):
     """Вспомогательная функция для получения дневных данных."""
     try:
-        from pathlib import Path
         import json
-        from datetime import datetime, timedelta, date
-        
+        from datetime import date, datetime, timedelta
+        from pathlib import Path
+
         # Определяем временной диапазон
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
-        
+
         # Собираем файлы в указанном диапазоне
         daily_path = aggregator.daily_path
         result = {
@@ -457,20 +482,20 @@ async def _get_daily_data(aggregator, days: int, detailed: bool = False):
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "days_requested": days,
-            "data": []
+            "data": [],
         }
-        
+
         # Ищем файлы по паттерну
         current_date = start_date
         while current_date <= end_date:
             day_key = current_date.strftime("%Y-%m-%d")
             day_file = daily_path / f"{day_key}.json"
-            
+
             if day_file.exists():
                 try:
-                    with open(day_file, 'r', encoding='utf-8') as f:
+                    with open(day_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                        
+
                         if detailed:
                             # Админы получают полные данные включая почасовую разбивку
                             result["data"].append(data)
@@ -481,18 +506,18 @@ async def _get_daily_data(aggregator, days: int, detailed: bool = False):
                                 "period_key": data.get("period_key"),
                                 "timestamp": data.get("timestamp"),
                                 "hours_aggregated": data.get("hours_aggregated"),
-                                "summary": data.get("summary", {})
+                                "summary": data.get("summary", {}),
                             }
                             result["data"].append(public_data)
-                            
+
                 except Exception as e:
                     logger.warning(f"Ошибка чтения файла {day_file}: {e}")
-            
+
             current_date += timedelta(days=1)
-        
+
         result["days_found"] = len(result["data"])
         return result
-        
+
     except Exception as e:
         logger.error(f"Ошибка получения дневных данных: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -512,12 +537,16 @@ async def list_models(
     """Получение списка доступных моделей от LLM API провайдера."""
     settings = get_settings()
 
-    effective_url, effective_key = resolve_llm_credentials(settings, llm_api_url, llm_api_key)
+    effective_url, effective_key = resolve_llm_credentials(
+        settings, llm_api_url, llm_api_key
+    )
 
     if not effective_url:
         return JSONResponse(
             status_code=503,
-            content={"detail": "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках."},
+            content={
+                "detail": "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках."
+            },
         )
 
     # Нормализуем base_url: убираем /v1, /v1/ и т.д.
@@ -529,6 +558,7 @@ async def list_models(
 
     try:
         import httpx
+
         http_kwargs: dict = {"timeout": 15.0}
         if not llm_api_url and settings.LLM_PROXY:
             http_kwargs["proxy"] = settings.LLM_PROXY
@@ -539,7 +569,11 @@ async def list_models(
             resp = await client.get(models_url, headers=headers)
             resp.raise_for_status()
             data = resp.json()
-            models = sorted(m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m)
+            models = sorted(
+                m["id"]
+                for m in data.get("data", [])
+                if isinstance(m, dict) and "id" in m
+            )
             return JSONResponse(content={"models": models})
     except Exception as e:
         logger.exception("Ошибка получения списка моделей")
@@ -574,7 +608,9 @@ async def analyze(
 
     # Rate limiting по IP
     client_ip = request.client.host if request.client else "unknown"
-    if _check_rate_limit(client_ip, settings.RATE_LIMIT_REQUESTS, settings.RATE_LIMIT_WINDOW):
+    if _check_rate_limit(
+        client_ip, settings.RATE_LIMIT_REQUESTS, settings.RATE_LIMIT_WINDOW
+    ):
         update_basic_metrics(rate_limit_hit=True)
         limit_msg = (
             f"Превышен лимит запросов ({settings.RATE_LIMIT_REQUESTS} "
@@ -599,7 +635,11 @@ async def analyze(
 
     # Проверка допустимых расширений файлов
     for f in files:
-        ext = ("." + f.filename.rsplit(".", 1)[-1].lower()) if f.filename and "." in f.filename else ""
+        ext = (
+            ("." + f.filename.rsplit(".", 1)[-1].lower())
+            if f.filename and "." in f.filename
+            else ""
+        )
         if ext not in _ALLOWED_EXTENSIONS:
             return JSONResponse(
                 status_code=400,
@@ -634,7 +674,9 @@ async def analyze(
     # Парсим языки переводов из comma-separated строки
     langs: list[str] | None = None
     if translation_languages:
-        langs = [lang.strip() for lang in translation_languages.split(",") if lang.strip()]
+        langs = [
+            lang.strip() for lang in translation_languages.split(",") if lang.strip()
+        ]
 
     # Выбираем очередь
     queue = custom_queue if is_custom_llm else server_queue
@@ -675,7 +717,9 @@ async def analyze(
                             )
                         except asyncio.TimeoutError:
                             if queue_item.cancelled:
-                                yield sse_error("Запрос отменён.", request_id=request_id)
+                                yield sse_error(
+                                    "Запрос отменён.", request_id=request_id
+                                )
                                 return
                             new_pos = queue.get_position(request_id)
                             if new_pos:
@@ -685,7 +729,10 @@ async def analyze(
                                     f"Ваш запрос в очереди. Позиция: {new_pos}. "
                                     f"Примерное ожидание: ~{max(1, new_eta // 60)} мин.",
                                     request_id=request_id,
-                                    extra={"queue_position": new_pos, "queue_eta": new_eta},
+                                    extra={
+                                        "queue_position": new_pos,
+                                        "queue_eta": new_eta,
+                                    },
                                 )
 
                     if queue_item.cancelled:
@@ -745,7 +792,9 @@ async def cancel_analyze(request: Request):
     body = await request.json()
     rid = body.get("request_id")
     if not rid:
-        return JSONResponse(status_code=400, content={"detail": "request_id обязателен"})
+        return JSONResponse(
+            status_code=400, content={"detail": "request_id обязателен"}
+        )
 
     cancelled = False
     if server_queue:
@@ -770,10 +819,12 @@ async def validate_schema(request: BuildRequest):
 
     template = build_template(request)
     schema_errors = validate_template(template)
-    return JSONResponse(content={
-        "errors": schema_errors,
-        "error_count": len(schema_errors),
-    })
+    return JSONResponse(
+        content={
+            "errors": schema_errors,
+            "error_count": len(schema_errors),
+        }
+    )
 
 
 @app.post("/api/validate")
@@ -782,27 +833,29 @@ async def validate(request: ValidateRequest):
     from register_validator import validate_registers
 
     result = validate_registers(request.registers)
-    return JSONResponse(content={
-        "registers": [
-            {
-                "register_id": rv.register_id,
-                "errors": [
-                    {
-                        "field": e.field,
-                        "severity": e.severity.value,
-                        "message_key": e.message_key,
-                        "message_params": e.message_params,
-                        "suggestion": e.suggestion,
-                    }
-                    for e in rv.errors
-                ],
-            }
-            for rv in result.registers
-            if rv.errors
-        ],
-        "error_count": result.error_count,
-        "warning_count": result.warning_count,
-    })
+    return JSONResponse(
+        content={
+            "registers": [
+                {
+                    "register_id": rv.register_id,
+                    "errors": [
+                        {
+                            "field": e.field,
+                            "severity": e.severity.value,
+                            "message_key": e.message_key,
+                            "message_params": e.message_params,
+                            "suggestion": e.suggestion,
+                        }
+                        for e in rv.errors
+                    ],
+                }
+                for rv in result.registers
+                if rv.errors
+            ],
+            "error_count": result.error_count,
+            "warning_count": result.warning_count,
+        }
+    )
 
 
 @app.post("/api/fix-registers")
@@ -839,9 +892,13 @@ async def fix_registers_endpoint(
     effective_model = (llm_model if is_custom_llm else None) or settings.LLM_MODEL
     effective_timeout = (llm_timeout if is_custom_llm else None) or settings.LLM_TIMEOUT
     effective_legacy = (
-        llm_legacy_max_tokens if llm_legacy_max_tokens is not None else settings.LLM_LEGACY_MAX_TOKENS
+        llm_legacy_max_tokens
+        if llm_legacy_max_tokens is not None
+        else settings.LLM_LEGACY_MAX_TOKENS
     )
-    effective_temperature = llm_temperature if is_custom_llm else settings.LLM_TEMPERATURE
+    effective_temperature = (
+        llm_temperature if is_custom_llm else settings.LLM_TEMPERATURE
+    )
 
     # Валидируем текущие регистры для получения описания ошибок
     validation = validate_registers(body.registers)
@@ -886,13 +943,15 @@ async def translate(request: TranslateRequest):
 
     # Изоляция ключей через единую функцию
     effective_url, effective_key = resolve_llm_credentials(
-        settings, request.llm_api_url if is_custom_llm else None,
+        settings,
+        request.llm_api_url if is_custom_llm else None,
         request.llm_api_key if is_custom_llm else None,
     )
     if is_custom_llm:
         effective_model = request.llm_model or settings.LLM_MODEL
         effective_legacy = (
-            request.llm_legacy_max_tokens if request.llm_legacy_max_tokens is not None
+            request.llm_legacy_max_tokens
+            if request.llm_legacy_max_tokens is not None
             else settings.LLM_LEGACY_MAX_TOKENS
         )
         effective_temperature = request.llm_temperature  # None = дефолт модели
@@ -921,6 +980,7 @@ async def translate(request: TranslateRequest):
     http_client = None
     if not is_custom_llm and settings.LLM_PROXY:
         import httpx
+
         http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
     # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
     client = AsyncOpenAI(
@@ -952,14 +1012,18 @@ async def translate(request: TranslateRequest):
             except Exception as e:
                 err_str = str(e)
                 fixed = False
-                if token_key in translate_kwargs and (fallback_key in err_str or token_key in err_str):
+                if token_key in translate_kwargs and (
+                    fallback_key in err_str or token_key in err_str
+                ):
                     logger.warning("Translate: %s → %s", token_key, fallback_key)
                     del translate_kwargs[token_key]
                     translate_kwargs[fallback_key] = 4096
                     token_key = fallback_key
                     fixed = True
                 if "temperature" in err_str and "temperature" in translate_kwargs:
-                    logger.warning("Translate: убираем temperature (не поддерживается моделью)")
+                    logger.warning(
+                        "Translate: убираем temperature (не поддерживается моделью)"
+                    )
                     del translate_kwargs["temperature"]
                     fixed = True
                 if not fixed:
