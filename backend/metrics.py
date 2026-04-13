@@ -1,7 +1,6 @@
 """Центральная система метрик для мониторинга приложения."""
 
 import logging
-import time
 from collections import deque
 from typing import Any
 

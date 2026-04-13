@@ -15,15 +15,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
 
-from aggregation import (get_aggregator, start_metrics_aggregation,
-                         stop_metrics_aggregation)
+from aggregation import get_aggregator, start_metrics_aggregation, stop_metrics_aggregation
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_service import analyze_document, resolve_llm_credentials
-from metrics import (get_admin_metrics, get_all_metrics, get_public_metrics,
-                     load_persisted_metrics, require_admin_access,
-                     start_metrics_persistence, stop_metrics_persistence,
-                     update_basic_metrics, update_monitoring_metrics)
+from metrics import (
+    get_admin_metrics,
+    get_all_metrics,
+    get_public_metrics,
+    load_persisted_metrics,
+    require_admin_access,
+    start_metrics_persistence,
+    stop_metrics_persistence,
+    update_basic_metrics,
+    update_monitoring_metrics,
+)
 from models import BuildRequest, TranslateRequest, ValidateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
@@ -339,7 +345,6 @@ async def _get_hourly_data(aggregator, hours: int, detailed: bool = False):
     try:
         import json
         from datetime import datetime, timedelta
-        from pathlib import Path
 
         # Определяем временной диапазон
         end_time = datetime.now()
@@ -468,8 +473,7 @@ async def _get_daily_data(aggregator, days: int, detailed: bool = False):
     """Вспомогательная функция для получения дневных данных."""
     try:
         import json
-        from datetime import date, datetime, timedelta
-        from pathlib import Path
+        from datetime import date, timedelta
 
         # Определяем временной диапазон
         end_date = date.today()

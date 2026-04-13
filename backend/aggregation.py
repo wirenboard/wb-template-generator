@@ -1,10 +1,8 @@
 """Модуль для агрегации метрик по временным периодам."""
 
 import asyncio
-import glob
 import json
 import logging
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional

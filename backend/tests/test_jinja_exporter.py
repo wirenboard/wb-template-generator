@@ -6,10 +6,14 @@ import os
 import jinja2
 import pytest
 
-from jinja_exporter import (_detect_channel_patterns, _detect_group_patterns,
-                            _detect_param_patterns,
-                            _detect_string_channel_patterns,
-                            _detect_translation_patterns, build_jinja_template)
+from jinja_exporter import (
+    _detect_channel_patterns,
+    _detect_group_patterns,
+    _detect_param_patterns,
+    _detect_string_channel_patterns,
+    _detect_translation_patterns,
+    build_jinja_template,
+)
 
 # Путь к директории с фикстурами
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")

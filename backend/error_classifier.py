@@ -1,8 +1,7 @@
 """Система классификации и человекочитаемых описаний ошибок LLM."""
 
-import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 
 @dataclass

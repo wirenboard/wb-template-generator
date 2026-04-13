@@ -1,12 +1,10 @@
 """Тесты для модуля persistence."""
 
-import asyncio
 import json
 import shutil
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
 import pytest
 

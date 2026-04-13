@@ -1,11 +1,10 @@
 """Тесты для модуля aggregation."""
 
-import asyncio
 import json
 import shutil
 import sys
 import tempfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 

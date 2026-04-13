@@ -7,9 +7,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from models import Register
-from register_validator import (Severity, auto_fix_and_validate,
-                                auto_fix_register, format_validation_errors,
-                                validate_register, validate_registers)
+from register_validator import (
+    Severity,
+    auto_fix_and_validate,
+    auto_fix_register,
+    format_validation_errors,
+    validate_register,
+    validate_registers,
+)
 
 # --- Хелперы ---
 

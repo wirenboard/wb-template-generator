@@ -25,8 +25,7 @@ import yaml  # noqa: E402
 from openai import AsyncOpenAI  # noqa: E402
 
 from config import Settings  # noqa: E402
-from llm_service import (_call_llm, _extract_json_from_response,  # noqa: E402
-                         _parse_registers)
+from llm_service import _call_llm, _extract_json_from_response, _parse_registers  # noqa: E402
 from prompts import get_analyze_prompt  # noqa: E402
 
 CASES_DIR = Path(__file__).parent / "cases"

@@ -13,8 +13,7 @@ from openai import AsyncOpenAI
 from PIL import Image
 
 from config import Settings
-from file_converter import (excel_to_text, image_to_base64, is_excel_file,
-                            is_image_file, is_pdf_file)
+from file_converter import excel_to_text, image_to_base64, is_excel_file, is_image_file, is_pdf_file
 from metrics import update_llm_metrics
 from models import AnalyzeResponse, DeviceInfo, Register
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
@@ -781,8 +780,7 @@ async def _analyze_single_batch(
 
             # --- Валидация: проверяем качество ответа ---
             from prompts import get_validation_retry_prompt
-            from register_validator import (format_validation_errors,
-                                            validate_registers)
+            from register_validator import format_validation_errors, validate_registers
 
             device_info, registers, auto_fixed = result
             if registers:
