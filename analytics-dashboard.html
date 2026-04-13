@@ -214,15 +214,21 @@
             currentLang = lang;
             
             // Обновляем кнопки
-            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.onclick && btn.onclick.toString().includes(`'${lang}'`)) {
+                    btn.classList.add('active');
+                }
+            });
             
             // Применяем переводы
             const t = translations[lang];
-            Object.keys(t).forEach(key => {
-                const elem = document.getElementById(key);
-                if (elem) elem.textContent = t[key];
-            });
+            if (t) {
+                Object.keys(t).forEach(key => {
+                    const elem = document.getElementById(key);
+                    if (elem) elem.textContent = t[key];
+                });
+            }
         }
 
         async function loadMetrics() {
