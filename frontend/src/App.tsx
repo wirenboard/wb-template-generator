@@ -18,7 +18,7 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-type Page = 'main' | 'monitoring';
+type Page = 'main' | 'monitoring' | 'analytics';
 
 /** Главная страница приложения WB Template Generator */
 export default function App() {
@@ -204,6 +204,12 @@ export default function App() {
               }`}
             >
               📊 {t('nav.monitoring')}
+            </button>
+            <button
+              onClick={() => window.open('/metrics-dashboard.html', '_blank')}
+              className="px-2 py-1 text-xs rounded transition-colors text-gray-600 hover:bg-gray-100"
+            >
+              📈 Analytics
             </button>
           </div>
           
