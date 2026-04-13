@@ -230,10 +230,17 @@
                 const response = await fetch('/api/metrics/summary/latest');
                 const data = await response.json();
                 
-                if (response.ok && data.message !== 'Нет доступных данных') {
+                console.log('Ответ API:', data); // Отладочная информация
+                
+                if (response.ok && data.message && (data.message.includes('Нет доступных') || data.message.includes('No data'))) {
+                    // Нет данных - показываем no-data блок
+                    document.getElementById('no-data').style.display = 'block';
+                } else if (response.ok && data.basic) {
+                    // Есть данные - показываем контент
                     displayMetrics(data);
                     document.getElementById('content').style.display = 'block';
                 } else {
+                    // Другие случаи - показываем no-data блок
                     document.getElementById('no-data').style.display = 'block';
                 }
             } catch (error) {
