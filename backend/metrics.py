@@ -1,5 +1,6 @@
 """Центральная система метрик для мониторинга приложения."""
 
+import hmac
 import logging
 from collections import deque
 from typing import Any
@@ -67,7 +68,7 @@ def check_admin_access(request: Request) -> bool:
         return False
 
     token = auth_header[7:]  # Убираем "Bearer "
-    return token == settings.ADMIN_TOKEN
+    return hmac.compare_digest(token, settings.ADMIN_TOKEN)
 
 
 def require_admin_access(request: Request) -> None:
@@ -92,7 +93,6 @@ def update_basic_metrics(
     duration: float = 0,
 ) -> None:
     """Обновляет базовые метрики анализа."""
-    global _metrics
 
     if analyze_request:
         _metrics["analyze_requests"] += 1
@@ -108,7 +108,6 @@ def update_monitoring_metrics(
     page_view: bool = False,
 ) -> None:
     """Обновляет метрики мониторинга."""
-    global _metrics
 
     if page_view:
         _metrics["monitoring_page_views"] += 1
@@ -124,11 +123,16 @@ def update_llm_metrics(
     retry: bool = False,
     error: bool = False,
     error_message: str = "",
+    count_request: bool = False,
 ) -> None:
-    """Обновляет LLM метрики. Вызывается из llm_service.py."""
-    global _metrics
+    """Обновляет LLM метрики. Вызывается из llm_service.py.
 
-    _metrics["llm_requests"] += 1
+    Args:
+        count_request: Инкрементировать счётчик llm_requests.
+            Передавать True только при реальном вызове LLM API.
+    """  # noqa: D401
+    if count_request:
+        _metrics["llm_requests"] += 1
     if error:
         _metrics["llm_errors"] += 1
 
@@ -257,7 +261,7 @@ def get_all_metrics() -> dict:
 
     # Объединяем админские метрики в публичную структуру
     result = public.copy()
-    result["llm"].update(admin)
+    result["llm"] = {**public["llm"], **admin}
 
     return result
 

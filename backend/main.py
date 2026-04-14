@@ -7,6 +7,7 @@ import re
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
@@ -343,9 +344,6 @@ async def get_hourly_metrics_admin(request: Request, hours: int = 72):
 async def _get_hourly_data(aggregator, hours: int, detailed: bool = False):
     """Вспомогательная функция для получения почасовых данных."""
     try:
-        import json
-        from datetime import datetime, timedelta
-
         # Определяем временной диапазон
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=hours)
@@ -393,7 +391,9 @@ async def _get_hourly_data(aggregator, hours: int, detailed: bool = False):
 
     except Exception as e:
         logger.error(f"Ошибка получения почасовых данных: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail="Ошибка получения почасовых данных"
+        )
 
 
 @app.get("/api/metrics/summary/latest")
@@ -444,7 +444,9 @@ async def get_latest_summary():
 
     except Exception as e:
         logger.error(f"Ошибка получения последней сводки: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail="Ошибка получения последней сводки"
+        )
 
 
 @app.get("/api/metrics/history/daily")
@@ -472,9 +474,6 @@ async def get_daily_metrics_admin(request: Request, days: int = 90):
 async def _get_daily_data(aggregator, days: int, detailed: bool = False):
     """Вспомогательная функция для получения дневных данных."""
     try:
-        import json
-        from datetime import date, timedelta
-
         # Определяем временной диапазон
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
@@ -524,7 +523,9 @@ async def _get_daily_data(aggregator, days: int, detailed: bool = False):
 
     except Exception as e:
         logger.error(f"Ошибка получения дневных данных: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail="Ошибка получения дневных данных"
+        )
 
 
 @app.get("/api/prompts")

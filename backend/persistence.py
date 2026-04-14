@@ -15,7 +15,7 @@ import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -117,20 +117,21 @@ class MetricsPersistence:
             file_path: Путь к целевому файлу
             data: Данные для сохранения
         """
-        # Создаем временный файл в той же директории
+        await asyncio.to_thread(self._save_json_atomic_sync, file_path, data)
+
+    def _save_json_atomic_sync(self, file_path: Path, data: Dict[str, Any]) -> None:
+        """Синхронная реализация атомарного сохранения JSON."""
         temp_fd, temp_path = tempfile.mkstemp(suffix=".json.tmp", dir=file_path.parent)
 
         try:
             with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
                 f.flush()
-                os.fsync(f.fileno())  # Принудительная запись на диск
+                os.fsync(f.fileno())
 
-            # Атомарное переименование
             shutil.move(temp_path, file_path)
 
         except Exception:
-            # Очищаем временный файл при ошибке
             try:
                 os.unlink(temp_path)
             except OSError:
@@ -138,15 +139,11 @@ class MetricsPersistence:
             raise
 
     async def _load_json(self, file_path: Path) -> Optional[Dict[str, Any]]:
-        """
-        Загрузка JSON файла.
+        """Загрузка JSON файла."""
+        return await asyncio.to_thread(self._load_json_sync, file_path)
 
-        Args:
-            file_path: Путь к файлу
-
-        Returns:
-            Загруженные данные или None если файл не найден/поврежден
-        """
+    def _load_json_sync(self, file_path: Path) -> Optional[Dict[str, Any]]:
+        """Синхронная реализация загрузки JSON."""
         if not file_path.exists():
             return None
 
@@ -159,14 +156,14 @@ class MetricsPersistence:
             return None
 
     async def start_auto_save(
-        self, get_metrics_func: Callable[[], Awaitable[Dict[str, Any]]]
+        self, get_metrics_func: Callable[[], Dict[str, Any]]
     ) -> None:
         """
         Запускает автоматическое периодическое сохранение метрик.
 
         Args:
             get_metrics_func: Функция для получения текущих метрик
-            interval_seconds: Интервал сохранения в секундах (по умолчанию 300 = 5 минут)
+            get_metrics_func: Синхронная функция, возвращающая текущие метрики
         """
         if self._auto_save_task is not None:
             logger.warning("Автосохранение уже запущено")

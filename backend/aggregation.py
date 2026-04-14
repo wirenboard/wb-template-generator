@@ -3,9 +3,9 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class MetricsAggregator:
         logger.info(f"Инициализация агрегатора метрик в {self.base_path}")
 
     async def start_aggregation(
-        self, get_metrics_func: Callable[[], Awaitable[Dict[str, Any]]]
+        self, get_metrics_func: Callable[[], Dict[str, Any]]
     ) -> None:
         """Запускает автоматическую агрегацию метрик."""
         if self._aggregation_task is not None:
@@ -102,7 +102,7 @@ class MetricsAggregator:
             logger.info("Автоматическая агрегация остановлена")
 
     async def _perform_hourly_aggregation(
-        self, get_metrics_func: Callable[[], Awaitable[Dict[str, Any]]]
+        self, get_metrics_func: Callable[[], Dict[str, Any]]
     ) -> None:
         """Выполняет почасовую агрегацию текущих метрик."""
         try:
@@ -205,12 +205,18 @@ class MetricsAggregator:
             logger.error(f"Ошибка дневной агрегации: {e}")
 
     async def _collect_hourly_data_for_day(
-        self, target_date: datetime
+        self, target_date: date
     ) -> List[Dict[str, Any]]:
         """Собирает все почасовые данные за указанный день."""
-        hourly_data = []
+        return await asyncio.to_thread(
+            self._collect_hourly_data_for_day_sync, target_date
+        )
 
-        # Ищем все файлы за указанную дату
+    def _collect_hourly_data_for_day_sync(
+        self, target_date: date
+    ) -> List[Dict[str, Any]]:
+        """Синхронная реализация сбора почасовых данных."""
+        hourly_data: List[Dict[str, Any]] = []
         date_pattern = target_date.strftime("%Y-%m-%d")
 
         for hour in range(24):
@@ -230,48 +236,49 @@ class MetricsAggregator:
     def _create_daily_summary(
         self, hourly_data: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Создает дневную сводку на основе почасовых данных."""
+        """Создает дневную сводку на основе почасовых данных.
+
+        Почасовые snapshot'ы содержат кумулятивные счётчики (нарастающий итог).
+        Дневная сводка вычисляется как разница между последним и первым snapshot'ом.
+        Пиковый час определяется по максимальной дельте между соседними часами.
+        """
         if not hourly_data:
             return {}
 
-        # Инициализация счетчиков
-        summary: Dict[str, Any] = {
-            "requests_total": 0,
-            "errors_total": 0,
-            "llm_requests_total": 0,
-            "tokens_total": 0,
-            "registers_extracted": 0,
-            "monitoring_page_views": 0,
-            "rate_limit_hits": 0,
-            "peak_hour": None,
-            "peak_requests_per_hour": 0,
-            "error_rate_percent": 0.0,
-        }
+        _COUNTER_KEYS = [
+            "requests_total",
+            "errors_total",
+            "llm_requests_total",
+            "tokens_total",
+            "registers_extracted",
+            "monitoring_page_views",
+            "rate_limit_hits",
+        ]
 
-        # Агрегируем данные по часам
-        for hour_data in hourly_data:
-            hour_summary = hour_data.get("summary", {})
+        first_summary = hourly_data[0].get("summary", {})
+        last_summary = hourly_data[-1].get("summary", {})
 
-            summary["requests_total"] += hour_summary.get("requests_total", 0)
-            summary["errors_total"] += hour_summary.get("errors_total", 0)
-            summary["llm_requests_total"] += hour_summary.get("llm_requests_total", 0)
-            summary["tokens_total"] += hour_summary.get("tokens_total", 0)
-            summary["registers_extracted"] += hour_summary.get("registers_extracted", 0)
-            summary["monitoring_page_views"] += hour_summary.get(
-                "monitoring_page_views", 0
-            )
-            summary["rate_limit_hits"] += hour_summary.get("rate_limit_hits", 0)
+        # Дневные итоги = последний snapshot минус первый (дельта за день)
+        summary: Dict[str, Any] = {}
+        for key in _COUNTER_KEYS:
+            summary[key] = last_summary.get(key, 0) - first_summary.get(key, 0)
 
-            # Находим час с пиковой активностью
-            hour_requests = hour_summary.get("requests_total", 0)
-            if hour_requests > summary["peak_requests_per_hour"]:
-                summary["peak_requests_per_hour"] = hour_requests
-                # Извлекаем час из period_key (формат: "2026-04-13_14")
-                period_key = hour_data.get("period_key", "")
+        summary["peak_hour"] = None
+        summary["peak_requests_per_hour"] = 0
+        summary["error_rate_percent"] = 0.0
+
+        # Пиковый час — максимальная дельта requests_total между соседними snapshot'ами
+        for i in range(1, len(hourly_data)):
+            prev = hourly_data[i - 1].get("summary", {})
+            curr = hourly_data[i].get("summary", {})
+            delta = curr.get("requests_total", 0) - prev.get("requests_total", 0)
+            if delta > summary["peak_requests_per_hour"]:
+                summary["peak_requests_per_hour"] = delta
+                period_key = hourly_data[i].get("period_key", "")
                 if "_" in period_key:
                     summary["peak_hour"] = period_key.split("_")[-1]
 
-        # Вычисляем общий процент ошибок
+        # Процент ошибок за день
         if summary["requests_total"] > 0:
             summary["error_rate_percent"] = round(
                 (summary["errors_total"] / summary["requests_total"]) * 100, 2
@@ -451,20 +458,25 @@ class MetricsAggregator:
     ) -> None:
         """Сохраняет агрегированные данные в файл."""
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            await asyncio.to_thread(self._save_json_sync, file_path, data)
         except Exception as e:
             logger.error(f"Ошибка сохранения {file_path}: {e}")
 
+    def _save_json_sync(self, file_path: Path, data: Dict[str, Any]) -> None:
+        """Синхронная запись JSON в файл."""
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
     def get_aggregation_status(self) -> Dict[str, Any]:
         """Возвращает статус системы агрегации."""
+        total_size = self._calculate_total_size()
         status: Dict[str, Any] = {
             "running": self._aggregation_task is not None
             and not self._aggregation_task.done(),
-            "total_size_bytes": self._calculate_total_size(),
+            "total_size_bytes": total_size,
             "max_size_bytes": self.max_total_size,
             "size_usage_percent": round(
-                (self._calculate_total_size() / self.max_total_size) * 100, 1
+                (total_size / self.max_total_size) * 100, 1
             ),
             "directories": {},
         }
@@ -501,7 +513,7 @@ def get_aggregator() -> MetricsAggregator:
 
 
 async def start_metrics_aggregation(
-    get_metrics_func: Callable[[], Awaitable[Dict[str, Any]]],
+    get_metrics_func: Callable[[], Dict[str, Any]],
 ) -> None:
     """Запускает автоматическую агрегацию метрик."""
     aggregator = get_aggregator()

@@ -26,10 +26,7 @@ disallow_any_generics = false
 
 [[tool.mypy.overrides]]
 module = ["persistence", "aggregation"]
-disallow_untyped_defs = false
-warn_return_any = false
 disallow_any_generics = false
-ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = ["openai.*", "pdf2image.*", "openpyxl.*", "PIL.*", "httpx.*", "pdfplumber.*"]

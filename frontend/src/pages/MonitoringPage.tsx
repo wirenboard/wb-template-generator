@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 
 interface SystemMetrics {
@@ -98,8 +98,12 @@ function formatUptime(seconds: number): string {
   if (hours > 0) {
     return `${hours}ч ${minutes}м`;
   }
-  
-  return `${minutes}м`;
+
+  if (minutes > 0) {
+    return `${minutes}м`;
+  }
+
+  return `${seconds}с`;
 }
 
 /** Русские названия категорий ошибок */
@@ -295,24 +299,31 @@ export default function MonitoringPage() {
   // Восстанавливаем токен из sessionStorage при загрузке
   useEffect(() => {
     const savedToken = sessionStorage.getItem('adminToken');
-    if (savedToken) {
-      setAdminToken(savedToken);
-      // Автоматически пробуем авторизоваться с сохраненным токеном
-      setTimeout(async () => {
+    if (!savedToken) return;
+
+    setAdminToken(savedToken);
+    let cancelled = false;
+
+    const timerId = setTimeout(async () => {
+      try {
         const response = await fetch('/api/admin/metrics', {
           headers: { 'Authorization': `Bearer ${savedToken}` }
         });
+        if (cancelled) return;
         if (response.ok) {
           const data = await response.json();
           setAdminMetrics(data);
           setIsAdminAuthenticated(true);
           setShowAdminSection(true);
         } else {
-          // Токен истек или недействителен - удаляем из storage
           sessionStorage.removeItem('adminToken');
         }
-      }, 100);
-    }
+      } catch {
+        // Сетевая ошибка при восстановлении — игнорируем
+      }
+    }, 100);
+
+    return () => { cancelled = true; clearTimeout(timerId); };
   }, []);
 
   /** Отслеживание просмотра страницы */
@@ -423,20 +434,30 @@ export default function MonitoringPage() {
     setLoading(false);
   };
 
+  // Отслеживаем просмотр страницы только при монтировании
+  useEffect(() => {
+    trackPageView();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refs для доступа к актуальным значениям из setInterval
+  const adminStateRef = useRef({ showAdminSection, isAdminAuthenticated, adminToken });
+  useEffect(() => {
+    adminStateRef.current = { showAdminSection, isAdminAuthenticated, adminToken };
+  }, [showAdminSection, isAdminAuthenticated, adminToken]);
+
   // Загрузка при монтировании и автообновление каждые 30 секунд
   useEffect(() => {
-    // Отслеживаем просмотр страницы при первом заходе
-    trackPageView();
-    
     fetchMetrics();
+    const REFRESH_INTERVAL_MS = 30_000;
     const interval = setInterval(() => {
-      fetchPublicMetrics(); // Всегда обновляем публичные метрики
-      if (showAdminSection && isAdminAuthenticated && adminToken) {
-        fetchAdminMetrics(); // Обновляем админские только если авторизованы
+      fetchPublicMetrics();
+      const { showAdminSection: show, isAdminAuthenticated: auth, adminToken: token } = adminStateRef.current;
+      if (show && auth && token) {
+        fetchAdminMetrics();
       }
-    }, 30000);
+    }, REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [showAdminSection, isAdminAuthenticated, adminToken]); // Добавляем зависимости
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -577,7 +598,7 @@ export default function MonitoringPage() {
         {/* Общий статус системы */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            🖥️ {t('sections.systemStatus')}
+            🖥️ {t('monitoring.systemHealth')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatusBadge 
@@ -604,7 +625,7 @@ export default function MonitoringPage() {
           {/* Очереди обработки */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              📊 {t('sections.processingQueues')}
+              📊 {t('queues.server')}
             </h2>
             <div className="space-y-4">
               {systemMetrics?.queues.server && (
@@ -659,7 +680,7 @@ export default function MonitoringPage() {
           {/* Статистика обработки */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              📈 {t('sections.processingStats')}
+              📈 {t('monitoring.processingStats')}
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <MetricCard 
@@ -691,66 +712,33 @@ export default function MonitoringPage() {
           {/* LLM метрики (публичные) */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              🤖 LLM Статистика
+              {t('monitoring.llmStats')}
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <MetricCard 
-                title="Всего запросов"
+              <MetricCard
+                title={t('metrics.llmRequests')}
                 value={publicMetrics?.llm.counters.llm_requests || 0}
                 variant="default"
               />
-              <MetricCard 
-                title="Ошибки LLM"
+              <MetricCard
+                title={t('metrics.llmErrors')}
                 value={publicMetrics?.llm.counters.llm_errors || 0}
                 variant={publicMetrics && publicMetrics.llm.quality.error_rate < 5 ? 'success' : 'warning'}
-                description={`${publicMetrics?.llm.quality.error_rate || 0}% от общего`}
+                description={`${publicMetrics?.llm.quality.error_rate ?? 0}%`}
               />
-              <MetricCard 
-                title="Повторы"
+              <MetricCard
+                title={t('metrics.llmRetries')}
                 value={publicMetrics?.llm.counters.llm_retries || 0}
                 variant={publicMetrics && publicMetrics.llm.quality.retry_rate < 10 ? 'success' : 'warning'}
-                description={`${publicMetrics?.llm.quality.retry_rate || 0}% от общего`}
+                description={`${publicMetrics?.llm.quality.retry_rate ?? 0}%`}
               />
-              <MetricCard 
-                title="Ср. время анализа"
+              <MetricCard
+                title={t('metrics.avgAnalysisTime')}
                 value={publicMetrics?.basic.histograms.analyze_duration_avg?.toFixed(1) || '—'}
-                unit="сек"
-                description={`${publicMetrics?.basic.histograms.analyze_duration_count || 0} измерений`}
+                unit={t('units.sec')}
+                description={t('metrics.measurementsCount', { count: publicMetrics?.basic.histograms.analyze_duration_count || 0 })}
               />
             </div>
-          </div>
-        </div>
-
-        {/* Публичные LLM Метрики */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            🤖 LLM Метрики (базовые)
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetricCard 
-              title="LLM запросов"
-              value={publicMetrics?.llm.counters.llm_requests || 0}
-              variant="default"
-            />
-            <MetricCard 
-              title="Ошибки LLM"
-              value={publicMetrics?.llm.counters.llm_errors || 0}
-              variant={publicMetrics && publicMetrics.llm.quality.error_rate > 5 ? 'error' : 'success'}
-              description={`${publicMetrics?.llm.quality.error_rate.toFixed(1) || 0}%`}
-            />
-            <MetricCard 
-              title="Ретраи"
-              value={publicMetrics?.llm.counters.llm_retries || 0}
-              variant={publicMetrics && publicMetrics.llm.quality.retry_rate > 10 ? 'warning' : 'success'}
-              description={`${publicMetrics?.llm.quality.retry_rate.toFixed(1) || 0}%`}
-            />
-            <MetricCard 
-              title="Качество"
-              value={publicMetrics ? (100 - publicMetrics.llm.quality.error_rate).toFixed(1) : '—'}
-              unit="%"
-              variant={publicMetrics && publicMetrics.llm.quality.error_rate < 5 ? 'success' : 'warning'}
-              description="Успешность"
-            />
           </div>
         </div>
 
@@ -758,52 +746,52 @@ export default function MonitoringPage() {
         {adminMetrics && (
           <div className="bg-white rounded-lg shadow-sm p-6 mt-6 border-l-4 border-blue-500">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              🔐 LLM Метрики (детальные)
+              {t('monitoring.llmMetricsDetailed')}
             </h2>
             <div className="space-y-6">
-              {/* Токены и стоимость */}
+              {/* Токены */}
               <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Использование токенов</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-3">{t('metrics.tokenUsage')}</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <MetricCard 
-                    title="Prompt токены"
+                  <MetricCard
+                    title={t('metrics.promptTokens')}
                     value={adminMetrics.tokens.total_prompt_tokens}
                     variant="default"
                   />
-                  <MetricCard 
-                    title="Completion токены"  
+                  <MetricCard
+                    title={t('metrics.completionTokens')}
                     value={adminMetrics.tokens.total_completion_tokens}
                     variant="default"
                   />
-                  <MetricCard 
-                    title="Всего токенов"
+                  <MetricCard
+                    title={t('metrics.totalTokens')}
                     value={adminMetrics.tokens.total_tokens}
                     variant="default"
                   />
                 </div>
               </div>
 
-              {/* Качество обработки и производительность */}
+              {/* Производительность */}
               <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Производительность</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-3">{t('metrics.performance')}</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <MetricCard 
-                    title="Регистров извлечено"
+                  <MetricCard
+                    title={t('metrics.registersExtracted')}
                     value={adminMetrics.processing.registers_extracted}
                     variant="success"
-                    description={`${adminMetrics.processing.avg_registers_per_request.toFixed(1)} в среднем`}
+                    description={`${adminMetrics.processing.avg_registers_per_request.toFixed(1)} ${t('metrics.avgPerRequest')}`}
                   />
-                  <MetricCard 
-                    title="Авто-исправлений"
+                  <MetricCard
+                    title={t('metrics.autoFixes')}
                     value={adminMetrics.processing.auto_fixes_applied}
                     variant={adminMetrics.processing.auto_fix_rate > 20 ? 'warning' : 'success'}
-                    description={`${adminMetrics.processing.auto_fix_rate.toFixed(1)}% от регистров`}
+                    description={`${adminMetrics.processing.auto_fix_rate.toFixed(1)}%`}
                   />
-                  <MetricCard 
-                    title="Ср. время LLM"
+                  <MetricCard
+                    title={t('metrics.avgLlmTime')}
                     value={adminMetrics.performance.llm_duration_avg?.toFixed(1) || '—'}
-                    unit="сек"
-                    description={`${adminMetrics.performance.llm_duration_count} запросов`}
+                    unit={t('units.sec')}
+                    description={`${adminMetrics.performance.llm_duration_count} ${t('metrics.requests')}`}
                   />
                 </div>
               </div>
@@ -811,7 +799,7 @@ export default function MonitoringPage() {
               {/* Анализ ошибок */}
               {adminMetrics.errors && (
                 <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Анализ ошибок</h3>
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">{t('errors.analysis')}</h3>
                   
                   {/* Категории ошибок */}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -830,7 +818,7 @@ export default function MonitoringPage() {
                   {adminMetrics.errors.recent.length > 0 && (
                     <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-3">
-                        Последние ошибки ({adminMetrics.errors.recent.length})
+                        {t('errors.recentErrors')} ({adminMetrics.errors.recent.length})
                       </h4>
                       <div className="space-y-3 max-h-96 overflow-y-auto">
                         {adminMetrics.errors.recent.map((error, index) => (
@@ -848,22 +836,22 @@ export default function MonitoringPage() {
         {/* Конфигурация системы */}
         <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            ⚙️ Конфигурация
+            {t('monitoring.systemConfig')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <MetricCard 
-              title="Версия"
+            <MetricCard
+              title={t('config.version')}
               value={appStatus?.version || 'dev'}
             />
-            <MetricCard 
-              title="LLM Модель"
-              value={appStatus?.server_model || 'Не настроена'}
+            <MetricCard
+              title={t('config.llmModel')}
+              value={appStatus?.server_model || t('config.notConfigured')}
               variant={appStatus?.llm_available ? 'success' : 'warning'}
             />
-            <MetricCard 
-              title="Лимит файла"
+            <MetricCard
+              title={t('config.fileLimit')}
               value={appStatus?.max_file_size_mb || 0}
-              unit="МБ"
+              unit={t('units.mb')}
             />
           </div>
         </div>

@@ -18,7 +18,7 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-type Page = 'main' | 'monitoring' | 'analytics';
+type Page = 'main' | 'monitoring';
 
 /** Главная страница приложения WB Template Generator */
 export default function App() {
@@ -198,18 +198,12 @@ export default function App() {
             <button
               onClick={() => setCurrentPage('monitoring')}
               className={`px-2 py-1 text-xs rounded transition-colors ${
-                currentPage === 'monitoring' 
-                  ? 'bg-blue-100 text-blue-700 font-medium' 
+                currentPage === 'monitoring'
+                  ? 'bg-blue-100 text-blue-700 font-medium'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              📊 {t('nav.monitoring')}
-            </button>
-            <button
-              onClick={() => window.location.href = '/analytics-dashboard.html'}
-              className="px-2 py-1 text-xs rounded transition-colors text-gray-600 hover:bg-gray-100"
-            >
-              📈 {t('nav.analytics')}
+              {t('nav.monitoring')}
             </button>
           </div>
           

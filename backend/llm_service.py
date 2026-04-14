@@ -252,10 +252,11 @@ async def _call_llm(
                     completion_tokens=usage.completion_tokens or 0,
                     total_tokens=usage.total_tokens or 0,
                     duration=llm_duration,
+                    count_request=True,
                 )
             else:
                 # Обновляем метрики без токенов
-                update_llm_metrics(duration=llm_duration)
+                update_llm_metrics(duration=llm_duration, count_request=True)
 
             if finish_reason == "length":
                 logger.warning(

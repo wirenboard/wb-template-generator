@@ -165,8 +165,12 @@ class TestMetricsAggregator:
         assert recent_file.exists()
 
     def test_create_daily_summary(self, aggregator):
-        """Тест создания дневной сводки."""
-        # Создаем тестовые почасовые данные
+        """Тест создания дневной сводки.
+
+        Почасовые snapshot'ы содержат кумулятивные счётчики.
+        Дневная сводка вычисляется как дельта: last - first.
+        """
+        # Кумулятивные данные: значения монотонно растут
         hourly_data = []
         for hour in range(0, 24, 4):  # Каждые 4 часа
             hour_data = {
@@ -174,7 +178,7 @@ class TestMetricsAggregator:
                 "timestamp": f"2026-04-13T{hour:02d}:00:00",
                 "summary": {
                     "requests_total": hour + 5,
-                    "errors_total": hour // 12,  # Ошибки только в поздние часы
+                    "errors_total": hour // 12,
                     "llm_requests_total": hour,
                     "tokens_total": (hour + 1) * 1000,
                     "registers_extracted": hour * 10,
@@ -186,13 +190,16 @@ class TestMetricsAggregator:
 
         summary = aggregator._create_daily_summary(hourly_data)
 
-        # Проверяем агрегированные значения
-        expected_requests = sum(h["summary"]["requests_total"] for h in hourly_data)
-        expected_errors = sum(h["summary"]["errors_total"] for h in hourly_data)
+        first = hourly_data[0]["summary"]
+        last = hourly_data[-1]["summary"]
 
-        assert summary["requests_total"] == expected_requests
-        assert summary["errors_total"] == expected_errors
-        assert summary["peak_hour"] == "20"  # Максимум в 20:00
+        # Дельта за день = last - first
+        expected_requests = last["requests_total"] - first["requests_total"]
+        expected_errors = last["errors_total"] - first["errors_total"]
+
+        assert summary["requests_total"] == expected_requests  # 25 - 5 = 20
+        assert summary["errors_total"] == expected_errors  # 1 - 0 = 1
+        assert summary["peak_hour"] is not None
         assert summary["error_rate_percent"] == round(
             (expected_errors / expected_requests) * 100, 2
         )

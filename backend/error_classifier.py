@@ -1,7 +1,6 @@
 """Система классификации и человекочитаемых описаний ошибок LLM."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
 
 
 @dataclass
@@ -16,21 +15,16 @@ class ErrorInfo:
     technical_details: str
 
 
-def classify_llm_error(
-    error_message: str, error_context: Optional[Dict[str, Any]] = None
-) -> ErrorInfo:
+def classify_llm_error(error_message: str) -> ErrorInfo:
     """Классифицирует ошибку LLM и возвращает человекочитаемое описание.
 
     Args:
         error_message: Сообщение об ошибке
-        error_context: Дополнительный контекст (модель, timeout, токены и т.д.)
 
     Returns:
         ErrorInfo с категорией, описанием и предложениями по исправлению
     """
     error_lower = error_message.lower()
-    # Контекст пока не используется, но может понадобиться в будущем
-    _ = error_context or {}
 
     # 1. Ошибки аутентификации
     if any(
@@ -209,33 +203,3 @@ def classify_llm_error(
     )
 
 
-def get_error_statistics() -> Dict[str, int]:
-    """Возвращает статистику ошибок по категориям (заглушка для будущего расширения)."""
-    # TODO: В будущем можно добавить сбор статистики ошибок
-    return {
-        "auth": 0,
-        "network": 0,
-        "quota": 0,
-        "model": 0,
-        "tokens": 0,
-        "format": 0,
-        "parsing": 0,
-        "empty": 0,
-        "api": 0,
-        "unknown": 0,
-    }
-
-
-def format_error_for_display(error_info: ErrorInfo) -> str:
-    """Форматирует ErrorInfo для отображения пользователю."""
-    severity_emoji = {"error": "❌", "warning": "⚠️", "info": "ℹ️"}
-
-    emoji = severity_emoji.get(error_info.severity, "❓")
-
-    return f"""{emoji} **{error_info.title}**
-
-{error_info.description}
-
-**Что делать**: {error_info.suggestion}
-
-*Категория*: {error_info.category}"""
