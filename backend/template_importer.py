@@ -7,13 +7,24 @@ import jinja2
 
 # Опциональные поля, которые копируются из канала/параметра в регистр as-is
 _OPTIONAL_FIELDS = (
-    "condition", "error_value", "word_order", "byte_order",
-    "string_data_size", "round_to", "on_value", "off_value", "min", "max",
+    "condition",
+    "error_value",
+    "word_order",
+    "byte_order",
+    "string_data_size",
+    "round_to",
+    "on_value",
+    "off_value",
+    "min",
+    "max",
 )
 
 # Дополнительные поля для roundtrip
 _ROUNDTRIP_FIELDS = (
-    "sporadic", "read_only", "required", "fw",
+    "sporadic",
+    "read_only",
+    "required",
+    "fw",
 )
 
 
@@ -32,7 +43,11 @@ def _extract_register_translations(
         tr: dict[str, str] = {}
         if name in lang_dict and lang_dict[name] != name:
             tr["name"] = lang_dict[name]
-        if description and description in lang_dict and lang_dict[description] != description:
+        if (
+            description
+            and description in lang_dict
+            and lang_dict[description] != description
+        ):
             tr["description"] = lang_dict[description]
         if tr:
             result[lang] = tr
@@ -74,7 +89,11 @@ def _extract_group_translations(
         tr: dict[str, str] = {}
         if title in lang_dict and lang_dict[title] != title:
             tr["title"] = lang_dict[title]
-        if description and description in lang_dict and lang_dict[description] != description:
+        if (
+            description
+            and description in lang_dict
+            and lang_dict[description] != description
+        ):
             tr["description"] = lang_dict[description]
         if tr:
             result[lang] = tr
@@ -95,7 +114,9 @@ def _parse_address(addr) -> int | str:
     return addr
 
 
-def _copy_optional_fields(source: dict, target: dict, fields: tuple[str, ...] = _OPTIONAL_FIELDS) -> None:
+def _copy_optional_fields(
+    source: dict, target: dict, fields: tuple[str, ...] = _OPTIONAL_FIELDS
+) -> None:
     """Копирует опциональные поля из source в target, если они не None."""
     for field in fields:
         value = source.get(field)
@@ -115,7 +136,9 @@ def _to_register(
     name = source.get(name_key, "")
     description = source.get("description")
     reg: dict = {
-        "id": original_id or re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "unknown",
+        "id": original_id
+        or re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+        or "unknown",
         "name": name,
         "address": _parse_address(source.get("address", 0)),
         "reg_type": source.get("reg_type", "holding"),
@@ -166,7 +189,9 @@ def _to_register(
     # Enum
     if source.get("enum") is not None:
         reg["enum_entries"] = _build_enum_entries(
-            source["enum"], source.get("enum_titles"), translations,
+            source["enum"],
+            source.get("enum_titles"),
+            translations,
         )
 
     # Переводы (включая EN где key != value)
@@ -190,8 +215,19 @@ def _parameter_to_register(
     """Конвертирует parameter шаблона в Register редактора."""
     # В parameters имя хранится в "title", а не "name"
     if "title" in param:
-        return _to_register(param, translations, is_parameter=True, name_key="title", original_id=param_id)
-    return _to_register({**param, "name": param_id}, translations, is_parameter=True, original_id=param_id)
+        return _to_register(
+            param,
+            translations,
+            is_parameter=True,
+            name_key="title",
+            original_id=param_id,
+        )
+    return _to_register(
+        {**param, "name": param_id},
+        translations,
+        is_parameter=True,
+        original_id=param_id,
+    )
 
 
 def import_template(raw: dict) -> dict:
@@ -251,7 +287,12 @@ def import_template(raw: dict) -> dict:
     # Device-level properties (для roundtrip)
     if raw.get("hw"):
         device_info["hw"] = raw["hw"]
-    for prop in ("max_read_registers", "response_timeout_ms", "frame_timeout_ms", "enable_wb_continuous_read"):
+    for prop in (
+        "max_read_registers",
+        "response_timeout_ms",
+        "frame_timeout_ms",
+        "enable_wb_continuous_read",
+    ):
         if device.get(prop) is not None:
             device_info[prop] = device[prop]
 
@@ -272,7 +313,9 @@ def import_template(raw: dict) -> dict:
         # UI options
         if g.get("ui_options"):
             group["ui_options"] = g["ui_options"]
-        tr = _extract_group_translations(g.get("title", ""), g.get("description"), translations)
+        tr = _extract_group_translations(
+            g.get("title", ""), g.get("description"), translations
+        )
         if tr:
             group["translations"] = tr
         groups.append(group)
@@ -292,7 +335,9 @@ def import_template(raw: dict) -> dict:
         # parameters как list (некоторые шаблоны используют массив)
         for param in raw_params:
             raw_title = param.get("title", param.get("name", "param")).lower()
-            param_id = param.get("id") or re.sub(r"[^a-z0-9]+", "_", raw_title).strip("_")
+            param_id = param.get("id") or re.sub(r"[^a-z0-9]+", "_", raw_title).strip(
+                "_"
+            )
             registers.append(_parameter_to_register(param_id, param, translations))
 
     return {
@@ -305,7 +350,7 @@ def import_template(raw: dict) -> dict:
 def _extract_with_variables(text: str) -> dict[str, str]:
     """Извлекает переменные из {% with var = "value", ... %} блока."""
     result: dict[str, str] = {}
-    match = re.search(r'\{%\s*with\b(.*?)%\}', text, re.DOTALL)
+    match = re.search(r"\{%\s*with\b(.*?)%\}", text, re.DOTALL)
     if not match:
         return result
     body = match.group(1)
@@ -359,10 +404,10 @@ def _strip_json_comments(text: str) -> str:
     Удаляет как строки, начинающиеся с //, так и inline-комментарии после значений.
     """
     # Удаляем строки, начинающиеся с комментария
-    text = re.sub(r'^\s*//.*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*//.*$", "", text, flags=re.MULTILINE)
     # Удаляем inline-комментарии: значение // комментарий
     # Ищем // которые НЕ внутри строк (упрощённо: после числа/true/false/null)
-    text = re.sub(r'(\b\d+|true|false|null)\s*//.*$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r"(\b\d+|true|false|null)\s*//.*$", r"\1", text, flags=re.MULTILINE)
     return text
 
 

@@ -81,7 +81,6 @@ def _sanitize_channel_name(name: str) -> str:
     return _FORBIDDEN_NAME_CHARS.sub("", name).strip()
 
 
-
 def _build_channel(reg: Register, group_id: str, channel_id: str) -> dict:
     """Собирает описание канала из регистра."""
     ch: dict = {
@@ -281,7 +280,7 @@ def _build_translations(
         existing = result[lang].get(key)
         if existing is not None and existing != value:
             warnings.append(
-                f"Конфликт перевода [{lang}]: \"{key}\" → \"{existing}\" vs \"{value}\""
+                f'Конфликт перевода [{lang}]: "{key}" → "{existing}" vs "{value}"'
             )
         result[lang][key] = value
 
@@ -364,12 +363,16 @@ def _build_translations(
         if reg.enum_entries:
             for entry in reg.enum_entries:
                 # EN: добавляем только если есть EN override (key != value)
-                en_entry_tr = entry.translations.get("en") if entry.translations else None
+                en_entry_tr = (
+                    entry.translations.get("en") if entry.translations else None
+                )
                 if en_entry_tr:
                     result["en"][entry.title] = en_entry_tr
 
                 for lang in all_langs:
-                    entry_tr = entry.translations.get(lang) if entry.translations else None
+                    entry_tr = (
+                        entry.translations.get(lang) if entry.translations else None
+                    )
                     if entry_tr:
                         _set_translation(lang, entry.title, entry_tr)
 
@@ -382,10 +385,7 @@ def _build_translations(
     for lang in list(result.keys()):
         if lang == "en":
             continue
-        has_unique = any(
-            k != v and en.get(k) != v
-            for k, v in result[lang].items()
-        )
+        has_unique = any(k != v and en.get(k) != v for k, v in result[lang].items())
         if not has_unique:
             del result[lang]
 
@@ -453,7 +453,11 @@ def build_template(request: BuildRequest) -> dict:
 
     # Переводы
     translations, translation_warnings = _build_translations(
-        registers, groups, request_groups, device_info, title_key,
+        registers,
+        groups,
+        request_groups,
+        device_info,
+        title_key,
     )
 
     # Сборка итогового шаблона

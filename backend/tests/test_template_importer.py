@@ -159,8 +159,18 @@ class TestImportEnum:
                 ],
                 "parameters": {},
                 "translations": {
-                    "en": {"Mode": "Mode", "Off": "Off", "Auto": "Auto", "Manual": "Manual"},
-                    "ru": {"Mode": "Режим", "Off": "Выкл", "Auto": "Авто", "Manual": "Ручной"},
+                    "en": {
+                        "Mode": "Mode",
+                        "Off": "Off",
+                        "Auto": "Auto",
+                        "Manual": "Manual",
+                    },
+                    "ru": {
+                        "Mode": "Режим",
+                        "Off": "Выкл",
+                        "Auto": "Авто",
+                        "Manual": "Ручной",
+                    },
                 },
             },
         }
@@ -270,64 +280,88 @@ class TestImportValidation:
 
     def test_channels_only_passes(self):
         """Шаблон только с каналами — допускается."""
-        result = import_template({
-            "device": {
-                "name": "Test",
-                "id": "test",
-                "channels": [{"name": "Ch", "address": 0, "reg_type": "holding", "type": "value", "format": "u16"}],
+        result = import_template(
+            {
+                "device": {
+                    "name": "Test",
+                    "id": "test",
+                    "channels": [
+                        {
+                            "name": "Ch",
+                            "address": 0,
+                            "reg_type": "holding",
+                            "type": "value",
+                            "format": "u16",
+                        }
+                    ],
+                }
             }
-        })
+        )
         assert len(result["registers"]) == 1
 
     def test_parameters_only_passes(self):
         """Шаблон только с параметрами (без каналов) — допускается."""
-        result = import_template({
-            "device": {
-                "name": "Test",
-                "id": "test",
-                "parameters": {
-                    "baud_rate": {
-                        "title": "Baud rate",
-                        "address": 110,
-                        "reg_type": "holding",
-                        "format": "u16",
-                        "enum": [1200, 2400, 9600],
-                        "enum_titles": ["1200", "2400", "9600"],
-                        "default": 9600,
+        result = import_template(
+            {
+                "device": {
+                    "name": "Test",
+                    "id": "test",
+                    "parameters": {
+                        "baud_rate": {
+                            "title": "Baud rate",
+                            "address": 110,
+                            "reg_type": "holding",
+                            "format": "u16",
+                            "enum": [1200, 2400, 9600],
+                            "enum_titles": ["1200", "2400", "9600"],
+                            "default": 9600,
+                        },
                     },
-                },
+                }
             }
-        })
+        )
         assert len(result["registers"]) == 1
         assert result["registers"][0]["is_parameter"] is True
 
     def test_device_id_without_device_type_passes(self):
         """Шаблон с device.id, но без device_type — допускается."""
-        result = import_template({
-            "device": {
-                "id": "my-device",
-                "channels": [{"name": "Ch", "address": 0, "reg_type": "holding", "type": "value", "format": "u16"}],
+        result = import_template(
+            {
+                "device": {
+                    "id": "my-device",
+                    "channels": [
+                        {
+                            "name": "Ch",
+                            "address": 0,
+                            "reg_type": "holding",
+                            "type": "value",
+                            "format": "u16",
+                        }
+                    ],
+                }
             }
-        })
+        )
         assert result["device_info"]["id"] == "my-device"
 
     def test_parameters_as_list_passes(self):
         """Параметры как list (альтернативный формат) — допускается."""
-        result = import_template({
-            "device": {
-                "name": "Test",
-                "id": "test",
-                "parameters": [
-                    {
-                        "title": "Baud rate",
-                        "address": 110,
-                        "reg_type": "holding",
-                        "format": "u16",
-                        "default": 9600,
-                    },
-                ],
+        result = import_template(
+            {
+                "device": {
+                    "name": "Test",
+                    "id": "test",
+                    "parameters": [
+                        {
+                            "title": "Baud rate",
+                            "address": 110,
+                            "reg_type": "holding",
+                            "format": "u16",
+                            "default": 9600,
+                        },
+                    ],
+                }
             }
-        })
+        )
         assert len(result["registers"]) == 1
         assert result["registers"][0]["is_parameter"] is True
         assert result["registers"][0]["name"] == "Baud rate"
@@ -359,7 +393,9 @@ class TestRoundtrip:
 
         # Проверяем ключевые поля
         assert built["device"]["id"] == minimal_template["device"]["id"]
-        assert len(built["device"]["channels"]) == len(minimal_template["device"]["channels"])
+        assert len(built["device"]["channels"]) == len(
+            minimal_template["device"]["channels"]
+        )
         assert built["device"]["channels"][0]["name"] == "Temperature"
         assert built["device"]["channels"][0]["format"] == "s16"
         assert built["device"]["channels"][0]["units"] == "deg C"
