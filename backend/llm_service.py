@@ -304,6 +304,115 @@ async def _call_llm(
     return "", None
 
 
+def _humanize_llm_error(err_msg: str) -> str:
+    """Преобразует сырую ошибку LLM API в человекочитаемое сообщение.
+
+    Распознаёт типичные ошибки OpenAI-совместимых API (401, 403, 404, 429, 500,
+    таймаут, connection error и т.д.) и возвращает понятное описание с советом.
+    Оригинальный текст ошибки сохраняется внизу для диагностики.
+    """
+    lower = err_msg.lower()
+
+    # --- Аутентификация (401) ---
+    if "401" in err_msg or "unauthorized" in lower or "invalid.*api.?key" in lower or "incorrect api key" in lower or "authentication" in lower:
+        human = (
+            "Неверный API-ключ.\n"
+            "Проверьте ключ в настройках LLM и убедитесь, что он актуален."
+        )
+    # --- Доступ запрещён (403) ---
+    elif "403" in err_msg or "permission denied" in lower or "forbidden" in lower or "access denied" in lower:
+        human = (
+            "Доступ запрещён.\n"
+            "У вашего API-ключа нет прав на использование этой модели или ресурса."
+        )
+    # --- Модель не найдена (404) ---
+    elif ("404" in err_msg and "model" in lower) or "does not exist" in lower or "model_not_found" in lower:
+        human = (
+            "Модель не найдена.\n"
+            "Проверьте название модели в настройках LLM. "
+            "Убедитесь, что модель доступна на вашем API-провайдере."
+        )
+    # --- Другие 404 (неверный URL) ---
+    elif "404" in err_msg or "not found" in lower:
+        human = (
+            "Эндпоинт не найден (404).\n"
+            "Проверьте URL API в настройках LLM."
+        )
+    # --- Rate limit (429) ---
+    elif "429" in err_msg or "rate limit" in lower or "too many requests" in lower or "quota" in lower:
+        human = (
+            "Превышен лимит запросов к LLM API.\n"
+            "Подождите немного и попробуйте снова. "
+            "Если ошибка повторяется, проверьте лимиты вашего тарифа."
+        )
+    # --- Превышен контекст / слишком длинный запрос ---
+    elif "context" in lower and ("length" in lower or "exceed" in lower or "too long" in lower or "maximum" in lower):
+        human = (
+            "Документ слишком большой для контекстного окна модели.\n"
+            "Попробуйте загрузить меньше страниц или разбить документ на части."
+        )
+    elif "maximum" in lower and "tokens" in lower:
+        human = (
+            "Превышен лимит токенов модели.\n"
+            "Попробуйте загрузить меньше страниц или выберите модель с большим контекстом."
+        )
+    # --- Таймаут ---
+    elif "timeout" in lower or "timed out" in lower or "request timed out" in lower:
+        human = (
+            "Таймаут запроса к LLM.\n"
+            "Сервер не ответил вовремя. Для больших документов может потребоваться "
+            "больше времени — попробуйте увеличить таймаут в настройках или уменьшить объём документа."
+        )
+    # --- Ошибки соединения ---
+    elif "connection error" in lower or "connect error" in lower or "connection refused" in lower:
+        human = (
+            "Не удалось подключиться к LLM API.\n"
+            "Проверьте URL API в настройках и убедитесь, что сервер доступен."
+        )
+    elif "could not resolve" in lower or "name resolution" in lower or "dns" in lower or "getaddrinfo" in lower:
+        human = (
+            "Не удалось определить адрес сервера LLM API.\n"
+            "Проверьте правильность URL в настройках LLM."
+        )
+    elif "ssl" in lower or "certificate" in lower or "cert" in lower:
+        human = (
+            "Ошибка SSL-сертификата при подключении к LLM API.\n"
+            "Проверьте URL (http/https) и валидность сертификата сервера."
+        )
+    # --- Серверные ошибки (5xx) ---
+    elif "500" in err_msg or "internal server error" in lower:
+        human = (
+            "Внутренняя ошибка сервера LLM (500).\n"
+            "Проблема на стороне провайдера. Попробуйте повторить запрос позже."
+        )
+    elif "502" in err_msg or "bad gateway" in lower:
+        human = (
+            "Ошибка шлюза LLM API (502).\n"
+            "Сервер провайдера временно недоступен. Попробуйте позже."
+        )
+    elif "503" in err_msg or "service unavailable" in lower or "overloaded" in lower:
+        human = (
+            "Сервис LLM временно недоступен (503).\n"
+            "Сервер перегружен или на обслуживании. Попробуйте позже."
+        )
+    elif "529" in err_msg:
+        human = (
+            "LLM API перегружен (529).\n"
+            "Попробуйте повторить запрос через несколько минут."
+        )
+    # --- Невалидный JSON / ответ ---
+    elif "json" in lower and ("decode" in lower or "parse" in lower or "invalid" in lower):
+        human = (
+            "LLM API вернул невалидный ответ.\n"
+            "Возможно, URL указывает не на OpenAI-совместимый API."
+        )
+    # --- Неизвестная ошибка — оставляем как есть, но с обёрткой ---
+    else:
+        return f"Ошибка LLM API: {err_msg}"
+
+    return f"{human}\n\nТехнические детали: {err_msg}"
+
+
 def _get_file_mime(filename: str) -> str:
     """Определяет MIME-тип файла по расширению."""
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
@@ -605,7 +714,7 @@ async def analyze_document(
                     request_id=request_id,
                 )
             else:
-                yield sse_error(f"Ошибка LLM API: {e}", request_id=request_id)
+                yield sse_error(_humanize_llm_error(err_msg), request_id=request_id)
             return
 
         # --- Этап 5: мерж результатов ---
@@ -707,7 +816,7 @@ async def analyze_document(
         logger.exception("Ошибка при анализе документа")
         # Обновляем метрики при общей ошибке анализа
         update_llm_metrics(error=True, error_message=str(e))
-        yield sse_error(f"Ошибка анализа: {e!s}", request_id=request_id)
+        yield sse_error(_humanize_llm_error(str(e)), request_id=request_id)
 
 
 async def _analyze_single_batch(
@@ -975,4 +1084,4 @@ async def fix_registers(
         logger.exception("Ошибка при исправлении регистров через AI")
         # Обновляем метрики при ошибке
         update_llm_metrics(error=True, error_message=str(e))
-        yield sse_error(f"Ошибка: {e!s}", request_id=request_id)
+        yield sse_error(_humanize_llm_error(str(e)), request_id=request_id)

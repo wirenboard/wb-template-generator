@@ -35,6 +35,7 @@ from models import BuildRequest, TranslateRequest, ValidateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
 from request_context import generate_request_id, get_request_id, set_request_id
+from llm_service import _humanize_llm_error
 from sse import sse_error, sse_progress
 from template_builder import build_template
 from template_importer import detect_and_import
@@ -771,7 +772,7 @@ async def analyze(
         except Exception as e:
             logger.exception("Ошибка в очереди/анализе")
             update_basic_metrics(analyze_error=True)
-            yield sse_error(f"Ошибка: {e!s}", request_id=request_id)
+            yield sse_error(_humanize_llm_error(str(e)), request_id=request_id)
 
         finally:
             duration = time.monotonic() - start_time
