@@ -25,6 +25,15 @@ class TestHumanizeLlmError:
 
     # --- Доступ запрещён (403) ---
 
+    def test_403_geo_restriction(self):
+        msg = _humanize_llm_error(
+            "Error code: 403 - {'error': {'code': 'unsupported_country_region_territory', "
+            "'message': 'Country, region, or territory not supported.', "
+            "'param': None, 'type': 'request_forbidden'}}"
+        )
+        assert "недоступен в вашем регионе" in msg
+        assert "Технические детали:" in msg
+
     def test_403_permission_denied(self):
         msg = _humanize_llm_error(
             "Error code: 403 - {'error': {'message': 'Permission denied'}}"

@@ -324,6 +324,12 @@ def _humanize_llm_error(err_msg: str) -> str:
             "Неверный API-ключ.\n"
             "Проверьте ключ в настройках LLM и убедитесь, что он актуален."
         )
+    # --- Гео-ограничение (403, country/region/territory) ---
+    elif "country" in lower or "region" in lower or "territory" in lower:
+        human = (
+            "Сервис LLM недоступен в вашем регионе.\n"
+            "Используйте VPN/прокси или другого LLM-провайдера без региональных ограничений."
+        )
     # --- Доступ запрещён (403) ---
     elif "403" in err_msg or "permission denied" in lower or "forbidden" in lower or "access denied" in lower:
         human = (
@@ -436,6 +442,11 @@ def _is_file_unsupported(error_msg: str) -> bool:
     прямую отправку файлов (type: "file"), и нужно откатиться на конвертацию.
     """
     lower = error_msg.lower()
+
+    # Исключаем ошибки, не связанные с файлами (geo-restriction, access denied и т.д.)
+    if "country" in lower or "region" in lower or "territory" in lower:
+        return False
+
     keywords = [
         "invalid_content_type",
         "content type",
@@ -445,10 +456,11 @@ def _is_file_unsupported(error_msg: str) -> bool:
         "unrecognized content",
     ]
     has_keyword = any(kw in lower for kw in keywords)
-    has_context = (
-        "file" in lower or "pdf" in lower or "type" in lower or "xlsx" in lower
+    has_file_context = (
+        "file" in lower or "pdf" in lower or "xlsx" in lower
+        or "content_type" in lower or "image" in lower
     )
-    return has_keyword and has_context
+    return has_keyword and has_file_context
 
 
 # ---------------------------------------------------------------------------
