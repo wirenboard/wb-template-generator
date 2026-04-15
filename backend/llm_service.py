@@ -314,7 +314,12 @@ def _humanize_llm_error(err_msg: str) -> str:
     lower = err_msg.lower()
 
     # --- Аутентификация (401) ---
-    if "401" in err_msg or "unauthorized" in lower or "invalid.*api.?key" in lower or "incorrect api key" in lower or "authentication" in lower:
+    if (
+        "401" in err_msg
+        or "unauthorized" in lower
+        or "incorrect api key" in lower
+        or "authentication" in lower
+    ):
         human = (
             "Неверный API-ключ.\n"
             "Проверьте ключ в настройках LLM и убедитесь, что он актуален."

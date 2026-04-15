@@ -1,7 +1,5 @@
 """Тесты для _humanize_llm_error — человекочитаемые сообщения об ошибках LLM API."""
 
-import pytest
-
 from llm_service import _humanize_llm_error
 
 

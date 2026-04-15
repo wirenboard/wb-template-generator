@@ -19,7 +19,7 @@ from openai import AsyncOpenAI
 from aggregation import get_aggregator, start_metrics_aggregation, stop_metrics_aggregation
 from config import get_settings
 from jinja_exporter import build_jinja_template
-from llm_service import analyze_document, resolve_llm_credentials
+from llm_service import _humanize_llm_error, analyze_document, resolve_llm_credentials
 from metrics import (
     get_admin_metrics,
     get_all_metrics,
@@ -35,7 +35,6 @@ from models import BuildRequest, TranslateRequest, ValidateRequest
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
 from request_context import generate_request_id, get_request_id, set_request_id
-from llm_service import _humanize_llm_error
 from sse import sse_error, sse_progress
 from template_builder import build_template
 from template_importer import detect_and_import
