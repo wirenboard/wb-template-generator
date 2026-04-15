@@ -141,8 +141,11 @@ class MetricsAggregator:
             "requests_total": basic.get("counters", {}).get("analyze_requests", 0),
             "errors_total": basic.get("counters", {}).get("analyze_errors", 0),
             "error_rate_percent": round(
-                basic.get("counters", {}).get("analyze_errors", 0)
-                / max(1, basic.get("counters", {}).get("analyze_requests", 0))
+                min(
+                    basic.get("counters", {}).get("analyze_errors", 0)
+                    / max(1, basic.get("counters", {}).get("analyze_requests", 0)),
+                    1.0,
+                )
                 * 100,
                 2,
             ),

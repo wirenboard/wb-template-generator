@@ -198,10 +198,10 @@ def get_public_metrics() -> dict:
             },
             "quality": {
                 "error_rate": round(
-                    _metrics["llm_errors"] / max(_metrics["llm_requests"], 1) * 100, 1
+                    min(_metrics["llm_errors"] / max(_metrics["llm_requests"], 1), 1.0) * 100, 1
                 ),
                 "retry_rate": round(
-                    _metrics["llm_retries"] / max(_metrics["llm_requests"], 1) * 100, 1
+                    min(_metrics["llm_retries"] / max(_metrics["llm_requests"], 1), 1.0) * 100, 1
                 ),
             },
         },

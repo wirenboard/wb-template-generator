@@ -489,8 +489,8 @@ export default function MonitoringPage() {
   }
 
   const isSystemHealthy = systemMetrics?.status === 'ok';
-  const errorRate = publicMetrics ? 
-    (publicMetrics.basic.counters.analyze_errors / Math.max(1, publicMetrics.basic.counters.analyze_requests) * 100) : 0;
+  const errorRate = publicMetrics ?
+    Math.min(publicMetrics.basic.counters.analyze_errors / Math.max(1, publicMetrics.basic.counters.analyze_requests), 1.0) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
