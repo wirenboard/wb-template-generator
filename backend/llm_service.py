@@ -21,6 +21,7 @@ from file_converter import (
     is_pdf_file,
 )
 from models import AnalyzeResponse, DeviceInfo, Register
+from notifier import report_llm_api_error
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
 from sse import sse_done, sse_error, sse_progress, sse_result
 
@@ -484,6 +485,10 @@ async def analyze_document(
             client, effective_model, system_prompt, llm_content,
             effective_timeout, effective_max_tokens, effective_legacy,
             effective_temperature, status=batch_status,
+            error_endpoint="analyze_document",
+            error_request_id=request_id or "",
+            error_model=effective_model,
+            is_custom_llm=is_custom_llm,
         ))
         start_time = time.monotonic()
         soft_sent = False
@@ -642,6 +647,11 @@ async def _analyze_single_batch(
     legacy_max_tokens: bool = False,
     temperature: float | None = None,
     status: dict | None = None,
+    *,
+    error_endpoint: str = "analyze_document",
+    error_request_id: str = "",
+    error_model: str = "",
+    is_custom_llm: bool = False,
 ) -> tuple[DeviceInfo, list[Register]] | str:
     """Анализирует один батч данных через LLM.
 
@@ -673,6 +683,11 @@ async def _analyze_single_batch(
             client, model, system_prompt, content, timeout, max_tokens, legacy_max_tokens, temperature,
         )
     except Exception as e:
+        # Уведомление и метрики (только для серверного LLM)
+        await report_llm_api_error(
+            e, endpoint=error_endpoint, request_id=error_request_id,
+            model=error_model, is_custom_llm=is_custom_llm,
+        )
         raise LLMApiError(str(e)) from e
 
     # Проверяем пустой ответ
@@ -753,6 +768,10 @@ async def _analyze_single_batch(
         )
     except Exception as e:
         status["failed"] = True
+        await report_llm_api_error(
+            e, endpoint=error_endpoint, request_id=error_request_id,
+            model=error_model, is_custom_llm=is_custom_llm,
+        )
         raise LLMApiError(str(e)) from e
 
     # Проверяем пустой ответ повторной попытки
@@ -789,6 +808,7 @@ async def fix_registers(
     temperature: float | None = 0,
     proxy: str = "",
     request_id: str = "",
+    is_custom_llm: bool = False,
 ) -> AsyncGenerator[str, None]:
     """SSE-генератор: отправляет регистры с ошибками в LLM для исправления.
 
@@ -824,11 +844,18 @@ async def fix_registers(
 
         yield sse_progress("analyzing", "LLM исправляет ошибки...", request_id=request_id)
 
-        raw_response, _usage = await _call_llm(
-            client, effective_model,
-            "You are a Modbus device template validator.",
-            content, effective_timeout, max_tokens, legacy_max_tokens, temperature,
-        )
+        try:
+            raw_response, _usage = await _call_llm(
+                client, effective_model,
+                "You are a Modbus device template validator.",
+                content, effective_timeout, max_tokens, legacy_max_tokens, temperature,
+            )
+        except Exception as api_exc:
+            await report_llm_api_error(
+                api_exc, endpoint="fix_registers", request_id=request_id,
+                model=effective_model, is_custom_llm=is_custom_llm,
+            )
+            raise
 
         if not raw_response or not raw_response.strip():
             yield sse_error("LLM вернул пустой ответ", request_id=request_id)

@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "*"  # Через запятую: "http://localhost:9080,https://app.example.com"
 
+    # Telegram-уведомления о сбоях LLM API (только для серверного LLM)
+    TELEGRAM_NOTIFY_ENABLED: bool = False           # выключено по умолчанию
+    TELEGRAM_BOT_TOKEN: str = ""                    # токен бота
+    TELEGRAM_CHAT_ID: str = ""                      # ID чата (для групп: "-100…")
+    TELEGRAM_API_URL: str = "https://api.telegram.org"  # для тестов / локального Bot API
+    TELEGRAM_PROXY: str = ""                        # отдельный прокси (Telegram блокирован в РФ)
+    TELEGRAM_REQUEST_TIMEOUT: float = 10.0
+    # CRITICAL (auth, quota, 5xx нашего бага): не чаще 1 алерта на категорию в N сек
+    TELEGRAM_NOTIFY_COOLDOWN_SECONDS: int = 900     # 15 минут
+    # WARNING (timeout, rate-limit, провайдер 5xx): порог событий за окно времени
+    TELEGRAM_NOTIFY_THRESHOLD_WINDOW_SECONDS: int = 300  # окно 5 минут
+    TELEGRAM_NOTIFY_THRESHOLD_COUNT: int = 5        # триггер при 5+ событиях в окне
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
