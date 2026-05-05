@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### Добавлено
+- **Telegram-уведомления о сбоях OpenAI API** (только для серверного LLM): классификация ошибок по категориям (`quota_exceeded`, `auth`, `permission`, `not_found`, `bad_request`, `rate_limit`, `timeout`, `connection`, `server_error`, `unknown`) и серьёзности (CRITICAL/WARNING). Особое внимание сценарию «закончились деньги на счёте» (`insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `account_deactivated`) — алерт уходит немедленно
+- **Антиспам-логика**: CRITICAL — cooldown по категории (`TELEGRAM_NOTIFY_COOLDOWN_SECONDS`, по умолчанию 15 мин), WARNING — порог событий за окно времени (`TELEGRAM_NOTIFY_THRESHOLD_*`, по умолчанию 5 событий за 5 мин)
+- **Метрика `llm_errors_by_category`** в `/api/metrics` — счётчики ошибок LLM API по категориям (только для серверного LLM)
+- **Настройки `TELEGRAM_*`** в `.env`: `TELEGRAM_NOTIFY_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_API_URL`, `TELEGRAM_PROXY`, `TELEGRAM_REQUEST_TIMEOUT`, `TELEGRAM_NOTIFY_COOLDOWN_SECONDS`, `TELEGRAM_NOTIFY_THRESHOLD_WINDOW_SECONDS`, `TELEGRAM_NOTIFY_THRESHOLD_COUNT`
+- Изоляция: для пользовательских (custom) LLM ошибки **не репортятся** — чужой ключ не наша зона ответственности
+
 ## [0.6.1] - 2026-04-09
 
 ### Добавлено
