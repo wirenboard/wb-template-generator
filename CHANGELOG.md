@@ -7,12 +7,16 @@
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-05-05
+
 ### Добавлено
-- **Telegram-уведомления о сбоях OpenAI API** (только для серверного LLM): классификация ошибок по категориям (`quota_exceeded`, `auth`, `permission`, `not_found`, `bad_request`, `rate_limit`, `timeout`, `connection`, `server_error`, `unknown`) и серьёзности (CRITICAL/WARNING). Особое внимание сценарию «закончились деньги на счёте» (`insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `account_deactivated`) — алерт уходит немедленно
-- **Антиспам-логика**: CRITICAL — cooldown по категории (`TELEGRAM_NOTIFY_COOLDOWN_SECONDS`, по умолчанию 15 мин), WARNING — порог событий за окно времени (`TELEGRAM_NOTIFY_THRESHOLD_*`, по умолчанию 5 событий за 5 мин)
-- **Метрика `llm_errors_by_category`** в `/api/metrics` — счётчики ошибок LLM API по категориям (только для серверного LLM)
-- **Настройки `TELEGRAM_*`** в `.env`: `TELEGRAM_NOTIFY_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_API_URL`, `TELEGRAM_PROXY`, `TELEGRAM_REQUEST_TIMEOUT`, `TELEGRAM_NOTIFY_COOLDOWN_SECONDS`, `TELEGRAM_NOTIFY_THRESHOLD_WINDOW_SECONDS`, `TELEGRAM_NOTIFY_THRESHOLD_COUNT`
-- Изоляция: для пользовательских (custom) LLM ошибки **не репортятся** — чужой ключ не наша зона ответственности
+- **Telegram-уведомления о сбоях LLM API**: классификация ошибок OpenAI SDK по 10 категориям (`quota_exceeded`, `auth`, `permission`, `not_found`, `bad_request`, `rate_limit`, `timeout`, `connection`, `server_error`, `unknown`) и серьёзности (CRITICAL/WARNING)
+- **Антиспам**: CRITICAL — cooldown по категории (15 мин), WARNING — порог событий в окне времени (5 событий за 5 мин)
+- **Билинговые алерты**: распознаются маркеры `insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `account_deactivated` (двойная проверка по `error.code` и тексту — для совместимых провайдеров) — алерт уходит немедленно
+- **API**: блок `llm_errors_by_category` в `/api/metrics` — счётчики ошибок LLM API по категориям (только для серверного LLM)
+- **Изоляция**: ошибки пользовательских (custom) LLM не репортятся — чужой ключ не наша зона ответственности
+- **Настройки**: переменные `TELEGRAM_*` в `.env` (`TELEGRAM_NOTIFY_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_PROXY` и др. — см. `docs/config.md`)
+- **Тесты**: 42 теста (20 — классификатор, 19 — notifier, 3 — интеграция в `analyze_document`)
 
 ## [0.6.1] - 2026-04-09
 
@@ -202,7 +206,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.9...v0.6.0
 [0.5.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.8...v0.5.9
