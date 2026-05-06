@@ -14,8 +14,7 @@ import pytest
 # Добавляем backend/ в sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from llm_errors import ClassifiedError, ErrorCategory, Severity, classify  # noqa: E402, I001
-import notifier as notifier_module  # noqa: E402
+from llm_errors import ClassifiedError, ErrorCategory, Severity  # noqa: E402, I001
 from notifier import (  # noqa: E402
     TelegramNotifier,
     clear_metric_hooks,

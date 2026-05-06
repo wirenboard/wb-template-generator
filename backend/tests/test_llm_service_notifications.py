@@ -17,7 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import Settings  # noqa: E402, I001
-from llm_errors import ErrorCategory, Severity  # noqa: E402
+from llm_errors import ErrorCategory  # noqa: E402
 from llm_service import analyze_document  # noqa: E402
 from notifier import (  # noqa: E402
     TelegramNotifier,
