@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-05-07
+
+### Добавлено
+- **Telegram-топики**: новая переменная `TELEGRAM_MESSAGE_THREAD_ID` — алерты можно отправлять в конкретный топик супергруппы (forum supergroup), а не только в общий чат. Если не задана — поведение прежнее (отправка в `TELEGRAM_CHAT_ID`).
+- **Telegram-уведомления о сбоях LLM API**: классификация ошибок OpenAI SDK по 10 категориям (`quota_exceeded`, `auth`, `permission`, `not_found`, `bad_request`, `rate_limit`, `timeout`, `connection`, `server_error`, `unknown`) и серьёзности (CRITICAL/WARNING)
+- **Антиспам**: CRITICAL — cooldown по категории (15 мин), WARNING — порог событий в окне времени (5 событий за 5 мин)
+- **Билинговые алерты**: распознаются маркеры `insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `account_deactivated` (двойная проверка по `error.code` и тексту — для совместимых провайдеров) — алерт уходит немедленно
+- **API**: блок `llm_errors_by_category` в `/api/metrics` — счётчики ошибок LLM API по категориям (только для серверного LLM)
+- **Изоляция**: ошибки пользовательских (custom) LLM не репортятся — чужой ключ не наша зона ответственности
+- **Настройки**: переменные `TELEGRAM_*` в `.env` (`TELEGRAM_NOTIFY_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_PROXY` и др. — см. `docs/config.md`)
+- **Тесты**: 42 теста (20 — классификатор, 19 — notifier, 3 — интеграция в `analyze_document`)
+
 ## [0.6.1] - 2026-04-09
 
 ### Добавлено
@@ -195,7 +207,8 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.9...v0.6.0
 [0.5.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.8...v0.5.9

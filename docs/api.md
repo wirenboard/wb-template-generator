@@ -47,6 +47,17 @@ event: error      → {message, request_id}
 - **Rate limiter**: sliding window по IP (10 запросов/60 сек)
 - **Изоляция LLM**: при серверном LLM пользовательский system_prompt игнорируется
 - **Кастомный промпт**: `customSystemPrompt` хранится в localStorage, передаётся только при пользовательском LLM
-- **Метрики**: in-memory счётчики и гистограммы в `/api/metrics`
+- **Метрики**: in-memory счётчики и гистограммы в `/api/metrics`. В ответе:
+  - `analyze_total`, `analyze_errors`, `rate_limit_hits`,
+  - `analyze_duration_avg`, `analyze_duration_count`,
+  - `llm_errors_by_category` — словарь `{category: count}` по категориям
+    ошибок OpenAI API (см. [docs/config.md](config.md) — `quota_exceeded`,
+    `auth`, `permission`, `not_found`, `bad_request`, `rate_limit`,
+    `timeout`, `connection`, `server_error`, `unknown`). Считается
+    только для серверного LLM.
+- **Telegram-алерты**: при сбоях серверного OpenAI API (квота, auth, 5xx и т. п.)
+  бэкенд шлёт уведомления в Telegram-чат (см. [docs/config.md](config.md) →
+  «Telegram-уведомления»). Антиспам: CRITICAL — cooldown по категории,
+  WARNING — порог событий в окне.
 - **Graceful shutdown**: отмена ожидающих запросов, ожидание активных до 30 сек
 - **Автосохранение**: состояние редактора (registers, groups, deviceInfo, llmConfig) сохраняется в localStorage с debounce

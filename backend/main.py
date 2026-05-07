@@ -17,8 +17,15 @@ from openai import AsyncOpenAI
 
 from config import get_settings
 from jinja_exporter import build_jinja_template
+from llm_errors import ALL_CATEGORIES, ErrorCategory
 from llm_service import analyze_document, resolve_llm_credentials
 from models import BuildRequest, TranslateRequest, ValidateRequest
+from notifier import (
+    init_notifier,
+    register_metric_hook,
+    report_llm_api_error,
+    shutdown_notifier,
+)
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueItem, custom_queue, init_queues, server_queue
 from request_context import generate_request_id, get_request_id, set_request_id
@@ -87,7 +94,15 @@ _metrics = {
     "analyze_errors": 0,
     "rate_limit_hits": 0,
     "durations": deque(maxlen=100),  # type: ignore[arg-type]
+    # Счётчики ошибок LLM API по категориям (для мониторинга и Telegram-алертов)
+    "llm_errors_by_category": {cat.value: 0 for cat in ALL_CATEGORIES},
 }
+
+
+def _record_llm_error_metric(category: ErrorCategory) -> None:
+    """Хук для notifier: инкрементирует счётчик категории при ошибке LLM API."""
+    bucket = _metrics["llm_errors_by_category"]
+    bucket[category.value] = bucket.get(category.value, 0) + 1
 
 
 def _check_rate_limit(ip: str, max_requests: int, window: int) -> bool:
@@ -118,6 +133,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         custom_max=settings.QUEUE_CUSTOM_MAX_CONCURRENT,
         activation_delay=settings.QUEUE_ACTIVATION_DELAY,
     )
+    # Telegram-уведомления о сбоях LLM API (только для серверного LLM)
+    register_metric_hook(_record_llm_error_metric)
+    init_notifier(settings, version=get_version())
     logger.info("Приложение запущено")
     yield
     # Graceful shutdown
@@ -140,6 +158,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if active == 0:
             break
         await asyncio.sleep(0.5)
+    await shutdown_notifier()
     logger.info("Приложение остановлено")
 
 
@@ -256,6 +275,7 @@ async def metrics():
             "analyze_duration_avg": avg_duration,
             "analyze_duration_count": len(durations),
         },
+        "llm_errors_by_category": dict(_metrics["llm_errors_by_category"]),
     }
 
 
@@ -304,6 +324,10 @@ async def list_models(
             return JSONResponse(content={"models": models})
     except Exception as e:
         logger.exception("Ошибка получения списка моделей")
+        await report_llm_api_error(
+            e, endpoint="list_models", request_id=get_request_id(),
+            model="", is_custom_llm=bool(llm_api_url),
+        )
         return JSONResponse(
             status_code=502,
             content={"detail": f"Не удалось получить список моделей: {e!s}"},
@@ -620,6 +644,7 @@ async def fix_registers_endpoint(
         temperature=effective_temperature,
         proxy=settings.LLM_PROXY if not is_custom_llm else "",
         request_id=request_id,
+        is_custom_llm=is_custom_llm,
     )
 
     return StreamingResponse(
@@ -742,6 +767,10 @@ async def translate(request: TranslateRequest):
         return JSONResponse(content={"translations": translations})
     except Exception as e:
         logger.exception("Ошибка перевода через LLM")
+        await report_llm_api_error(
+            e, endpoint="translate", request_id=request_id,
+            model=effective_model, is_custom_llm=is_custom_llm,
+        )
         return JSONResponse(
             status_code=500,
             content={

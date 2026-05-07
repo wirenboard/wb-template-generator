@@ -90,3 +90,19 @@ Condition regex: `(?:^|[^a-zA-Z0-9_])([a-zA-Z_][a-zA-Z0-9_]*?)(?:==|!=|>=|<=|>|<
 - **Бейдж версии** — кликабельная ссылка на CHANGELOG.md в репозитории
 - **«by AI»** — tooltip «Код написан и поддерживается AI»
 - **Футер** — ссылка на исходный код на GitHub
+
+## Мониторинг и Telegram-уведомления
+
+При работе серверного LLM бэкенд классифицирует ошибки OpenAI API
+(квота биллинга, auth, 5xx, timeout и т. п.) и отправляет алерты
+в настроенный Telegram-чат.
+
+- **Категории**: `quota_exceeded` (закончились деньги), `auth`, `permission`,
+  `not_found`, `bad_request`, `rate_limit`, `timeout`, `connection`,
+  `server_error`, `unknown`
+- **Severity**: CRITICAL (мгновенный алерт + cooldown по категории) и
+  WARNING (порог событий в окне времени)
+- **Метрики**: счётчики по категориям в `/api/metrics` →
+  `llm_errors_by_category`
+- **Изоляция**: ошибки пользовательских (custom) LLM **не репортятся**
+- **Настройка**: переменные `TELEGRAM_*` в `.env` (см. [docs/config.md](config.md))
