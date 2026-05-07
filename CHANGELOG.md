@@ -207,8 +207,7 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.3...HEAD
-[0.6.3]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.2...v0.6.3
+[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.2...HEAD
 [0.6.2]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.9...v0.6.0
