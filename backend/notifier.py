@@ -91,6 +91,7 @@ class TelegramNotifier:
         enabled: bool,
         bot_token: str,
         chat_id: str,
+        message_thread_id: int = 0,
         api_url: str = "https://api.telegram.org",
         proxy: str | None = None,
         request_timeout: float = 10.0,
@@ -104,6 +105,7 @@ class TelegramNotifier:
         self._enabled = enabled and bool(bot_token) and bool(chat_id)
         self._bot_token = bot_token
         self._chat_id = chat_id
+        self._message_thread_id = message_thread_id if message_thread_id > 0 else 0
         self._api_url = api_url.rstrip("/")
         self._cooldown = cooldown_seconds
         self._threshold_window = threshold_window_seconds
@@ -266,12 +268,14 @@ class TelegramNotifier:
     async def _send(self, text: str) -> None:
         """Фактическая отправка через Bot API. Ошибки только логируются."""
         url = f"{self._api_url}/bot{self._bot_token}/sendMessage"
-        payload = {
+        payload: dict = {
             "chat_id": self._chat_id,
             "text": text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }
+        if self._message_thread_id:
+            payload["message_thread_id"] = self._message_thread_id
         try:
             client = await self._get_client()
             response = await client.post(url, json=payload)
@@ -310,6 +314,7 @@ def init_notifier(settings: Settings, version: str = "") -> TelegramNotifier:
         enabled=getattr(settings, "TELEGRAM_NOTIFY_ENABLED", False),
         bot_token=getattr(settings, "TELEGRAM_BOT_TOKEN", ""),
         chat_id=getattr(settings, "TELEGRAM_CHAT_ID", ""),
+        message_thread_id=getattr(settings, "TELEGRAM_MESSAGE_THREAD_ID", 0),
         api_url=getattr(settings, "TELEGRAM_API_URL", "https://api.telegram.org"),
         proxy=getattr(settings, "TELEGRAM_PROXY", "") or None,
         request_timeout=getattr(settings, "TELEGRAM_REQUEST_TIMEOUT", 10.0),

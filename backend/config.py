@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     TELEGRAM_NOTIFY_ENABLED: bool = False           # выключено по умолчанию
     TELEGRAM_BOT_TOKEN: str = ""                    # токен бота
     TELEGRAM_CHAT_ID: str = ""                      # ID чата (для групп: "-100…")
+    TELEGRAM_MESSAGE_THREAD_ID: int = 0             # ID топика в супергруппе с топиками (0 = не задан)
     TELEGRAM_API_URL: str = "https://api.telegram.org"  # для тестов / локального Bot API
     TELEGRAM_PROXY: str = ""                        # отдельный прокси (Telegram блокирован в РФ)
     TELEGRAM_REQUEST_TIMEOUT: float = 10.0

@@ -421,6 +421,8 @@ class TestMessageFormatting:
         assert "1.2.3" in text  # версия
         assert captured["json"]["chat_id"] == "-100123456"
         assert captured["json"]["parse_mode"] == "HTML"
+        # По умолчанию topic не задан — параметр в payload отсутствует.
+        assert "message_thread_id" not in captured["json"]
 
     @pytest.mark.asyncio
     async def test_html_escaping(self):
@@ -447,6 +449,71 @@ class TestMessageFormatting:
         text = captured["json"]["text"]
         assert "<script>" not in text
         assert "&lt;script&gt;" in text
+
+
+# ---------------------------------------------------------------------------
+# Отправка в топик супергруппы (message_thread_id)
+# ---------------------------------------------------------------------------
+
+
+class TestMessageThreadId:
+    """Параметр message_thread_id пробрасывается в payload только когда задан."""
+
+    @pytest.mark.asyncio
+    async def test_thread_id_added_to_payload_when_set(self):
+        captured = {}
+
+        async def capture_post(url, **kwargs):
+            captured["json"] = kwargs.get("json")
+            return _make_httpx_response()
+
+        client = MagicMock(spec=httpx.AsyncClient)
+        client.post = AsyncMock(side_effect=capture_post)
+        n = TelegramNotifier(
+            enabled=True,
+            bot_token="test-bot-token",
+            chat_id="-100123456",
+            message_thread_id=42,
+            client=client,
+        )
+
+        await n.notify_llm_error(
+            _make_classified(ErrorCategory.QUOTA_EXCEEDED),
+            endpoint="analyze_document",
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert captured["json"]["chat_id"] == "-100123456"
+        assert captured["json"]["message_thread_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_thread_id_zero_means_not_set(self):
+        """0 трактуется как «топик не задан» — параметр не должен попасть в payload."""
+        captured = {}
+
+        async def capture_post(url, **kwargs):
+            captured["json"] = kwargs.get("json")
+            return _make_httpx_response()
+
+        client = MagicMock(spec=httpx.AsyncClient)
+        client.post = AsyncMock(side_effect=capture_post)
+        n = TelegramNotifier(
+            enabled=True,
+            bot_token="test-bot-token",
+            chat_id="-100123456",
+            message_thread_id=0,
+            client=client,
+        )
+
+        await n.notify_llm_error(
+            _make_classified(ErrorCategory.QUOTA_EXCEEDED),
+            endpoint="analyze_document",
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert "message_thread_id" not in captured["json"]
 
 
 # ---------------------------------------------------------------------------

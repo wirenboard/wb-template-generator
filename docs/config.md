@@ -24,6 +24,7 @@ CORS_ORIGINS=*               # Разрешённые CORS-источники ч
 TELEGRAM_NOTIFY_ENABLED=false                       # Включить алерты в Telegram
 TELEGRAM_BOT_TOKEN=                                 # Токен бота из @BotFather
 TELEGRAM_CHAT_ID=                                   # ID чата (для групп: "-100…")
+TELEGRAM_MESSAGE_THREAD_ID=                         # ID топика в супергруппе (необязательно; 0/пусто = обычный чат)
 TELEGRAM_API_URL=https://api.telegram.org           # Для тестов / локального Bot API
 TELEGRAM_PROXY=                                     # Отдельный прокси (Telegram заблокирован в РФ)
 TELEGRAM_REQUEST_TIMEOUT=10                         # Таймаут HTTP-запроса к Bot API (сек)
@@ -71,3 +72,21 @@ TELEGRAM_NOTIFY_THRESHOLD_COUNT=5                   # WARNING: триггер п
 
 В РФ Telegram Bot API часто блокируется — укажите `TELEGRAM_PROXY`
 (`http://...` или `socks5://...`).
+
+### Отправка в топик супергруппы
+
+Если бот должен писать не в общий чат, а в конкретный **топик** супергруппы
+с включёнными топиками (forum supergroup), задайте `TELEGRAM_MESSAGE_THREAD_ID`
+— параметр `message_thread_id` будет добавлен в каждый запрос `sendMessage`.
+
+Как узнать ID топика:
+
+1. Откройте нужный топик в Telegram Web (`web.telegram.org`).
+2. В URL после `#` будут два числа: `…#-100<chat_id>_<thread_id>` —
+   первое число это `chat_id`, второе — `TELEGRAM_MESSAGE_THREAD_ID`.
+
+Альтернатива: переслать любое сообщение из топика боту и посмотреть
+`message_thread_id` в ответе `getUpdates`.
+
+Если переменная не задана (или равна `0`), сообщения уходят в общий чат
+по `TELEGRAM_CHAT_ID` — обратной совместимости с группами без топиков.
