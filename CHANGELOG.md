@@ -7,14 +7,10 @@
 
 ## [Unreleased]
 
-## [0.6.3] - 2026-05-07
+## [0.6.2] - 2026-05-07
 
 ### Добавлено
 - **Telegram-топики**: новая переменная `TELEGRAM_MESSAGE_THREAD_ID` — алерты можно отправлять в конкретный топик супергруппы (forum supergroup), а не только в общий чат. Если не задана — поведение прежнее (отправка в `TELEGRAM_CHAT_ID`).
-
-## [0.6.2] - 2026-05-05
-
-### Добавлено
 - **Telegram-уведомления о сбоях LLM API**: классификация ошибок OpenAI SDK по 10 категориям (`quota_exceeded`, `auth`, `permission`, `not_found`, `bad_request`, `rate_limit`, `timeout`, `connection`, `server_error`, `unknown`) и серьёзности (CRITICAL/WARNING)
 - **Антиспам**: CRITICAL — cooldown по категории (15 мин), WARNING — порог событий в окне времени (5 событий за 5 мин)
 - **Билинговые алерты**: распознаются маркеры `insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `account_deactivated` (двойная проверка по `error.code` и тексту — для совместимых провайдеров) — алерт уходит немедленно
