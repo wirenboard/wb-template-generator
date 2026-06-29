@@ -72,6 +72,7 @@ class TestImportChannels:
         assert reg["units"] == "deg C"
         assert reg["scale"] == 0.1
         assert reg["access"] == "read"  # readonly=True → access="read"
+        assert reg["readonly"] is True  # флаг readonly сохраняется для roundtrip
         assert reg["group"] == "main"
 
     def test_channel_translations(self, minimal_template):
@@ -365,3 +366,60 @@ class TestRoundtrip:
         assert built["device"]["channels"][0]["units"] == "deg C"
         # Переводы сохранились
         assert "ru" in built["device"]["translations"]
+
+    def test_readonly_channel_roundtrip(self, minimal_template):
+        """readonly (без подчёркивания) у канала не теряется при import → build."""
+        from models import BuildRequest, DeviceInfo, Register, RegisterGroup
+        from template_builder import build_template
+
+        imported = import_template(minimal_template)
+        request = BuildRequest(
+            device_info=DeviceInfo(**imported["device_info"]),
+            registers=[Register(**r) for r in imported["registers"]],
+            groups=[RegisterGroup(**g) for g in imported["groups"]],
+        )
+        built = build_template(request)
+
+        channel = built["device"]["channels"][0]
+        assert channel.get("readonly") is True
+
+    def test_readonly_parameter_roundtrip(self):
+        """readonly у параметра не теряется при import → build."""
+        from models import BuildRequest, DeviceInfo, Register, RegisterGroup
+        from template_builder import build_template
+
+        template = {
+            "device_type": "test-device",
+            "title": "test_template_title",
+            "device": {
+                "name": "Test Device",
+                "id": "test-device",
+                "groups": [{"title": "Main", "id": "main"}],
+                "channels": [],
+                "parameters": {
+                    "serial": {
+                        "title": "Serial Number",
+                        "address": 10,
+                        "reg_type": "input",
+                        "group": "main",
+                        "order": 1,
+                        "readonly": True,
+                    }
+                },
+                "translations": {},
+            },
+        }
+
+        imported = import_template(template)
+        reg = imported["registers"][0]
+        assert reg["readonly"] is True
+
+        request = BuildRequest(
+            device_info=DeviceInfo(**imported["device_info"]),
+            registers=[Register(**r) for r in imported["registers"]],
+            groups=[RegisterGroup(**g) for g in imported["groups"]],
+        )
+        built = build_template(request)
+
+        param = built["device"]["parameters"]["serial"]
+        assert param.get("readonly") is True
