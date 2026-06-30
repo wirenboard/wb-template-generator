@@ -13,7 +13,7 @@ _OPTIONAL_FIELDS = (
 
 # Дополнительные поля для roundtrip
 _ROUNDTRIP_FIELDS = (
-    "sporadic", "read_only", "required", "fw",
+    "sporadic", "read_only", "readonly", "required", "fw",
 )
 
 
