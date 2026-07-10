@@ -5,11 +5,15 @@
 - wb-mqtt-serial-confed-common.schema.json
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import lru_cache
 
 from models import Register
+
+logger = logging.getLogger("wb-template-gen")
 
 # ---------------------------------------------------------------------------
 # Типы
@@ -53,19 +57,53 @@ class ValidationResult:
 
 
 # ---------------------------------------------------------------------------
-# Допустимые значения из JSON-схемы wb-mqtt-serial
+# Допустимые значения — из JSON-схемы драйвера wb-mqtt-serial (единый источник)
 # ---------------------------------------------------------------------------
+# reg_type/format/word_order/byte_order берём из вендоренной схемы (той же, что
+# грузит schema_validator), а НЕ хардкодим: иначе списки дрейфуют от драйвера.
+# В схеме, например, ~45 reg_type (включая press_counter, relay, power, freq…),
+# и их набор зависит от протокола устройства. Fallback ниже — на случай, если
+# схему не удалось загрузить (тогда узнаём лишь базовые типы; хуже, но не падаем).
 
-VALID_FORMATS = frozenset({
+_FALLBACK_FORMATS = frozenset({
     "s16", "u16", "s8", "u8", "s24", "u24", "s32", "u32", "s64", "u64",
     "bcd8", "bcd16", "bcd24", "bcd32",
     "float", "double", "char8", "string", "string8",
 })
-
-VALID_REG_TYPES = frozenset({
+_FALLBACK_REG_TYPES = frozenset({
     "coil", "discrete", "holding", "holding_single", "holding_multi",
     "input", "direct",
 })
+_FALLBACK_ORDER = frozenset({"big_endian", "little_endian"})
+
+
+@lru_cache(maxsize=1)
+def _schema_value_sets() -> dict[str, frozenset]:
+    """Закрытые перечни (reg_type/format/word_order/byte_order) из схемы драйвера.
+
+    Единый источник — вендоренная схема wb-mqtt-serial (`backend/schemas/`), чтобы
+    значения не расходились с драйвером. При ошибке загрузки — пустой dict
+    (валидатор откатится на _FALLBACK_*). Валидатор не должен падать из-за схемы.
+    """
+    try:
+        from schema_validator import _load_schema
+        defs = _load_schema().get("definitions", {})
+        out: dict[str, frozenset] = {}
+        for key in ("reg_type", "format", "word_order", "byte_order"):
+            enum = defs.get(key, {}).get("enum")
+            if isinstance(enum, list) and enum:
+                out[key] = frozenset(str(v) for v in enum)
+        return out
+    except Exception as e:  # noqa: BLE001 — деградируем на fallback, не падаем
+        logger.warning("Не удалось загрузить перечни из схемы драйвера: %s", e)
+        return {}
+
+
+_SCHEMA_SETS = _schema_value_sets()
+VALID_FORMATS = _SCHEMA_SETS.get("format") or _FALLBACK_FORMATS
+VALID_REG_TYPES = _SCHEMA_SETS.get("reg_type") or _FALLBACK_REG_TYPES
+VALID_WORD_ORDER = _SCHEMA_SETS.get("word_order") or _FALLBACK_ORDER
+VALID_BYTE_ORDER = _SCHEMA_SETS.get("byte_order") or _FALLBACK_ORDER
 
 VALID_CHANNEL_TYPES = frozenset({
     "switch", "wo-switch", "pushbutton", "range", "rgb", "text", "value",
@@ -78,12 +116,6 @@ VALID_CHANNEL_TYPES = frozenset({
 
 # Для параметров допустим только value
 PARAMETER_CHANNEL_TYPES = frozenset({"value"})
-
-VALID_WORD_ORDER = frozenset({"big_endian", "little_endian"})
-VALID_BYTE_ORDER = frozenset({"big_endian", "little_endian"})
-
-# Форматы, занимающие более одного 16-бит регистра
-MULTI_REG_FORMATS = frozenset({"u32", "s32", "u64", "s64", "float", "double"})
 
 # Строковые форматы
 STRING_FORMATS = frozenset({"string", "string8"})
@@ -281,6 +313,15 @@ def auto_fix_register(raw_reg: dict) -> tuple[dict, list[FieldError]]:
 # Валидация одного регистра
 # ---------------------------------------------------------------------------
 
+def _address_has_width(address) -> bool:
+    """Задаёт ли адрес ширину через синтаксис "register:offset:width" (2 двоеточия).
+
+    wb-mqtt-serial принимает ширину строки как из поля string_data_size, так и из
+    адреса — в последнем случае string_data_size не обязателен.
+    """
+    return isinstance(address, str) and address.count(":") >= 2
+
+
 def validate_register(reg: Register) -> RegisterValidation:
     """Валидирует один регистр, возвращает список ошибок/предупреждений."""
     errors: list[FieldError] = []
@@ -372,48 +413,16 @@ def validate_register(reg: Register) -> RegisterValidation:
             message_params={"channelType": reg.channel_type},
         ))
 
-    # switch с enum (enum игнорируется драйвером)
-    if reg.channel_type in ("switch", "wo-switch") and reg.enum:
-        errors.append(FieldError(
-            field="enum", severity=Severity.WARNING,
-            message_key="validation.switchWithEnum",
-        ))
-
-    # wo-switch но access != write
-    if reg.channel_type == "wo-switch" and reg.access != "write":
-        errors.append(FieldError(
-            field="access", severity=Severity.WARNING,
-            message_key="validation.woSwitchNotWriteOnly",
-            message_params={"access": reg.access},
-        ))
-
-    # Многорегистровый формат без word_order
-    if reg.format in MULTI_REG_FORMATS and reg.word_order is None:
-        # Не предупреждать для bit-регистров
-        if reg.reg_type not in BIT_REG_TYPES:
-            errors.append(FieldError(
-                field="word_order", severity=Severity.WARNING,
-                message_key="validation.missingWordOrder",
-                message_params={"format": reg.format},
-            ))
-
-    # Строковый формат без string_data_size
-    if reg.format in STRING_FORMATS and reg.string_data_size is None:
+    # Строковый формат без указания ширины. Драйвер бросает исключение при нулевой
+    # ширине, но ширину можно задать не только полем string_data_size, а и через
+    # адрес "N:offset:width" — тогда предупреждение не нужно.
+    if (reg.format in STRING_FORMATS and reg.string_data_size is None
+            and not _address_has_width(reg.address)):
         errors.append(FieldError(
             field="string_data_size", severity=Severity.WARNING,
             message_key="validation.missingStringDataSize",
             message_params={"format": reg.format},
         ))
-
-    # coil/discrete с channel_type не switch/wo-switch/pushbutton/value
-    if reg.reg_type in BIT_REG_TYPES:
-        typical_bit_types = {"switch", "wo-switch", "pushbutton", "value"}
-        if reg.channel_type not in typical_bit_types:
-            errors.append(FieldError(
-                field="channel_type", severity=Severity.WARNING,
-                message_key="validation.bitRegNotSwitch",
-                message_params={"regType": reg.reg_type, "channelType": reg.channel_type},
-            ))
 
     # readonly и read_only конфликтуют
     if (reg.readonly is not None and reg.read_only is not None
@@ -467,25 +476,25 @@ def validate_registers(registers: list[Register]) -> ValidationResult:
         rv = validate_register(reg)
         validations.append(rv)
 
-    # Кросс-регистровая проверка: дубликаты адресов
-    seen_addresses: dict[str, str] = {}  # "(address, reg_type)" → register_id первого
-    for reg in registers:
+    # Кросс-регистровая проверка: дубликаты (address, reg_type).
+    # condition-gated пары (одна address, разные взаимоисключающие condition) — это
+    # штатный паттерн: драйвер оставит один канал (CheckCondition), реального дубля
+    # нет. Поэтому если у любого из совпавших задан condition — не предупреждаем.
+    # rv берём по позиции (validations[i] ↔ registers[i]) — id в шаблонах не уникальны.
+    seen_addresses: dict[str, Register] = {}  # key → первый регистр
+    for i, reg in enumerate(registers):
         key = f"{reg.address}:{reg.reg_type}"
-        if key in seen_addresses:
-            # Находим validation для этого регистра
-            for rv in validations:
-                if rv.register_id == reg.id:
-                    rv.errors.append(FieldError(
-                        field="address", severity=Severity.WARNING,
-                        message_key="validation.duplicateAddress",
-                        message_params={
-                            "address": str(reg.address),
-                            "regType": reg.reg_type,
-                        },
-                    ))
-                    break
-        else:
-            seen_addresses[key] = reg.id
+        first = seen_addresses.get(key)
+        if first is None:
+            seen_addresses[key] = reg
+            continue
+        if reg.condition or first.condition:
+            continue
+        validations[i].errors.append(FieldError(
+            field="address", severity=Severity.WARNING,
+            message_key="validation.duplicateAddress",
+            message_params={"address": str(reg.address), "regType": reg.reg_type},
+        ))
 
     # Подсчёт
     for rv in validations:

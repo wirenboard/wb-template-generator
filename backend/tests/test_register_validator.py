@@ -285,36 +285,6 @@ class TestValidateRegister:
         warnings = [e for e in result.errors if e.message_key == "validation.parameterChannelType"]
         assert len(warnings) == 0
 
-    def test_switch_with_enum_warning(self):
-        reg = _reg(channel_type="switch", enum=[0, 1])
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.switchWithEnum"]
-        assert len(warnings) == 1
-
-    def test_wo_switch_not_write_warning(self):
-        reg = _reg(channel_type="wo-switch", access="read")
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.woSwitchNotWriteOnly"]
-        assert len(warnings) == 1
-
-    def test_wo_switch_write_no_warning(self):
-        reg = _reg(channel_type="wo-switch", access="write")
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.woSwitchNotWriteOnly"]
-        assert len(warnings) == 0
-
-    def test_multi_reg_format_without_word_order_warning(self):
-        reg = _reg(format="u32", word_order=None)
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.missingWordOrder"]
-        assert len(warnings) == 1
-
-    def test_multi_reg_format_with_word_order_no_warning(self):
-        reg = _reg(format="u32", word_order="big_endian")
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.missingWordOrder"]
-        assert len(warnings) == 0
-
     def test_string_without_data_size_warning(self):
         reg = _reg(format="string", string_data_size=None)
         result = validate_register(reg)
@@ -327,17 +297,19 @@ class TestValidateRegister:
         warnings = [e for e in result.errors if e.message_key == "validation.missingStringDataSize"]
         assert len(warnings) == 0
 
-    def test_coil_with_range_channel_warning(self):
-        reg = _reg(reg_type="coil", channel_type="range")
+    def test_string_width_in_address_no_warning(self):
+        # Ширина строки задана через адрес "N:offset:width" — string_data_size не нужен
+        reg = _reg(format="string", string_data_size=None, address="0:0:8")
         result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.bitRegNotSwitch"]
-        assert len(warnings) == 1
-
-    def test_coil_with_switch_no_warning(self):
-        reg = _reg(reg_type="coil", channel_type="switch")
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.bitRegNotSwitch"]
+        warnings = [e for e in result.errors if e.message_key == "validation.missingStringDataSize"]
         assert len(warnings) == 0
+
+    def test_press_counter_is_valid_reg_type(self):
+        # press_counter валиден по схеме драйвера (раньше ложно флагался как ошибка)
+        reg = _reg(reg_type="press_counter")
+        result = validate_register(reg)
+        rt_errors = [e for e in result.errors if e.field == "reg_type"]
+        assert len(rt_errors) == 0
 
     def test_min_greater_than_max_warning(self):
         reg = _reg(min=100, max=50)
@@ -465,6 +437,20 @@ class TestValidateRegisters:
         ]
         assert len(dup_warnings) == 1  # только у второго
 
+    def test_duplicate_address_with_condition_no_warning(self):
+        # condition-gated пары на одном адресе — штатный паттерн (драйвер оставит один),
+        # реального дубликата нет → предупреждать не нужно.
+        regs = [
+            _reg(address=100, reg_type="holding", name="A", condition="mode==1"),
+            _reg(address=100, reg_type="holding", name="B", condition="mode==2"),
+        ]
+        result = validate_registers(regs)
+        dup_warnings = [
+            e for rv in result.registers for e in rv.errors
+            if e.message_key == "validation.duplicateAddress"
+        ]
+        assert len(dup_warnings) == 0
+
     def test_same_address_different_reg_type_ok(self):
         regs = [
             _reg(address=100, reg_type="holding", name="Reg A"),
@@ -489,7 +475,7 @@ class TestValidateRegisters:
     def test_counts_correct(self):
         regs = [
             _reg(address=0, format="invalid_fmt", name="Bad Reg"),  # 1 error
-            _reg(address=1, format="u32", word_order=None, name="OK Reg"),  # 1 warning
+            _reg(address=1, min=100, max=50, name="OK Reg"),  # 1 warning (min>max)
         ]
         result = validate_registers(regs)
         assert result.error_count == 1
