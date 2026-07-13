@@ -85,7 +85,7 @@ def _extract_json_from_response(text: str) -> dict:
     return json.loads(text)
 
 
-def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register], int]:
+def _parse_registers(raw: dict, *, preserve_id: bool = False) -> tuple[DeviceInfo, list[Register], int]:
     """Парсит ответ LLM в структуры DeviceInfo и список Register.
 
     Использует авто-исправление синонимов + мягкую валидацию.
@@ -112,8 +112,10 @@ def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register], int]:
         if not isinstance(raw_reg, dict):
             continue
         try:
-            # Убираем поле id если LLM его сгенерировала (мы генерируем свои uuid)
-            raw_reg.pop("id", None)
+            # По умолчанию убираем id (LLM-генерённый) — мы генерируем свои uuid.
+            # preserve_id=True сохраняет id (нужно для merge-back в fix-registers).
+            if not preserve_id:
+                raw_reg.pop("id", None)
             # Авто-исправление синонимов (uint16→u16, holding_register→holding и т.д.)
             fixed_reg, fixes = auto_fix_register(raw_reg)
             auto_fixed_count += len(fixes)
@@ -131,12 +133,37 @@ def _parse_registers(raw: dict) -> tuple[DeviceInfo, list[Register], int]:
                 reg = Register(
                     address=int(raw_reg.get("address", 0)),
                     name=str(raw_reg.get("name", "Unknown")),
+                    **({"id": raw_reg["id"]} if preserve_id and raw_reg.get("id") else {}),
                 )
                 registers.append(reg)
             except Exception:
                 logger.error("Не удалось распарсить регистр, пропускаем: %s", raw_reg)
 
     return device_info, registers, auto_fixed_count
+
+
+def _merge_fixed_registers(
+    all_registers: list[Register],
+    fixed_subset: list[Register],
+    error_positions: list[int],
+) -> list[Register]:
+    """Вмёрдживает исправленное подмножество регистров обратно в полный список.
+
+    Используется в fix-registers: в LLM уходят только регистры с ошибками (в порядке
+    error_positions), помеченные ВРЕМЕННЫМ уникальным id `__fix_<i>`. Матчим по нему,
+    а не по настоящему id, потому что id в шаблонах НЕ уникальны — у condition-gated
+    пар (одна address, взаимоисключающие condition) id совпадают, и матч по id схлопнул
+    бы близнецов. Восстанавливаем исходный id и ставим фикс строго на свою позицию.
+    Регистры, которых LLM не вернул, остаются без изменений.
+    """
+    fixed_by_temp = {r.id: r for r in fixed_subset if r.id}
+    merged: list[Register] = list(all_registers)
+    for i, pos in enumerate(error_positions):
+        fx = fixed_by_temp.get(f"__fix_{i}")
+        if fx is not None:
+            fx.id = all_registers[pos].id  # восстанавливаем исходный id
+            merged[pos] = fx
+    return merged
 
 
 def _merge_batch_results(
@@ -799,6 +826,8 @@ async def fix_registers(
     registers: list[Register],
     error_descriptions: str,
     *,
+    all_registers: list[Register] | None = None,
+    error_positions: list[int] | None = None,
     effective_url: str,
     effective_key: str | None,
     effective_model: str,
@@ -812,18 +841,40 @@ async def fix_registers(
 ) -> AsyncGenerator[str, None]:
     """SSE-генератор: отправляет регистры с ошибками в LLM для исправления.
 
+    В LLM уходят только `registers` (регистры с ошибками) — не весь шаблон, иначе
+    на крупных устройствах запрос виснет и вывод обрезается по лимиту токенов.
+    Если задан `all_registers` (полный список), исправленное подмножество
+    вмёрживается обратно по позициям и возвращается полный шаблон.
+
     Yields SSE-события: progress, result, done, error.
     """
     from prompts import get_fix_registers_prompt
     from register_validator import validate_registers as _validate_regs
 
     try:
+        # Нет регистров с ошибками — возвращаем шаблон как есть, без вызова LLM.
+        if not registers:
+            response = AnalyzeResponse(
+                device_info=DeviceInfo(name="device", id="device"),
+                registers=all_registers or [],
+            )
+            yield sse_result(response, request_id=request_id)
+            yield sse_done(request_id=request_id)
+            return
+
         yield sse_progress("analyzing", "Отправка в LLM для исправления...", request_id=request_id)
 
-        # Сериализуем регистры в JSON для промпта
+        # Сериализуем ТОЛЬКО регистры с ошибками. Присваиваем ВРЕМЕННЫЙ уникальный
+        # id __fix_<i>: настоящие id в шаблонах не уникальны (condition-gated пары),
+        # а merge-back должен точно попадать по позиции (см. _merge_fixed_registers).
+        subset_payload = []
+        for i, r in enumerate(registers):
+            d = r.model_dump(exclude_none=True)
+            d["id"] = f"__fix_{i}"
+            subset_payload.append(d)
         registers_json = json.dumps(
             {"device_info": {"name": "device", "id": "device"},
-             "registers": [r.model_dump(exclude_none=True) for r in registers]},
+             "registers": subset_payload},
             ensure_ascii=False, indent=2,
         )
 
@@ -862,11 +913,16 @@ async def fix_registers(
             return
 
         raw_data = _extract_json_from_response(raw_response)
-        device_info, fixed_registers, auto_fixed = _parse_registers(raw_data)
+        # preserve_id=True — сохраняем id, чтобы вмёрдживать исправления по нему.
+        device_info, fixed_registers, auto_fixed = _parse_registers(raw_data, preserve_id=True)
 
         if not fixed_registers:
             yield sse_error("LLM не вернул регистров", request_id=request_id)
             return
+
+        # Вмёрдживаем исправленное подмножество обратно в полный шаблон по позициям.
+        if all_registers is not None and error_positions is not None:
+            fixed_registers = _merge_fixed_registers(all_registers, fixed_registers, error_positions)
 
         # Валидация результата
         yield sse_progress("validating", "Проверка исправленных регистров...", request_id=request_id)

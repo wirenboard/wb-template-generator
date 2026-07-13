@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useT } from '../i18n';
 import { validateSchema, type BuildRequest } from '../api';
 
@@ -33,14 +33,9 @@ export default function ValidationGateModal({
   buildRequest, onDownload, onCancel,
 }: Props) {
   const t = useT();
-  const [checkSchema, setCheckSchema] = useState(false);
+  const [checkSchema, setCheckSchema] = useState(true);
   const [schemaErrors, setSchemaErrors] = useState<string[] | null>(null);
   const [schemaLoading, setSchemaLoading] = useState(false);
-
-  if (!isOpen) return null;
-
-  const hasIssues = validationErrorCount > 0 || validationWarningCount > 0
-    || (schemaErrors !== null && schemaErrors.length > 0);
 
   const handleCheckSchema = async () => {
     if (!buildRequest) return;
@@ -54,6 +49,19 @@ export default function ValidationGateModal({
     setSchemaLoading(false);
   };
 
+  // Проверка по схеме включена по умолчанию — запускаем её при открытии модалки
+  useEffect(() => {
+    if (isOpen && checkSchema && schemaErrors === null && !schemaLoading && buildRequest) {
+      void handleCheckSchema();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const hasIssues = validationErrorCount > 0 || validationWarningCount > 0
+    || (schemaErrors !== null && schemaErrors.length > 0);
+
   const handleToggleSchema = () => {
     const next = !checkSchema;
     setCheckSchema(next);
@@ -63,14 +71,14 @@ export default function ValidationGateModal({
   };
 
   const handleClose = () => {
-    setCheckSchema(false);
+    setCheckSchema(true);
     setSchemaErrors(null);
     setSchemaLoading(false);
     onCancel();
   };
 
   const handleDownload = () => {
-    setCheckSchema(false);
+    setCheckSchema(true);
     setSchemaErrors(null);
     setSchemaLoading(false);
     onDownload();
