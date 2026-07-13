@@ -603,7 +603,7 @@ async def fix_registers_endpoint(
 ):
     """Исправление регистров через AI — SSE-поток."""
     from llm_service import fix_registers
-    from register_validator import format_validation_errors, validate_registers
+    from register_validator import Severity, format_validation_errors, validate_registers
 
     settings = get_settings()
     request_id = get_request_id()
@@ -632,9 +632,21 @@ async def fix_registers_endpoint(
     validation = validate_registers(body.registers)
     error_desc = format_validation_errors(validation, body.registers)
 
+    # В LLM отправляем ТОЛЬКО регистры с ошибками (не весь шаблон): иначе на
+    # крупных устройствах запрос виснет и вывод обрезается по лимиту токенов.
+    # Позиции, а не id: id в шаблонах не уникальны (condition-gated пары),
+    # merge-back в fix_registers идёт по позициям + временному тегу __fix_<i>.
+    error_positions = [
+        i for i, rv in enumerate(validation.registers)
+        if any(e.severity == Severity.ERROR for e in rv.errors)
+    ]
+    error_registers = [body.registers[i] for i in error_positions]
+
     generator = fix_registers(
-        body.registers,
+        error_registers,
         error_desc,
+        all_registers=body.registers,
+        error_positions=error_positions,
         effective_url=effective_url,
         effective_key=effective_key,
         effective_model=effective_model,

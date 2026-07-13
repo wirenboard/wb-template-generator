@@ -89,7 +89,7 @@ def _schema_value_sets() -> dict[str, frozenset]:
         from schema_validator import _load_schema
         defs = _load_schema().get("definitions", {})
         out: dict[str, frozenset] = {}
-        for key in ("reg_type", "format", "word_order", "byte_order"):
+        for key in ("reg_type", "format", "word_order", "byte_order", "control_type"):
             enum = defs.get(key, {}).get("enum")
             if isinstance(enum, list) and enum:
                 out[key] = frozenset(str(v) for v in enum)
@@ -105,23 +105,29 @@ VALID_REG_TYPES = _SCHEMA_SETS.get("reg_type") or _FALLBACK_REG_TYPES
 VALID_WORD_ORDER = _SCHEMA_SETS.get("word_order") or _FALLBACK_ORDER
 VALID_BYTE_ORDER = _SCHEMA_SETS.get("byte_order") or _FALLBACK_ORDER
 
-VALID_CHANNEL_TYPES = frozenset({
-    "switch", "wo-switch", "pushbutton", "range", "rgb", "text", "value",
+# Тип канала — из перечня control_type схемы (там, напр., есть "w1-id", которого
+# в захардкоженном списке не было → ложные ошибки). Fallback — на случай, если
+# схему не удалось загрузить.
+_FALLBACK_CHANNEL_TYPES = frozenset({
+    "switch", "wo-switch", "pushbutton", "range", "rgb", "text", "w1-id", "value",
     "temperature", "rel_humidity", "atmospheric_pressure", "rainfall",
     "wind_speed", "power", "power_consumption", "voltage", "water_flow",
     "water_consumption", "resistance", "concentration", "heat_energy",
     "heat_power", "dimmer", "lux", "pressure", "current", "sound_level",
     "alarm",
 })
+VALID_CHANNEL_TYPES = _SCHEMA_SETS.get("control_type") or _FALLBACK_CHANNEL_TYPES
 
 # Для параметров допустим только value
 PARAMETER_CHANNEL_TYPES = frozenset({"value"})
 
+# Запрещённые в имени канала символы — из схемы (channel_name: "^[^$#+\/\"']+$").
+# Это MQTT-разделители/wildcard ($ # + /), обратный слэш и кавычки: они ломают
+# имя MQTT-топика. schema_validator ловит это лишь при экспорте — здесь раньше.
+CHANNEL_NAME_FORBIDDEN_CHARS = frozenset('$#+/\\"\'')
+
 # Строковые форматы
 STRING_FORMATS = frozenset({"string", "string8"})
-
-# Битовые типы регистров (coil/discrete — 1-битные)
-BIT_REG_TYPES = frozenset({"coil", "discrete"})
 
 # Регулярка адреса из JSON-схемы драйвера
 ADDRESS_REGEX = re.compile(r"^(?:0x[A-Fa-f0-9]+|\d+)(?::\d+:\d+)?$")
@@ -334,6 +340,16 @@ def validate_register(reg: Register) -> RegisterValidation:
             field="name", severity=Severity.ERROR,
             message_key="validation.emptyName",
         ))
+    else:
+        # Запрещённые символы в имени (ломают MQTT-топик) — иначе схема отклонит
+        # шаблон при экспорте.
+        bad = sorted({c for c in reg.name if c in CHANNEL_NAME_FORBIDDEN_CHARS})
+        if bad:
+            errors.append(FieldError(
+                field="name", severity=Severity.ERROR,
+                message_key="validation.invalidNameChars",
+                message_params={"chars": " ".join(bad)},
+            ))
 
     # Невалидный format
     if reg.format not in VALID_FORMATS:
@@ -447,17 +463,6 @@ def validate_register(reg: Register) -> RegisterValidation:
             message_key="validation.disabledParameter",
         ))
 
-    # Enable/Disable в имени, но channel_type=value без enum — вероятно должен быть switch
-    if (reg.channel_type == "value" and not reg.enum and not reg.enum_entries
-            and not reg.is_parameter and reg.reg_type not in BIT_REG_TYPES):
-        name_lower = reg.name.lower()
-        if re.search(r'\b(enable|disable|on[/_\s]off|вкл|выкл)\b', name_lower):
-            errors.append(FieldError(
-                field="channel_type", severity=Severity.WARNING,
-                message_key="validation.probablySwitch",
-                message_params={"name": reg.name},
-            ))
-
     return RegisterValidation(register_id=reg.id, errors=errors)
 
 
@@ -569,6 +574,11 @@ def format_validation_errors(
     reg_map = {r.id: r for r in registers}
     lines: list[str] = []
 
+    # Перечни валидных значений берём из schema-derived множеств (не хардкодим),
+    # иначе подсказка для LLM разойдётся с валидатором и драйвером.
+    valid_formats = ", ".join(sorted(VALID_FORMATS))
+    valid_reg_types = ", ".join(sorted(VALID_REG_TYPES))
+
     for rv in result.registers:
         error_items = [e for e in rv.errors if e.severity == Severity.ERROR]
         if not error_items:
@@ -582,13 +592,12 @@ def format_validation_errors(
             if e.field == "format":
                 lines.append(
                     f'{reg_label}: format "{e.message_params.get("value", "")}" is invalid. '
-                    f"Valid formats: s16, u16, s8, u8, s24, u24, s32, u32, s64, u64, "
-                    f"bcd8, bcd16, bcd24, bcd32, float, double, char8, string, string8"
+                    f"Valid formats: {valid_formats}"
                 )
             elif e.field == "reg_type":
                 lines.append(
                     f'{reg_label}: reg_type "{e.message_params.get("value", "")}" is invalid. '
-                    f"Valid types: coil, discrete, holding, holding_single, holding_multi, input"
+                    f"Valid types: {valid_reg_types}"
                 )
             elif e.field == "channel_type":
                 lines.append(
@@ -601,7 +610,14 @@ def format_validation_errors(
                     f"Must be a non-negative integer or 'register:bit:width' string"
                 )
             elif e.field == "name":
-                lines.append(f"{reg_label}: name is empty")
+                if e.message_key == "validation.invalidNameChars":
+                    lines.append(
+                        f'{reg_label}: name contains forbidden characters '
+                        f'({e.message_params.get("chars", "")}). '
+                        f"Remove any of: $ # + / \\ \" '"
+                    )
+                else:
+                    lines.append(f"{reg_label}: name is empty")
             elif e.field == "enum":
                 lines.append(
                     f"{reg_label}: enum has {e.message_params.get('enumLen', '?')} values "

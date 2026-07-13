@@ -487,11 +487,19 @@ def get_validation_retry_prompt(error_descriptions: str) -> str:
 _FIX_REGISTERS_PROMPT = """\
 You are a Modbus device template validator for the wb-mqtt-serial driver.
 
-Below is a JSON with device registers and a list of validation errors.
-Fix ALL the errors and return the COMPLETE corrected register list \
-(including registers that were already correct — do not omit them).
+Below is a JSON with ONLY the registers that have validation errors, and the
+list of those errors. Fix ALL the errors and return the corrected registers.
 
-CURRENT REGISTERS:
+IMPORTANT:
+- Return every register you were given (do not omit any).
+- Keep each register's "id" field UNCHANGED — it is used to match your fix back
+  to the original register. Never invent, drop, or reassign "id".
+- Only registers with errors are provided here; the rest of the template is fine
+  and is intentionally not included.
+- Fix ONLY what the error says. Do NOT change a field the errors don't mention
+  (especially reg_type, format, address, condition) — those are already valid.
+
+REGISTERS TO FIX:
 {registers_json}
 
 VALIDATION ERRORS:
@@ -500,12 +508,14 @@ VALIDATION ERRORS:
 Reminder of valid values:
 - format: s16, u16, s8, u8, s24, u24, s32, u32, s64, u64, bcd8, bcd16, bcd24, bcd32, \
 float, double, char8, string, string8
-- reg_type: coil, discrete, holding, holding_single, holding_multi, input
+- reg_type: validated against the driver schema (holding, input, coil, discrete, \
+holding_single, holding_multi, press_counter, and other driver-specific types). \
+Keep the given reg_type unless the error explicitly flags it as invalid.
 - channel_type: "value" for measurements, "switch" for on/off toggles, \
 "wo-switch" for write-only switches, "pushbutton" for buttons, "range" for sliders
 - address: non-negative integer or "register:bit:width" string (e.g. "109:1:2")
 - enum and enum_titles must have the same length
-- name must not be empty
+- name must not be empty and must not contain any of: $ # + / \\ " '
 - string format requires string_data_size
 
 Return ONLY a valid JSON object:

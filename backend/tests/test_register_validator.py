@@ -244,6 +244,40 @@ class TestValidateRegister:
         errors = [e for e in result.errors if e.field == "name"]
         assert len(errors) == 1
 
+    def test_name_with_forbidden_char_error(self):
+        # Символы $ # + / \ " ' ломают MQTT-топик → ошибка (схема отклонит при экспорте)
+        reg = _reg(name="Temp #1")
+        result = validate_register(reg)
+        errors = [e for e in result.errors if e.message_key == "validation.invalidNameChars"]
+        assert len(errors) == 1
+        assert errors[0].severity == Severity.ERROR
+
+    def test_name_with_slash_error(self):
+        reg = _reg(name="Pump On/Off")
+        result = validate_register(reg)
+        errors = [e for e in result.errors if e.message_key == "validation.invalidNameChars"]
+        assert len(errors) == 1
+
+    def test_name_clean_no_forbidden_char_warning(self):
+        reg = _reg(name="Voltage L1-N (RMS)")
+        result = validate_register(reg)
+        errors = [e for e in result.errors if e.message_key == "validation.invalidNameChars"]
+        assert len(errors) == 0
+
+    def test_empty_name_no_forbidden_char_error(self):
+        # У пустого имени проверяем только emptyName, не дублируем invalidNameChars
+        reg = _reg(name="")
+        result = validate_register(reg)
+        errors = [e for e in result.errors if e.message_key == "validation.invalidNameChars"]
+        assert len(errors) == 0
+
+    def test_w1_id_is_valid_channel_type(self):
+        # w1-id есть в перечне control_type схемы (раньше отсутствовал в хардкоде)
+        reg = _reg(channel_type="w1-id")
+        result = validate_register(reg)
+        ct_errors = [e for e in result.errors if e.field == "channel_type"]
+        assert len(ct_errors) == 0
+
     def test_enum_length_mismatch_error(self):
         reg = _reg(enum=[0, 1, 2], enum_titles=["Off", "On"])
         result = validate_register(reg)
@@ -352,42 +386,6 @@ class TestValidateRegister:
         result = validate_register(reg)
         warnings = [e for e in result.errors if e.message_key == "validation.readonlyConflict"]
         assert len(warnings) == 0
-
-    def test_enable_in_name_value_no_enum_warning(self):
-        reg = _reg(name="Anti-Freezing Enable", channel_type="value")
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
-        assert len(warnings) == 1
-
-    def test_enable_in_name_switch_no_warning(self):
-        reg = _reg(name="Anti-Freezing Enable", channel_type="switch")
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
-        assert len(warnings) == 0
-
-    def test_enable_in_name_with_enum_no_warning(self):
-        reg = _reg(name="Mode Enable", channel_type="value", enum=[0, 1, 2], enum_titles=["Off", "On", "Auto"])
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
-        assert len(warnings) == 0
-
-    def test_enable_in_name_parameter_no_warning(self):
-        reg = _reg(name="Feature Enable", channel_type="value", is_parameter=True)
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
-        assert len(warnings) == 0
-
-    def test_disable_in_name_warning(self):
-        reg = _reg(name="Alarm Disable", channel_type="value")
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
-        assert len(warnings) == 1
-
-    def test_on_off_in_name_warning(self):
-        reg = _reg(name="Pump On/Off", channel_type="value")
-        result = validate_register(reg)
-        warnings = [e for e in result.errors if e.message_key == "validation.probablySwitch"]
-        assert len(warnings) == 1
 
     def test_all_valid_formats_pass(self):
         """Каждый валидный формат должен проходить без ошибок."""
