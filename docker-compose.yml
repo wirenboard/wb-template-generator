@@ -8,7 +8,8 @@ services:
     environment:
       - LLM_API_URL=${LLM_API_URL:-}
       - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      # Дефолт модели задаётся в config.py. Если LLM_MODEL нет в .env, применится дефолт config.py, если есть, значение прокинется в контейнер.
+      - LLM_MODEL
       - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-0}
       - LLM_LEGACY_MAX_TOKENS=${LLM_LEGACY_MAX_TOKENS:-false}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-600}
