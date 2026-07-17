@@ -145,7 +145,7 @@ async def run_case(
 
     try:
         raw_data = _extract_json_from_response(raw_response)
-        _device_info, registers = _parse_registers(raw_data)
+        _device_info, registers, _fixes = _parse_registers(raw_data)
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"  {_RED}ОШИБКА парсинга: {e}{_RESET}")
         snippet = raw_response[:300] if raw_response else "(пустой ответ)"

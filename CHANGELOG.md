@@ -5,7 +5,19 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
-## [Unreleased]
+## [0.7.0] - 2026-07-16
+
+### Добавлено
+- **Тест** `test_llm_content.py` — контракт сборки LLM-контента (`assemble_llm_content`).
+
+### Изменено
+- **Модель по умолчанию `gpt-4o` → `gpt-5.6-luna`**: gpt-4o теряет регистры на image-based PDF, все gpt-5.x дают 100%; luna выбрана по балансу цена/качество (~$0.02/анализ).
+- **`LLM_TEMPERATURE` по умолчанию → пусто**: gpt-5.x принимают только `temperature=1`. Для gpt-4o/локальных LLM детерминизм возвращается установкой `LLM_TEMPERATURE=0`.
+- **Рефакторинг**: сборка vision-контента вынесена в `assemble_llm_content()`. Поведение не изменилось.
+- **Дефолт модели сведён в один источник** — `config.py` (в `docker-compose.yml` убран дублирующий хардкод).
+
+### Исправлено
+- **Текстовый prompt-regression** был нерабочим с 0.6.0: `run.py` распаковывал 2 значения вместо 3 (`too many values to unpack`).
 
 ## [0.6.4] - 2026-07-13
 
@@ -232,7 +244,9 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
-[Unreleased]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.2...HEAD
+[0.7.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.4...v0.7.0
+[0.6.4]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.3...v0.6.4
+[0.6.3]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/wirenboard/wb-template-generator/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/wirenboard/wb-template-generator/compare/v0.5.9...v0.6.0

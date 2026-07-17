@@ -137,12 +137,12 @@ event: error     ->  {message, request_id}
 |------------|-------------|----------|
 | `LLM_API_URL` | _(пусто)_ | URL OpenAI-совместимого API. Пусто = mock-режим |
 | `LLM_API_KEY` | _(пусто)_ | API-ключ |
-| `LLM_MODEL` | `gpt-4o` | Модель |
+| `LLM_MODEL` | `gpt-5.6-luna` | Модель (`gpt-5.4-mini` — ещё дешевле, `gpt-5.5` — дороже, качество то же) |
 | `LLM_MAX_TOKENS` | `0` | 0 = без ограничения, >0 = лимит токенов |
 | `LLM_LEGACY_MAX_TOKENS` | `false` | `true` = `max_tokens` (старые API), `false` = `max_completion_tokens` |
 | `LLM_TIMEOUT` | `600` | Жёсткий таймаут HTTP-запроса к LLM (сек) |
 | `LLM_SOFT_TIMEOUT` | `180` | Мягкий таймаут — предложить продлить (сек) |
-| `LLM_TEMPERATURE` | `0` | 0 = детерминированный вывод, пусто = дефолт модели |
+| `LLM_TEMPERATURE` | _(пусто)_ | Пусто = дефолт модели (нужно для gpt-5.x); 0 = детерминизм для gpt-4o/локальных |
 | `LLM_PROXY` | _(пусто)_ | HTTP/SOCKS5 прокси для запросов к LLM API |
 | `PDF_BATCH_SIZE` | `0` | Страниц на батч (0 = все одним запросом) |
 | `MAX_FILE_SIZE_MB` | `1` | Максимальный размер загружаемого файла (МБ) |

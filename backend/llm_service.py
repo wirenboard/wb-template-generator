@@ -307,6 +307,48 @@ async def _call_llm(
     return "", None
 
 
+def assemble_llm_content(
+    text_parts: list[str],
+    direct_files: list[tuple[str, bytes]],
+    all_images: list["Image.Image"],
+) -> list[dict]:
+    """Собирает vision-контент для LLM: Excel → текст, PDF → file (base64), изображения → image_url.
+
+    Единая точка формирования запроса — общая для analyze_document и регресс-теста,
+    чтобы тест проверял ровно тот контент, что уходит в модель.
+    """
+    llm_content: list[dict] = []
+
+    if text_parts:
+        llm_content.append({
+            "type": "text",
+            "text": "\n\n".join(text_parts),
+        })
+
+    for filename, file_bytes in direct_files:
+        mime = _get_file_mime(filename)
+        b64_data = base64.b64encode(file_bytes).decode("ascii")
+        llm_content.append({
+            "type": "file",
+            "file": {
+                "filename": filename,
+                "file_data": f"data:{mime};base64,{b64_data}",
+            },
+        })
+
+    for img in all_images:
+        b64 = image_to_base64(img)
+        llm_content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/png;base64,{b64}",
+                "detail": "high",
+            },
+        })
+
+    return llm_content
+
+
 def _get_file_mime(filename: str) -> str:
     """Определяет MIME-тип файла по расширению."""
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
@@ -468,37 +510,7 @@ async def analyze_document(
 
         # --- Этап 3: отправка всех файлов в LLM одним запросом ---
         # Формируем единый content: текст (Excel) + файлы (PDF) + изображения (PNG/JPG)
-        llm_content: list[dict] = []
-
-        # Excel-данные как текст
-        if text_parts:
-            llm_content.append({
-                "type": "text",
-                "text": "\n\n".join(text_parts),
-            })
-
-        # PDF как file-content
-        for filename, file_bytes in direct_files:
-            mime = _get_file_mime(filename)
-            b64_data = base64.b64encode(file_bytes).decode("ascii")
-            llm_content.append({
-                "type": "file",
-                "file": {
-                    "filename": filename,
-                    "file_data": f"data:{mime};base64,{b64_data}",
-                },
-            })
-
-        # Изображения как image_url
-        for img in all_images:
-            b64 = image_to_base64(img)
-            llm_content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{b64}",
-                    "detail": "high",
-                },
-            })
+        llm_content = assemble_llm_content(text_parts, direct_files, all_images)
 
         if not llm_content:
             yield sse_error("Нет данных для анализа. Загрузите PDF, Excel или изображение.", request_id=request_id)
@@ -834,7 +846,7 @@ async def fix_registers(
     effective_timeout: int = 600,
     max_tokens: int = 16384,
     legacy_max_tokens: bool = False,
-    temperature: float | None = 0,
+    temperature: float | None = None,
     proxy: str = "",
     request_id: str = "",
     is_custom_llm: bool = False,
