@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from collections import defaultdict, deque
@@ -46,6 +47,15 @@ def get_version() -> str:
         except OSError:
             continue
     return "dev"
+
+
+def get_revision() -> str:
+    """git-SHA собранного образа (запекается в образ как ENV GIT_SHA при сборке в CI).
+
+    Даёт неизменяемый якорь: по нему видно, из какого именно коммита собран
+    работающий артефакт (PRJ-1089: связь «что реально в проде» ↔ git).
+    """
+    return os.environ.get("GIT_SHA", "unknown")
 
 
 # Допустимые расширения загружаемых файлов
@@ -244,6 +254,7 @@ async def status():
         "llm_available": bool(settings.LLM_API_URL),
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
         "version": app.version,
+        "revision": get_revision(),
     }
     if settings.LLM_API_URL:
         result["server_model"] = settings.LLM_MODEL

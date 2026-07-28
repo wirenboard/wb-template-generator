@@ -47,3 +47,11 @@ services:
     volumes:
       - ./frontend/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
+    # HEALTHCHECK в образе бьёт в :80 (прод-конфиг), а dev монтирует nginx.dev.conf
+    # с портом 9080 — без переопределения dev-контейнер вечно unhealthy.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
