@@ -54,7 +54,7 @@ docker compose up --build -d
 ```
                 ┌─────────┐     ┌─────────┐     ┌─────────────┐
  Браузер ──────>│  nginx  │────>│ FastAPI  │────>│ OpenAI API  │
-                │ :8080   │     │ :8000    │     │ (любой LLM) │
+                │ :9080   │     │ :9000    │     │ (любой LLM) │
                 └─────────┘     └─────────┘     └─────────────┘
                  frontend        backend
 ```
@@ -95,7 +95,17 @@ frontend/src/
   components/          # UI-компоненты редактора
 
 .github/workflows/
-  ci.yml               # CI: ruff, mypy, pytest, eslint, tsc
+  push_other.yml       # ветки/PR: lint + test + проверка CHANGELOG
+  push_master.yml      # main: проверки → сборка образов по git-SHA → выкат → smoke → журнал → тег
+  rollback.yml         # кнопка отката (workflow_dispatch)
+
+ci/
+  README.md            # как устроен конвейер и last-good
+  shell/               # логика выката: deploy, rollback, smoke, сторож, конформанс
+
+Makefile               # единый запускатор: make lint / test / build / deploy / rollback / smoke
+DEPLOYING.md           # операторская карточка: как выкатить, откатить, что делать при аварии
+docker-compose.deploy.yml  # прод: образы по git-SHA из реестра (без сборки на сервере)
 ```
 
 ## API
@@ -180,17 +190,21 @@ event: error     ->  {message, request_id}
 
 ### Продакшен-деплой
 
-```bash
-# Копируйте .env и настройте для production
-cp env.example .env
+Выкат автоматический и **сборки на сервере нет**: образы собираются в CI и помечаются
+git-SHA, сервер только скачивает готовый образ. Поэтому любую версию можно вернуть за
+секунды — она уже лежит в реестре.
 
-# В файле .env важно добавить ваш API ключ из личного кабинета OpenAI
+- Смержил PR в `main` → `push_master` сам собирает, выкатывает, гоняет smoke и пишет в журнал.
+- Откат — **Actions → rollback → Run workflow** (пустой `target` = предыдущая успешная версия).
+- Пошагово, включая аварийные сценарии и break-glass, — в [`DEPLOYING.md`](DEPLOYING.md).
+- Что сейчас в проде: **Environments → production** или `/api/status` (поле `revision`).
 
-# Запуск через prod-конфигурацию (bridge networking, restart: always)
-docker compose -f docker-compose.prod.yml up --build -d
-```
+Прод-конфигурация — [`docker-compose.deploy.yml`](docker-compose.deploy.yml): образы по
+git-SHA из `ghcr.io`, bridge-сеть, `restart: always`, healthcheck-зависимость frontend от
+backend. Секреты (`DEPLOY_HOST`, `DEPLOY_DIR`, `PROD_URL`, `DEPLOY_SSH_KEY`) живут в среде
+`production`, `.env` с ключами — на сервере, в репозиторий не попадает.
 
-`docker-compose.prod.yml` отличается от dev: bridge-сеть вместо host, `restart: always`, healthcheck-зависимость frontend от backend, без volume-маунтов исходников.
+Проверить, что репозиторий соответствует требованиям стандарта деплоя: `make conformance`.
 
 ## Разработка
 
@@ -226,9 +240,22 @@ docker compose logs -f backend
 
 ### CI/CD
 
-GitHub Actions (`ci.yml`) запускается на push/PR в `main`:
-- **Backend**: `ruff check`, `mypy`, `pytest --cov` (порог покрытия 70%)
-- **Frontend**: `npm ci`, `eslint`, `tsc -b`
+Один вход для всех проверок — `make`: те же команды локально и в CI, разницы «у меня
+работало» нет.
+
+```bash
+make lint      # ruff + mypy, eslint + tsc, shellcheck + bash -n на скриптах выката
+make test      # pytest --cov (порог 70%) + vitest
+make conformance   # соответствие prod-ready гейту стандарта деплоя
+```
+
+GitHub Actions:
+
+| Workflow | Когда | Что делает |
+|---|---|---|
+| `push_other.yml` | ветки и PR в `main` | `make lint`, `make test`, CHANGELOG обновлён и `[Unreleased]` пуста |
+| `push_master.yml` | push в `main` | проверки → сторож свежести → сборка+пуш образов по git-SHA → выкат → smoke → журнал → git-тег из CHANGELOG |
+| `rollback.yml` | кнопка (workflow_dispatch) | откат на версию из журнала или на указанный SHA |
 
 ## Формат шаблона wb-mqtt-serial
 

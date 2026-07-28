@@ -23,17 +23,34 @@
 
 ## Запуск и тестирование
 
-**Все команды — только через Docker, НЕ локально.**
+**Приложение запускаем только в Docker, локально на хосте — не поднимаем.**
 
 ```bash
 docker compose up --build -d          # Сборка и запуск
 docker compose build --no-cache && docker compose up -d  # Без кеша
-docker compose exec backend pytest tests/ -v             # Бэкенд-тесты
+docker compose exec backend pytest tests/ -v             # Бэкенд-тесты в контейнере
 docker run --rm -v $(pwd)/frontend:/app -w /app node:20-alpine sh -c "npm ci --ignore-scripts && npx vitest run"  # Фронтенд-тесты
 docker compose down                   # Остановка
 ```
 
 Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
+
+### make — единый вход для проверок и выката
+
+Линт, тесты и выкат вызываются одинаково локально и в CI (в CI шаги окружения ставит
+runner, поэтому там команды идут без Docker-обёртки — это норма, а не нарушение правила
+выше: правило про запуск приложения, а не про запуск линтера).
+
+```bash
+make lint          # ruff + mypy, eslint + tsc, shellcheck + bash -n (ci/shell/*.sh)
+make test          # pytest --cov (порог 70%) + vitest
+make conformance   # соответствие prod-ready гейту стандарта деплоя
+make help          # все цели
+```
+
+**Выкат правится только через `make`/`ci/shell/`** — в workflow-файлах не должно
+появляться shell-логики выката (тонкий YAML: триггеры, среды, секреты). Как выкатить и
+откатить — `DEPLOYING.md`, как устроен конвейер — `ci/README.md`.
 
 ## Флоу разработки
 
