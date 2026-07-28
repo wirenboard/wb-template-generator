@@ -1,0 +1,59 @@
+# Тонкий триггер (стандарт деплоя, PRJ-1089): ветки/PR → только проверки, без выката.
+# Структура — здесь; логика — в `make` (одинаково локально и в CI).
+name: push_other
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  checks:
+    name: lint + test (make)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - name: system deps (poppler для backend)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: install deps
+        run: |
+          pip install -r backend/requirements.txt
+          cd frontend && npm ci
+      # make lint включает lint-shell: shellcheck + bash -n на ci/shell/*.sh
+      # (shellcheck предустановлен на ubuntu-latest). Скрипты выката ходят на прод —
+      # они проверяются наравне с кодом приложения.
+      - run: make lint
+      - run: make test
+
+  changelog:
+    name: CHANGELOG обновлён (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: проверить обновление и версию
+        run: |
+          git diff origin/main...HEAD --name-only | grep -q '^CHANGELOG.md$' \
+            || { echo "::error::CHANGELOG.md не обновлён в PR"; exit 1; }
+          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          [ -n "$VERSION" ] || { echo "::error::нет версионной секции ## [X.Y.Z]"; exit 1; }
+          echo "✅ версия: $VERSION"
+      # Версия сервиса и git-тег берутся из ПЕРВОЙ секции ## [X.Y.Z]. Если записи остались
+      # в [Unreleased], релиз уедет под старым номером, тег молча не создастся, а
+      # /api/status покажет не ту версию — поэтому пустота [Unreleased] проверяется отдельно.
+      - name: секция [Unreleased] должна быть пустой
+        run: |
+          UNRELEASED=$(sed -n '/^## \[Unreleased\]/,/^## \[/{ /^## \[/d; /^[[:space:]]*$/d; p; }' CHANGELOG.md)
+          if [ -n "$UNRELEASED" ]; then
+            echo "::error::Секция [Unreleased] содержит записи. Перенеси их в ## [X.Y.Z] - $(date +%Y-%m-%d) перед мержем."
+            echo "$UNRELEASED"
+            exit 1
+          fi
+          echo "✅ [Unreleased] пуста"

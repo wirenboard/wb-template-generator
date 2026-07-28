@@ -1,0 +1,44 @@
+# PRJ-1089 pilot — прод-выкат по НЕИЗМЕННОМУ образу из реестра (НЕ сборка на сервере).
+# Отличие от docker-compose.prod.yml: здесь `image:` с пиннутым тегом вместо `build:`.
+# Тег задаётся переменной DEPLOY_TAG (git-SHA), образы уже собраны и лежат в реестре.
+#
+# Использование (на сервере, обычно из ci/shell/deploy.sh):
+#   DEPLOY_TAG=<git-sha> docker compose -f docker-compose.deploy.yml pull
+#   DEPLOY_TAG=<git-sha> docker compose -f docker-compose.deploy.yml up -d
+services:
+  backend:
+    image: ${REGISTRY:-ghcr.io/wirenboard}/wb-template-generator-backend:${DEPLOY_TAG:?set DEPLOY_TAG=<git-sha>}
+    env_file: .env
+    environment:
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app
+
+  frontend:
+    image: ${REGISTRY:-ghcr.io/wirenboard}/wb-template-generator-frontend:${DEPLOY_TAG:?set DEPLOY_TAG=<git-sha>}
+    ports:
+      - "${WEB_PORT:-80}:80"
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - app
+
+networks:
+  app:
+    driver: bridge
