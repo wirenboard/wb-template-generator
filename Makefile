@@ -7,8 +7,9 @@ IMAGE_FRONTEND := $(REGISTRY)/wb-template-generator-frontend
 TAG            ?= $(shell git rev-parse HEAD)
 SHELL_SCRIPTS  := $(wildcard ci/shell/*.sh)
 
+.DEFAULT_GOAL := help
 .PHONY: help lint lint-backend lint-frontend lint-shell test test-backend test-frontend \
-        build push smoke guard-staleness conformance up down
+        build push smoke guard-staleness up down
 
 help: ## показать цели
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -45,9 +46,6 @@ push: ## запушить локально собранные образы
 
 guard-staleness: ## стоп, если ветка отстала от main
 	@ci/shell/guard_staleness.sh
-
-conformance: ## соответствие prod-ready гейту стандарта деплоя
-	@ci/shell/conformance.sh
 
 smoke: ## проверка живости после выката (URL=https://...)
 	@ci/shell/smoke.sh "$(URL)"

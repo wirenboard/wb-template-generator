@@ -1,3 +1,5 @@
+# Локальная разработка: собирает образы из исходников, host networking (9080/9000).
+# Прод — docker-compose.deploy.yml (готовые образы по git-SHA).
 services:
   backend:
     build:

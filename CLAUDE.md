@@ -40,7 +40,6 @@ Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
 ```bash
 make lint          # ruff + mypy, eslint + tsc, shellcheck + bash -n
 make test          # pytest --cov (порог 70%) + vitest
-make conformance   # соответствие prod-ready гейту стандарта деплоя
 make help          # все цели
 ```
 

@@ -102,8 +102,7 @@ jobs:
           env: ${{ steps.dep.outputs.env }}
           deployment_id: ${{ steps.dep.outputs.deployment_id }}
 
-      # Авто-откат: цель — предыдущий success из журнала. Практика зрелого прода,
-      # а не требование гейта (для гейта хватает красного прогона и кнопки отката).
+      # авто-откат: цель — предыдущий success из журнала
       - uses: actions/github-script@v7
         id: prev
         if: failure()
@@ -131,7 +130,7 @@ jobs:
           dir: ${{ secrets.DEPLOY_DIR }}
           registry: ${{ env.REGISTRY }}
 
-      # откат тоже событие выката — без записи «что в проде» расходится с журналом
+      # откат тоже событие выката — иначе журнал разойдётся с реальностью
       - uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8  # v1.5.0
         if: failure() && steps.prev.outputs.sha != ''
         with:
@@ -162,8 +161,7 @@ jobs:
 
   tag:
     name: git-тег из CHANGELOG
-    # намеренно не needs: release — транзиентный провал smoke не должен оставить
-    # версию без тега навсегда
+    # не needs: release — транзиентный smoke не должен оставить версию без тега
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 10

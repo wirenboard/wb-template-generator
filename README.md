@@ -30,7 +30,7 @@ cp env.example .env
 # Отредактируйте .env — укажите LLM_API_KEY и LLM_API_URL
 
 docker compose up --build -d
-# Откройте http://localhost:8080
+# Откройте http://localhost:9080
 ```
 
 ## Как это работает
@@ -102,10 +102,10 @@ frontend/src/
   deploy/              # composite-действие выката (scp + ssh через готовые actions)
 
 ci/
-  README.md            # как устроен конвейер и last-good
-  shell/               # smoke, сторож свежести, конформанс
+  README.md            # как устроен конвейер
+  shell/               # smoke-проверка и сторож свежести
 
-Makefile               # единый запускатор: make lint / test / build / smoke / conformance
+Makefile               # единый запускатор: make lint / test / build / smoke
 DEPLOYING.md           # операторская карточка: как выкатить, откатить, что делать при аварии
 docker-compose.deploy.yml  # прод: образы по git-SHA из реестра (без сборки на сервере)
 ```
@@ -206,7 +206,12 @@ git-SHA из `ghcr.io`, bridge-сеть, `restart: always`, healthcheck-зави
 backend. Секреты (`DEPLOY_HOST`, `DEPLOY_DIR`, `PROD_URL`, `DEPLOY_SSH_KEY`) живут в среде
 `production`, `.env` с ключами — на сервере, в репозиторий не попадает.
 
-Проверить, что репозиторий соответствует требованиям стандарта деплоя: `make conformance`.
+**Два compose-файла — разные задачи:**
+
+| Файл | Где используется | Как получает код |
+|---|---|---|
+| `docker-compose.yml` | локальная разработка (`make up`) | собирает образы из исходников тут же, host networking, порты 9080/9000 |
+| `docker-compose.deploy.yml` | боевой сервер (использует CI) | скачивает готовый образ по git-SHA из `ghcr.io`, bridge-сеть, публикует `${WEB_PORT:-80}` |
 
 ## Разработка
 
@@ -248,7 +253,6 @@ docker compose logs -f backend
 ```bash
 make lint      # ruff + mypy, eslint + tsc, shellcheck + bash -n
 make test      # pytest --cov (порог 70%) + vitest
-make conformance   # соответствие prod-ready гейту стандарта деплоя
 ```
 
 | Workflow | Когда | Что делает |

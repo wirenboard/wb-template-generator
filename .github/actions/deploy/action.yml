@@ -13,8 +13,7 @@ inputs:
 runs:
   using: composite
   steps:
-    # compose именно из выкатываемого коммита: иначе откат поехал бы со свежим
-    # compose при старых образах.
+    # compose из выкатываемого коммита — иначе откат поедет со свежим compose
     - shell: bash
       run: |
         mkdir -p .deploy
@@ -49,8 +48,7 @@ runs:
           [ -w "$LOG" ] || LOG=deploy-history.log
           echo "$(date -Is) deploy tag=$DEPLOY_TAG src=ci user=$(id -un)" >> "$LOG"
           docker compose -f docker-compose.deploy.yml pull
-          # backend за прокси — можно поднять рядом и снять старый; frontend держит
-          # хостовый :80, там recreate с миганием ~1-2с
+          # backend за прокси — можно поднять рядом; frontend держит :80 → recreate
           if docker rollout --help >/dev/null 2>&1; then
             docker rollout -f docker-compose.deploy.yml backend
           else

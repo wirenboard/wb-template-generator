@@ -1,10 +1,6 @@
-# PRJ-1089 pilot — прод-выкат по НЕИЗМЕННОМУ образу из реестра (НЕ сборка на сервере).
-# Отличие от docker-compose.prod.yml: здесь `image:` с пиннутым тегом вместо `build:`.
-# Тег задаётся переменной DEPLOY_TAG (git-SHA), образы уже собраны и лежат в реестре.
-#
-# Использование (на сервере, обычно из ci/shell/deploy.sh):
-#   DEPLOY_TAG=<git-sha> docker compose -f docker-compose.deploy.yml pull
-#   DEPLOY_TAG=<git-sha> docker compose -f docker-compose.deploy.yml up -d
+# Боевой сервер: готовый образ из реестра по git-SHA (DEPLOY_TAG), без сборки на месте.
+# Обычно запускается из CI; руками — см. DEPLOYING.md.
+# Локальная разработка — docker-compose.yml.
 services:
   backend:
     image: ${REGISTRY:-ghcr.io/wirenboard}/wb-template-generator-backend:${DEPLOY_TAG:?set DEPLOY_TAG=<git-sha>}
