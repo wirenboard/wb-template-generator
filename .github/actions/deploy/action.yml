@@ -48,8 +48,10 @@ runs:
           [ -w "$LOG" ] || LOG=deploy-history.log
           echo "$(date -Is) deploy tag=$DEPLOY_TAG src=ci user=$(id -un)" >> "$LOG"
           docker compose -f docker-compose.deploy.yml pull
-          # backend за прокси — можно поднять рядом; frontend держит :80 → recreate
-          if docker rollout --help >/dev/null 2>&1; then
+          # backend за прокси — можно поднять рядом; frontend держит :80 → recreate.
+          # Детект плагина именно через `version`: на `docker rollout --help` docker
+          # печатает общий help и выходит с 0 даже когда плагина нет.
+          if docker rollout version >/dev/null 2>&1; then
             docker rollout -f docker-compose.deploy.yml backend
           else
             docker compose -f docker-compose.deploy.yml up -d --wait backend

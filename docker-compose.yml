@@ -37,7 +37,7 @@ services:
       - TELEGRAM_NOTIFY_THRESHOLD_COUNT=${TELEGRAM_NOTIFY_THRESHOLD_COUNT:-5}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9000/api/health"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
     # в образе HEALTHCHECK бьёт в :80, а dev-конфиг слушает 9080
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:9080/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9080/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3

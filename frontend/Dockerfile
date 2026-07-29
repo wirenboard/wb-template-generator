@@ -17,5 +17,7 @@ EXPOSE 80
 
 # Раньше healthcheck у фронта не было вовсе → rolling-update «слепой» (Swarm/compose
 # не видят, поднялся ли контейнер). Добавлен лёгкий /healthz в nginx (см. nginx.conf).
+# именно 127.0.0.1, не localhost: в контейнере localhost резолвится в ::1, а nginx
+# слушает только IPv4 — busybox wget не пробует второй адрес и healthcheck не проходит
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=5s \
-  CMD wget -qO- http://localhost/healthz >/dev/null 2>&1 || exit 1
+  CMD wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1
