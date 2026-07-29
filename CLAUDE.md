@@ -35,22 +35,18 @@ docker compose down                   # Остановка
 
 Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
 
-### make — единый вход для проверок и выката
-
-Линт, тесты и выкат вызываются одинаково локально и в CI (в CI шаги окружения ставит
-runner, поэтому там команды идут без Docker-обёртки — это норма, а не нарушение правила
-выше: правило про запуск приложения, а не про запуск линтера).
+### make — единый вход для проверок
 
 ```bash
-make lint          # ruff + mypy, eslint + tsc, shellcheck + bash -n (ci/shell/*.sh)
+make lint          # ruff + mypy, eslint + tsc, shellcheck + bash -n
 make test          # pytest --cov (порог 70%) + vitest
 make conformance   # соответствие prod-ready гейту стандарта деплоя
 make help          # все цели
 ```
 
-**Выкат правится только через `make`/`ci/shell/`** — в workflow-файлах не должно
-появляться shell-логики выката (тонкий YAML: триггеры, среды, секреты). Как выкатить и
-откатить — `DEPLOYING.md`, как устроен конвейер — `ci/README.md`.
+Правило конвейера: **сначала готовый GitHub Action, свой скрипт — только если готового
+нет.** Шаги выката собраны в `.github/actions/deploy`, свои скрипты — в `ci/shell/`.
+Как выкатить и откатить — `DEPLOYING.md`, как устроен конвейер — `ci/README.md`.
 
 ## Флоу разработки
 

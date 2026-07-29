@@ -1,6 +1,3 @@
-# Тонкий триггер (стандарт деплоя, PRJ-1089): main → проверки → сторож → сборка+пуш
-# по git-SHA → выкат → smoke → журнал → тег. Логика в `make`/`ci/`; YAML — только
-# структура, среды и секреты.
 name: push_master
 on:
   push:
@@ -11,7 +8,7 @@ env:
 
 jobs:
   checks:
-    name: lint + test (make)
+    name: lint + test
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -26,156 +23,156 @@ jobs:
       - run: make test
 
   release:
-    name: guard → build+push (git-SHA) → deploy → smoke
+    name: build → deploy → smoke
     needs: checks
     runs-on: ubuntu-latest
-    timeout-minutes: 30              # без предела зависший VPS держал бы лок прода часами
-    environment: production          # доступ к прод-секретам + история на вкладке Environments (§4.5)
-    # Лок именно на выкат, а НЕ на весь workflow: иначе, во-первых, лок держится ещё и на
-    # время lint/test, во-вторых, новый push в main вытесняет из очереди *ожидающий* откат
-    # (GitHub держит 1 running + 1 pending) — то есть нажатая кнопка отката молча отменяется.
+    timeout-minutes: 30
+    environment: production
+    # лок только на выкат: иначе новый push вытесняет из очереди нажатый откат
     concurrency:
       group: deploy-prod
-      cancel-in-progress: false      # прод-выкаты не отменяем на полпути
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
-      deployments: write             # журнал выкатов через GitHub Deployments API
+      deployments: write
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0             # сторожу и доставке compose из git нужна полная история (§7.2)
+          fetch-depth: 0   # нужно сторожу и доставке compose из git
 
-      # сторож свежести (§7.2): для push-в-main ловит re-run старого прогона
       - run: make guard-staleness
 
-      - name: login ghcr
-        uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # сборка+пуш обоих образов: тег = git-SHA. :latest НЕ публикуем — этот сервис
-      # не под общим стеком. Профиль «сервис под стеком, ссылающимся на latest» добавляет
-      # push :latest на переходный период (§3.2) — здесь такого нет, комментарий не врёт.
-      - run: make build push TAG=${{ github.sha }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/wb-template-generator-backend:${{ github.sha }}
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      # журнал: открыть deployment-«кандидата» (успех проставится ТОЛЬКО после smoke — §7.1)
-      - name: journal — candidate
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6
+        with:
+          context: ./frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/wb-template-generator-frontend:${{ github.sha }}
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # успех проставится только после smoke
+      - uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8  # v1.5.0
         id: dep
-        uses: actions/github-script@v7
         with:
-          script: |
-            const d = await github.rest.repos.createDeployment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              ref: context.sha, environment: 'production',
-              auto_merge: false, required_contexts: [] });
-            core.setOutput('id', d.data.id);
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: production
+          ref: ${{ github.sha }}
 
-      # Действие пиннуется по commit-SHA, а не по тегу: тег в чужом репозитории можно
-      # передвинуть, и в шаг, который держит прод-ключ, приедет другой код.
-      - name: install ssh key
-        uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387  # v0.9.0
+      - uses: ./.github/actions/deploy
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-
-      # Отпечаток сервера закреплён ЗАРАНЕЕ в repo Variables (не TOFU-keyscan на каждом прогоне):
-      # владелец один раз выполняет `ssh-keyscan -H <host>` и кладёт вывод в DEPLOY_KNOWN_HOSTS.
-      - name: trust deploy host (pinned known_hosts)
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ vars.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
-
-      # выкат по неизменяемому тегу (rolling + verify) — вся логика в ci/
-      - name: deploy
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
-        run: make deploy TAG=${{ github.sha }}
+          tag: ${{ github.sha }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          fingerprint: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
+          dir: ${{ secrets.DEPLOY_DIR }}
+          registry: ${{ env.REGISTRY }}
 
       - name: smoke
         env:
           EXPECT_SHA: ${{ github.sha }}
         run: make smoke URL=${{ secrets.PROD_URL }}
 
-      # ТОЛЬКО после smoke выкат становится «хорошим»: статус в журнале (§7.1, двухфазно)
-      - name: journal — result
-        if: always() && steps.dep.outputs.id != ''
-        uses: actions/github-script@v7
-        env:
-          DEPLOYMENT_ID: ${{ steps.dep.outputs.id }}
+      - uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8  # v1.5.0
+        if: always()
+        with:
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          status: ${{ job.status }}
+          env: ${{ steps.dep.outputs.env }}
+          deployment_id: ${{ steps.dep.outputs.deployment_id }}
+
+      # Авто-откат: цель — предыдущий success из журнала. Практика зрелого прода,
+      # а не требование гейта (для гейта хватает красного прогона и кнопки отката).
+      - uses: actions/github-script@v7
+        id: prev
+        if: failure()
         with:
           script: |
-            await github.rest.repos.createDeploymentStatus({
+            const deps = await github.rest.repos.listDeployments({
               owner: context.repo.owner, repo: context.repo.repo,
-              deployment_id: Number(process.env.DEPLOYMENT_ID),
-              state: '${{ job.status }}' === 'success' ? 'success' : 'failure' });
+              environment: 'production', per_page: 30 });
+            for (const d of deps.data) {
+              if (d.sha === context.sha) continue;
+              const st = await github.rest.repos.listDeploymentStatuses({
+                owner: context.repo.owner, repo: context.repo.repo, deployment_id: d.id, per_page: 1 });
+              if (st.data[0]?.state === 'success') { core.setOutput('sha', d.sha); return; }
+            }
+            core.warning('в журнале нет предыдущего успешного выката — откатывай кнопкой (rollback.yml)');
 
-      # АВТО-ОТКАТ при провале выката/smoke — на last-good из break-glass-зеркала
-      # (оно обновляется только ПОСЛЕ успешного smoke, т.е. сейчас хранит предыдущую хорошую).
-      # NB: авто-откат — практика зрелого прода (§7.1, решение A2), НЕ требование гейта:
-      # для гейта достаточно красного прогона + отката кнопкой (rollback.yml).
-      - name: auto-rollback to last-good (deploy/smoke failed)
-        id: autorb
-        if: failure() && steps.dep.outputs.id != ''
-        env:
-          REGISTRY: ghcr.io/wirenboard
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
-        run: |
-          LG="$(ci/shell/last_good.sh read)"
-          if [ -n "$LG" ] && [ "$LG" != "${{ github.sha }}" ]; then
-            echo "::warning::выкат/smoke провален — авто-откат на last-good ${LG}"
-            make rollback TAG="$LG"
-            echo "target=$LG" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::last-good недоступен или совпадает с текущим SHA — авто-откат невозможен, откатывай кнопкой (rollback.yml)"
-          fi
-
-      # Авто-откат — тоже событие выката: без записи в журнал он остаётся невидимым,
-      # «что сейчас в проде» перестаёт совпадать с последним success, а MTTR/CFR врут.
-      - name: journal — auto-rollback record
-        if: always() && steps.autorb.outputs.target != ''
-        uses: actions/github-script@v7
-        env:
-          TARGET: ${{ steps.autorb.outputs.target }}
+      - uses: ./.github/actions/deploy
+        if: failure() && steps.prev.outputs.sha != ''
         with:
-          script: |
-            const d = await github.rest.repos.createDeployment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              ref: process.env.TARGET, environment: 'production',
-              auto_merge: false, required_contexts: [],
-              description: 'auto-rollback after failed deploy/smoke',
-              payload: { rollback: true, auto: true } });
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner, repo: context.repo.repo,
-              deployment_id: d.data.id, state: 'success' });
+          tag: ${{ steps.prev.outputs.sha }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          fingerprint: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
+          dir: ${{ secrets.DEPLOY_DIR }}
+          registry: ${{ env.REGISTRY }}
 
-      # break-glass-зеркало с ИСТОРИЕЙ (current + previous) — только после успешного smoke.
-      # Логика (валидация SHA, сдвиг prev) — в ci/shell/last_good.sh, не инлайном в YAML.
-      - name: break-glass mirror — last-good on server (post-smoke only)
+      # откат тоже событие выката — без записи «что в проде» расходится с журналом
+      - uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8  # v1.5.0
+        if: failure() && steps.prev.outputs.sha != ''
+        with:
+          step: deploy_status
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: production
+          status: success
+          deployment_id: ${{ steps.dep.outputs.deployment_id }}
+          desc: auto-rollback на ${{ steps.prev.outputs.sha }}
+
+      # break-glass-зеркало: current + prev, только после успешного smoke
+      - uses: appleboy/ssh-action@2ead5e36573f08b82fbfce1504f1a4b05a647c6f  # v1.2.2
         if: success()
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
-        run: ci/shell/last_good.sh write "${{ github.sha }}"
+          SHA: ${{ github.sha }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          fingerprint: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
+          envs: DEPLOY_DIR,SHA
+          script: |
+            set -eu
+            cd "$DEPLOY_DIR"
+            [ -f last-good-sha ] && cp last-good-sha last-good-sha.prev || true
+            echo "$SHA" > last-good-sha
 
   tag:
-    name: git-тег из CHANGELOG (SemVer для людей)
-    # Намеренно НЕ needs: release. Тег — метка версии для людей, он не про состояние прода:
-    # если smoke упал транзиентно (или прод-секреты ещё не заведены), версия иначе осталась
-    # бы без тега навсегда — второго push в main с этим CHANGELOG уже не будет.
+    name: git-тег из CHANGELOG
+    # намеренно не needs: release — транзиентный провал smoke не должен оставить
+    # версию без тега навсегда
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { contents: write }
     steps:
       - uses: actions/checkout@v4
-      - name: тег vX.Y.Z
-        run: |
+      - run: |
           VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
           [ -n "$VERSION" ] || { echo "::error::в CHANGELOG.md нет секции ## [X.Y.Z]"; exit 1; }
           TAG="v${VERSION}"
           git ls-remote --tags origin | grep -q "refs/tags/${TAG}$" && { echo "тег ${TAG} есть"; exit 0; }
-          git tag "${TAG}" && git push origin "${TAG}" && echo "✅ ${TAG}"
+          git tag "${TAG}" && git push origin "${TAG}"

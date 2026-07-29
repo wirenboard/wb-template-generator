@@ -3,8 +3,8 @@
 > Операторская карточка: минимум, который нужен в момент выката или аварии.
 > Почему всё устроено именно так — в стандарте деплоя.
 
-Конкретные адреса не хранятся в репозитории: они лежат в секретах среды `production`
-(`DEPLOY_HOST`, `DEPLOY_DIR`, `PROD_URL`) — смотреть в **Settings → Environments → production**.
+Адреса не хранятся в репозитории — они в секретах среды `production`
+(**Settings → Environments → production**).
 
 ## 🚀 Выкатить
 
@@ -35,15 +35,12 @@
 0. **Озвучь и получи добро руководителя** (в остром инциденте — озвучь постфактум). Записывать ничего не надо — след оставит механизм.
 1. `ssh <DEPLOY_HOST>`, каталог `<DEPLOY_DIR>` (по умолчанию `/srv/wb-template-generator`).
 2. Цель отката: `cat last-good-sha.prev` — если беда проявилась после успешного выката; `cat last-good-sha` — если текущий выкат не дошёл до конца.
-3. Выкат — **предпочтительно тем же скриптом** (он сам запишет след в журнал хоста и возьмёт compose из git того же коммита):
-   ```bash
-   DEPLOY_HOST=<user@host> DEPLOY_DIR=<dir> ci/shell/deploy.sh <sha>   # со своей машины, из клона репо
-   ```
-   Крайний случай — сырыми командами на сервере (compose-файл там останется от прошлого выката):
+3. Выкат руками на сервере (compose-файл там остался от прошлого выката):
    ```bash
    export DEPLOY_TAG=<sha> REGISTRY=ghcr.io/wirenboard
    docker compose -f docker-compose.deploy.yml pull
    docker compose -f docker-compose.deploy.yml up -d --wait
+   echo "$(date -Is) deploy tag=$DEPLOY_TAG src=manual user=$(id -un)" >> /var/log/wb-deploy-history.log
    ```
 4. После инцидента — следующий выкат обычным путём (он же выровняет журнал конвейера).
 

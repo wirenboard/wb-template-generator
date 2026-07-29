@@ -98,12 +98,14 @@ frontend/src/
   push_other.yml       # ветки/PR: lint + test + проверка CHANGELOG
   push_master.yml      # main: проверки → сборка образов по git-SHA → выкат → smoke → журнал → тег
   rollback.yml         # кнопка отката (workflow_dispatch)
+.github/actions/
+  deploy/              # composite-действие выката (scp + ssh через готовые actions)
 
 ci/
   README.md            # как устроен конвейер и last-good
-  shell/               # логика выката: deploy, rollback, smoke, сторож, конформанс
+  shell/               # smoke, сторож свежести, конформанс
 
-Makefile               # единый запускатор: make lint / test / build / deploy / rollback / smoke
+Makefile               # единый запускатор: make lint / test / build / smoke / conformance
 DEPLOYING.md           # операторская карточка: как выкатить, откатить, что делать при аварии
 docker-compose.deploy.yml  # прод: образы по git-SHA из реестра (без сборки на сервере)
 ```
@@ -244,18 +246,22 @@ docker compose logs -f backend
 работало» нет.
 
 ```bash
-make lint      # ruff + mypy, eslint + tsc, shellcheck + bash -n на скриптах выката
+make lint      # ruff + mypy, eslint + tsc, shellcheck + bash -n
 make test      # pytest --cov (порог 70%) + vitest
 make conformance   # соответствие prod-ready гейту стандарта деплоя
 ```
-
-GitHub Actions:
 
 | Workflow | Когда | Что делает |
 |---|---|---|
 | `push_other.yml` | ветки и PR в `main` | `make lint`, `make test`, CHANGELOG обновлён и `[Unreleased]` пуста |
 | `push_master.yml` | push в `main` | проверки → сторож свежести → сборка+пуш образов по git-SHA → выкат → smoke → журнал → git-тег из CHANGELOG |
 | `rollback.yml` | кнопка (workflow_dispatch) | откат на версию из журнала или на указанный SHA |
+
+Работу с реестром, сервером и журналом делают готовые действия
+(`docker/build-push-action`, `appleboy/scp-action` + `appleboy/ssh-action`,
+`bobheadxi/deployments`, `dangoslen/changelog-enforcer`); шаги выката собраны в
+локальном composite-действии `.github/actions/deploy`. Свои скрипты остались только
+там, где готового действия нет: `ci/shell/`.
 
 ## Формат шаблона wb-mqtt-serial
 

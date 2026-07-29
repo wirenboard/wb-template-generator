@@ -1,0 +1,60 @@
+name: deploy
+description: Выкат образа по git-SHA на сервер; compose берётся из git того же коммита.
+
+inputs:
+  tag:         { required: true,  description: git-SHA выкатываемого образа }
+  host:        { required: true }
+  username:    { required: true }
+  key:         { required: true,  description: приватный SSH-ключ }
+  fingerprint: { required: true,  description: SHA256-отпечаток хоста }
+  dir:         { required: true,  description: каталог со стеком на сервере }
+  registry:    { required: false, default: ghcr.io/wirenboard }
+
+runs:
+  using: composite
+  steps:
+    # compose именно из выкатываемого коммита: иначе откат поехал бы со свежим
+    # compose при старых образах.
+    - shell: bash
+      run: |
+        mkdir -p .deploy
+        git show "${{ inputs.tag }}:docker-compose.deploy.yml" > .deploy/docker-compose.deploy.yml
+
+    - uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345  # v1.0.0
+      with:
+        host: ${{ inputs.host }}
+        username: ${{ inputs.username }}
+        key: ${{ inputs.key }}
+        fingerprint: ${{ inputs.fingerprint }}
+        source: .deploy/docker-compose.deploy.yml
+        target: ${{ inputs.dir }}
+        strip_components: 1
+
+    - uses: appleboy/ssh-action@2ead5e36573f08b82fbfce1504f1a4b05a647c6f  # v1.2.2
+      env:
+        DEPLOY_DIR: ${{ inputs.dir }}
+        DEPLOY_TAG: ${{ inputs.tag }}
+        REGISTRY: ${{ inputs.registry }}
+      with:
+        host: ${{ inputs.host }}
+        username: ${{ inputs.username }}
+        key: ${{ inputs.key }}
+        fingerprint: ${{ inputs.fingerprint }}
+        command_timeout: 10m
+        envs: DEPLOY_DIR,DEPLOY_TAG,REGISTRY
+        script: |
+          set -eu
+          cd "$DEPLOY_DIR"
+          LOG=/var/log/wb-deploy-history.log
+          [ -w "$LOG" ] || LOG=deploy-history.log
+          echo "$(date -Is) deploy tag=$DEPLOY_TAG src=ci user=$(id -un)" >> "$LOG"
+          docker compose -f docker-compose.deploy.yml pull
+          # backend за прокси — можно поднять рядом и снять старый; frontend держит
+          # хостовый :80, там recreate с миганием ~1-2с
+          if docker rollout --help >/dev/null 2>&1; then
+            docker rollout -f docker-compose.deploy.yml backend
+          else
+            docker compose -f docker-compose.deploy.yml up -d --wait backend
+          fi
+          docker compose -f docker-compose.deploy.yml up -d --wait frontend
+          docker compose -f docker-compose.deploy.yml ps

@@ -1,7 +1,5 @@
-# Тонкий триггер (стандарт деплоя, PRJ-1089): откат одной кнопкой. Безусловный, без гейта (§7.1).
-# Пустой target = предыдущий успешный деплой из журнала (Deployments API, двухфазный last-good).
-# ВАЖНО: на среде production НЕ включать required reviewers — защита среды действует на все job,
-# т.е. гейтила бы и откат, ломая «безусловно однокнопочный» (§7.1).
+# Откат одной кнопкой: безусловный, без гейта.
+# На среде production НЕ включать required reviewers — иначе загейтит и откат.
 name: rollback
 on:
   workflow_dispatch:
@@ -18,34 +16,24 @@ on:
 jobs:
   rollback:
     runs-on: ubuntu-latest
-    timeout-minutes: 30              # авария не должна висеть в очереди из-за зависшего ssh
+    timeout-minutes: 30
     environment: production
-    # Лок на уровне job'а (не workflow) — той же группой, что и выкат: откат и выкат
-    # взаимно исключают друг друга, но лок не удерживается на посторонние шаги.
     concurrency:
       group: deploy-prod
       cancel-in-progress: false
     permissions: { deployments: write, contents: read, packages: read }
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # нужен для проверок ancestry и миграций в диапазоне отката (§7.1)
+        with: { fetch-depth: 0 }
 
-      # Проверки ниже сравнивают цель с origin/main, а НЕ с HEAD этого прогона: workflow_dispatch
-      # можно запустить с любой ветки, и тогда HEAD — это её верхушка. Без явного origin/main
-      # запуск с левой ветки протащил бы в прод коммит, не прошедший ревью, и перекосил бы
-      # проверку миграций. Дополнительно стоит ограничить среду production deployment branch
-      # policy (только main) — это уже настройка репозитория, а не YAML.
-      - name: fetch main
-        run: git fetch --no-tags --depth=0 origin main
+      # проверки сравнивают цель с origin/main, а не с HEAD прогона: dispatch можно
+      # запустить с любой ветки
+      - run: git fetch --no-tags origin main
 
-      # Цель отката. Якорь — ЖУРНАЛ, а не context.sha: последний success = то, что сейчас
-      # в проде; цель = предыдущий success с ДРУГИМ SHA. Иначе «откат» может молча выкатить
-      # ту же версию, что уже стоит (ложное чувство отката).
-      # inputs.target приходит через env, НЕ интерполяцией в скрипт (script injection).
-      - name: resolve & validate target (journal-anchored)
+      # Якорь — журнал: последний success = то, что в проде; цель = предыдущий success
+      # с другим SHA. Вход идёт через env, не интерполяцией (script injection).
+      - uses: actions/github-script@v7
         id: target
-        uses: actions/github-script@v7
         env:
           TARGET_INPUT: ${{ inputs.target }}
         with:
@@ -63,25 +51,21 @@ jobs:
                   owner: context.repo.owner, repo: context.repo.repo, deployment_id: d.id, per_page: 1 });
                 if (st.data[0]?.state === 'success') ok.push(d.sha);
               }
-              const current = ok[0];                     // последний успех = текущий прод
-              sha = ok.find(s => s !== current) || '';   // цель = предыдущий успех с другим SHA
+              sha = ok.find(s => s !== ok[0]) || '';
               if (!sha) return core.setFailed('В журнале нет предыдущего успешного деплоя — укажи target явно.');
-              core.info(`прод сейчас: ${current} → откат на: ${sha}`);
+              core.info(`прод сейчас: ${ok[0]} → откат на: ${sha}`);
             }
             core.setOutput('sha', sha);
 
-      # target существует в истории и является предком main (откат — только назад по main)
-      - name: validate target — commit exists & is ancestor of main
+      - name: цель есть в истории и является предком main
         env:
           TARGET: ${{ steps.target.outputs.sha }}
         run: |
-          git cat-file -e "${TARGET}^{commit}" \
-            || { echo "::error::коммит ${TARGET} не найден в истории"; exit 1; }
+          git cat-file -e "${TARGET}^{commit}" || { echo "::error::коммит ${TARGET} не найден"; exit 1; }
           git merge-base --is-ancestor "${TARGET}" origin/main \
-            || { echo "::error::${TARGET} не предок origin/main — откатываться можно только назад по истории main"; exit 1; }
+            || { echo "::error::${TARGET} не предок origin/main"; exit 1; }
 
-      # образ такой версии реально лежит в реестре — иначе «откат» упадёт на pull посреди аварии
-      - name: validate target — image exists in registry
+      - name: образ есть в реестре
         env:
           TARGET: ${{ steps.target.outputs.sha }}
         run: |
@@ -89,60 +73,46 @@ jobs:
           docker manifest inspect "ghcr.io/wirenboard/wb-template-generator-backend:${TARGET}"  >/dev/null
           docker manifest inspect "ghcr.io/wirenboard/wb-template-generator-frontend:${TARGET}" >/dev/null
 
-      # предохранитель N−1 (§7.1): миграции в диапазоне отката → стоп.
-      # Осознанное продолжение — галка confirm_migrations при запуске (не тупик).
-      - name: migration-boundary check
+      # предохранитель N−1: миграции в диапазоне отката → стоп до подтверждения
+      - name: миграции в диапазоне отката
         env:
           TARGET: ${{ steps.target.outputs.sha }}
         run: |
           MIGR=$(git diff --name-only "${TARGET}"..origin/main -- '**/migrations/**' | head -5)
           if [ -n "$MIGR" ] && [ "${{ inputs.confirm_migrations }}" != "true" ]; then
-            echo "::error::Диапазон отката содержит миграции БД — старый код против новой схемы (§7.1):"
-            echo "$MIGR"
+            echo "::error::Диапазон отката содержит миграции БД: $MIGR"
             echo "::error::Проверь совместимость N−1 и перезапусти с галкой confirm_migrations."
             exit 1
           fi
 
-      # Действие пиннуется по commit-SHA, а не по тегу (тег в чужом репозитории можно передвинуть).
-      - name: install ssh key
-        uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387  # v0.9.0
+      - uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8  # v1.5.0
+        id: dep
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: production
+          ref: ${{ steps.target.outputs.sha }}
+          desc: rollback
 
-      # Отпечаток сервера закреплён ЗАРАНЕЕ в repo Variables (не TOFU-keyscan на каждом прогоне):
-      # владелец один раз выполняет `ssh-keyscan -H <host>` и кладёт вывод в DEPLOY_KNOWN_HOSTS.
-      - name: trust deploy host (pinned known_hosts)
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ vars.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
-
-      - name: rollback
-        env:
-          REGISTRY: ghcr.io/wirenboard
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
-          TAG: ${{ steps.target.outputs.sha }}
-        run: make rollback TAG="$TAG"
+      - uses: ./.github/actions/deploy
+        with:
+          tag: ${{ steps.target.outputs.sha }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          fingerprint: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
+          dir: ${{ secrets.DEPLOY_DIR }}
 
       - name: smoke
         env:
           EXPECT_SHA: ${{ steps.target.outputs.sha }}
         run: make smoke URL=${{ secrets.PROD_URL }}
 
-      # откат ТОЖЕ пишется в журнал (§7.1) — иначе MTTR/CFR слепнут на главных событиях
-      - name: journal — rollback record
+      - uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8  # v1.5.0
         if: always()
-        uses: actions/github-script@v7
-        env:
-          TARGET: ${{ steps.target.outputs.sha }}
         with:
-          script: |
-            const d = await github.rest.repos.createDeployment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              ref: process.env.TARGET, environment: 'production',
-              auto_merge: false, required_contexts: [],
-              payload: { rollback: true } });
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner, repo: context.repo.repo,
-              deployment_id: d.data.id,
-              state: '${{ job.status }}' === 'success' ? 'success' : 'failure' });
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          status: ${{ job.status }}
+          env: ${{ steps.dep.outputs.env }}
+          deployment_id: ${{ steps.dep.outputs.deployment_id }}
