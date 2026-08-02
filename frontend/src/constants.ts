@@ -81,6 +81,13 @@ export const LOCALE_TRANSLATION_LANGUAGES: Record<string, { code: string; label:
 /** Ключ localStorage для пользовательских языков */
 export const LANGUAGES_STORAGE_KEY = 'wb-template-languages';
 
+/**
+ * Лимит размера файла до ответа /api/status. Держать синхронно с
+ * MAX_FILE_SIZE_MB в backend/config.py — иначе фронт отобьёт файл, который
+ * сервер принял бы, и наоборот.
+ */
+export const DEFAULT_MAX_FILE_SIZE_MB = 2;
+
 /** Маппинг кодов языков → названия (для промпта перевода) */
 export const LANGUAGE_NAMES: Record<string, string> = {
   ru: 'Russian',

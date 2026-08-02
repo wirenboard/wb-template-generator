@@ -37,7 +37,6 @@ def _make_settings(**overrides) -> Settings:
         "LLM_LEGACY_MAX_TOKENS": False,
         "LLM_TEMPERATURE": 0,
         "LLM_PROXY": "",
-        "PDF_BATCH_SIZE": 0,
     }
     defaults.update(overrides)
     return Settings(**defaults)

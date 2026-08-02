@@ -6,7 +6,7 @@ import logging
 import re
 import time
 from collections import defaultdict, deque
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
@@ -15,10 +15,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
 
+import queue_manager
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_errors import ALL_CATEGORIES, ErrorCategory
-from llm_service import analyze_document, resolve_llm_credentials
+from llm_service import analysis_metrics, analyze_document, resolve_llm_credentials
 from models import BuildRequest, TranslateRequest, ValidateRequest
 from notifier import (
     init_notifier,
@@ -27,7 +28,7 @@ from notifier import (
     shutdown_notifier,
 )
 from prompts import get_raw_prompts, get_translate_prompt
-from queue_manager import QueueItem, custom_queue, init_queues, server_queue
+from queue_manager import QueueTicket, init_queues
 from request_context import generate_request_id, get_request_id, set_request_id
 from sse import sse_error, sse_progress
 from template_builder import build_template
@@ -140,21 +141,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     # Graceful shutdown
 
-    cancelled = 0
-    if server_queue:
-        cancelled += server_queue.cancel_all()
-    if custom_queue:
-        cancelled += custom_queue.cancel_all()
-    if cancelled:
-        logger.info("Отменено %d ожидающих запросов при остановке", cancelled)
+    drained = 0
+    if queue_manager.server_queue:
+        drained += queue_manager.server_queue.drain()
+    if queue_manager.custom_queue:
+        drained += queue_manager.custom_queue.drain()
+    if drained:
+        logger.info("Снято %d ожидающих запросов при остановке", drained)
     # Ждём завершения активных запросов (до 30 сек)
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         active = 0
-        if server_queue:
-            active += server_queue.active_count
-        if custom_queue:
-            active += custom_queue.active_count
+        if queue_manager.server_queue:
+            active += queue_manager.server_queue.active_count
+        if queue_manager.custom_queue:
+            active += queue_manager.custom_queue.active_count
         if active == 0:
             break
         await asyncio.sleep(0.5)
@@ -230,8 +231,8 @@ async def health():
         "status": "ok",
         "uptime_seconds": uptime,
         "queues": {
-            "server": server_queue.get_status() if server_queue else None,
-            "custom": custom_queue.get_status() if custom_queue else None,
+            "server": queue_manager.server_queue.get_status() if queue_manager.server_queue else None,
+            "custom": queue_manager.custom_queue.get_status() if queue_manager.custom_queue else None,
         },
     }
 
@@ -255,8 +256,8 @@ async def queue_status():
     """Текущее состояние очередей."""
 
     return {
-        "server": server_queue.get_status() if server_queue else None,
-        "custom": custom_queue.get_status() if custom_queue else None,
+        "server": queue_manager.server_queue.get_status() if queue_manager.server_queue else None,
+        "custom": queue_manager.custom_queue.get_status() if queue_manager.custom_queue else None,
     }
 
 
@@ -276,6 +277,9 @@ async def metrics():
             "analyze_duration_count": len(durations),
         },
         "llm_errors_by_category": dict(_metrics["llm_errors_by_category"]),
+        # Автофикс: сколько прогонов его запускало и в скольких из них он убрал
+        # все ошибки (ручная кнопка «Исправить через AI» не понадобилась).
+        "analysis": dict(analysis_metrics),
     }
 
 
@@ -421,85 +425,65 @@ async def analyze(
     if translation_languages:
         langs = [lang.strip() for lang in translation_languages.split(",") if lang.strip()]
 
-    # Выбираем очередь
-    queue = custom_queue if is_custom_llm else server_queue
+    # Выбираем очередь. None бывает, только если lifespan не выполнялся (например,
+    # в тестах) — тогда анализ идёт без ограничения параллельности.
+    queue = queue_manager.custom_queue if is_custom_llm else queue_manager.server_queue
     if not queue:
-        # Очередь не инициализирована — пропускаем
-        logger.warning("Очередь не инициализирована, пропускаем")
-        queue = None
+        logger.warning("Очередь не инициализирована, анализ без ограничения параллельности")
+
+    def queued_event(ticket: QueueTicket) -> str:
+        """SSE-событие «запрос в очереди» с текущей позицией и оценкой ожидания."""
+        pos = ticket.position or 1
+        eta = ticket.eta
+        return sse_progress(
+            "queued",
+            f"Ваш запрос в очереди. Позиция: {pos}. Примерное ожидание: ~{max(1, eta // 60)} мин.",
+            request_id=request_id,
+            extra={"queue_position": pos, "queue_eta": eta},
+        )
 
     async def queued_generator() -> AsyncGenerator[str, None]:
-        """Обёртка: ожидание в очереди → выполнение analyze_document."""
-        queue_item: QueueItem | None = None
-        start_time = time.monotonic()
+        """Обёртка: ожидание слота в очереди → выполнение analyze_document."""
+        analysis_start: float | None = None
 
         try:
-            if queue:
-                queue_item = QueueItem(request_id=request_id)
+            # Выход из ticket() освобождает слот при любом исходе, включая обрыв SSE.
+            async with AsyncExitStack() as stack:
+                if queue:
+                    ticket = await stack.enter_async_context(queue.ticket(request_id))
 
-                # Проверяем, нужно ли ожидание
-                if queue.active_count >= queue._max_concurrent:
-                    # Сначала добавляемся в очередь, потом шлём SSE с позицией
-                    # Но acquire() блокирует, поэтому сначала шлём прогресс
-                    queue._waiting.append(queue_item)
-                    pos = queue.get_position(request_id)
-                    eta = queue.get_eta(pos or 1) if pos else 0
-                    yield sse_progress(
-                        "queued",
-                        f"Ваш запрос в очереди. Позиция: {pos}. Примерное ожидание: ~{max(1, eta // 60)} мин.",
-                        request_id=request_id,
-                        extra={"queue_position": pos, "queue_eta": eta},
-                    )
-
-                    # Периодически обновляем позицию пока ждём
-                    while not queue_item.ready_event.is_set():
-                        try:
-                            await asyncio.wait_for(
-                                queue_item.ready_event.wait(),
-                                timeout=5.0,
-                            )
-                        except asyncio.TimeoutError:
-                            if queue_item.cancelled:
-                                yield sse_error("Запрос отменён.", request_id=request_id)
-                                return
-                            new_pos = queue.get_position(request_id)
-                            if new_pos:
-                                new_eta = queue.get_eta(new_pos)
-                                yield sse_progress(
-                                    "queued",
-                                    f"Ваш запрос в очереди. Позиция: {new_pos}. "
-                                    f"Примерное ожидание: ~{max(1, new_eta // 60)} мин.",
+                    # timeout=0 — есть ли свободный слот прямо сейчас. Если нет,
+                    # сообщаем позицию и ждём, обновляя её каждые 5 секунд.
+                    if not await ticket.wait(timeout=0):
+                        yield queued_event(ticket)
+                        while not await ticket.wait(timeout=5.0):
+                            if ticket.drained:
+                                yield sse_error(
+                                    "Сервис останавливается, попробуйте позже.",
                                     request_id=request_id,
-                                    extra={"queue_position": new_pos, "queue_eta": new_eta},
                                 )
+                                return
+                            yield queued_event(ticket)
 
-                    if queue_item.cancelled:
-                        yield sse_error("Запрос отменён.", request_id=request_id)
-                        return
-
-                    queue._active += 1
-                else:
-                    # Слот свободен — занимаем сразу
-                    queue._active += 1
-
-            # Выполняем анализ
-            async for event in analyze_document(
-                files=file_data,
-                template_type=template_type,
-                settings=settings,
-                api_url=llm_api_url,
-                api_key=llm_api_key,
-                model=llm_model,
-                max_tokens=llm_max_tokens,
-                timeout=llm_timeout,
-                custom_system_prompt=system_prompt,
-                translation_languages=langs,
-                legacy_max_tokens=llm_legacy_max_tokens,
-                temperature=llm_temperature if llm_temperature is not None else -1,
-                request_id=request_id,
-                is_custom_llm=is_custom_llm,
-            ):
-                yield event
+                # Выполняем анализ
+                analysis_start = time.monotonic()
+                async for event in analyze_document(
+                    files=file_data,
+                    template_type=template_type,
+                    settings=settings,
+                    api_url=llm_api_url,
+                    api_key=llm_api_key,
+                    model=llm_model,
+                    max_tokens=llm_max_tokens,
+                    timeout=llm_timeout,
+                    custom_system_prompt=system_prompt,
+                    translation_languages=langs,
+                    legacy_max_tokens=llm_legacy_max_tokens,
+                    temperature=llm_temperature if llm_temperature is not None else -1,
+                    request_id=request_id,
+                    is_custom_llm=is_custom_llm,
+                ):
+                    yield event
 
         except Exception as e:
             logger.exception("Ошибка в очереди/анализе")
@@ -507,10 +491,11 @@ async def analyze(
             yield sse_error(f"Ошибка: {e!s}", request_id=request_id)
 
         finally:
-            duration = time.monotonic() - start_time
-            _metrics["durations"].append(duration)
-            if queue:
-                queue.release(duration)
+            # Ожидание в очереди в длительность анализа не входит: ETA считается из
+            # среднего, а среднее росло бы от самого ожидания. Запрос, не дошедший до
+            # анализа (отменён в очереди, оборван клиентом), замера не даёт вовсе.
+            if analysis_start is not None:
+                _metrics["durations"].append(time.monotonic() - analysis_start)
 
     return StreamingResponse(
         queued_generator(),
@@ -522,23 +507,6 @@ async def analyze(
             "X-Request-Id": request_id,
         },
     )
-
-
-@app.post("/api/cancel-analyze")
-async def cancel_analyze(request: Request):
-    """Отмена ожидающего запроса в очереди по request_id."""
-    body = await request.json()
-    rid = body.get("request_id")
-    if not rid:
-        return JSONResponse(status_code=400, content={"detail": "request_id обязателен"})
-
-    cancelled = False
-    if server_queue:
-        cancelled = server_queue.cancel(rid)
-    if not cancelled and custom_queue:
-        cancelled = custom_queue.cancel(rid)
-
-    return JSONResponse(content={"cancelled": cancelled, "request_id": rid})
 
 
 @app.post("/api/build")
@@ -603,7 +571,11 @@ async def fix_registers_endpoint(
 ):
     """Исправление регистров через AI — SSE-поток."""
     from llm_service import fix_registers
-    from register_validator import Severity, format_validation_errors, validate_registers
+    from register_validator import (
+        collect_error_registers,
+        format_validation_errors,
+        validate_registers,
+    )
 
     settings = get_settings()
     request_id = get_request_id()
@@ -634,13 +606,7 @@ async def fix_registers_endpoint(
 
     # В LLM отправляем ТОЛЬКО регистры с ошибками (не весь шаблон): иначе на
     # крупных устройствах запрос виснет и вывод обрезается по лимиту токенов.
-    # Позиции, а не id: id в шаблонах не уникальны (condition-gated пары),
-    # merge-back в fix_registers идёт по позициям + временному тегу __fix_<i>.
-    error_positions = [
-        i for i, rv in enumerate(validation.registers)
-        if any(e.severity == Severity.ERROR for e in rv.errors)
-    ]
-    error_registers = [body.registers[i] for i in error_positions]
+    error_positions, error_registers = collect_error_registers(validation, body.registers)
 
     generator = fix_registers(
         error_registers,

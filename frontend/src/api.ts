@@ -58,10 +58,17 @@ export async function fetchPrompts(): Promise<{
 export async function fetchModels(
   config?: { apiUrl?: string; apiKey?: string },
 ): Promise<string[]> {
-  const formData = new FormData();
-  if (config?.apiUrl) formData.append('llm_api_url', config.apiUrl);
-  if (config?.apiKey) formData.append('llm_api_key', config.apiKey);
-  const res = await fetch('/api/models', { method: 'POST', body: formData });
+  // В серверном режиме (без своего URL/ключа) тело не отправляем: пустой
+  // multipart/form-data FastAPI не может распарсить и отвечает 400. Бэкенд
+  // корректно обрабатывает POST вообще без тела (все Form-поля опциональны).
+  const init: RequestInit = { method: 'POST' };
+  if (config?.apiUrl || config?.apiKey) {
+    const formData = new FormData();
+    if (config.apiUrl) formData.append('llm_api_url', config.apiUrl);
+    if (config.apiKey) formData.append('llm_api_key', config.apiKey);
+    init.body = formData;
+  }
+  const res = await fetch('/api/models', init);
   if (!res.ok) {
     let detail = getT()('api.modelsError', { code: res.status });
     try {
