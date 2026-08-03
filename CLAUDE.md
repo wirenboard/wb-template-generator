@@ -57,7 +57,7 @@ backend/
   main.py              # FastAPI: эндпоинты, middleware, lifespan
   config.py            # Настройки из .env (pydantic-settings)
   models.py            # Pydantic-модели (Register, BuildRequest и т.д.)
-  llm_service.py       # LLM-интеграция: analyze_document, batch-обработка PDF
+  llm_service.py       # LLM-интеграция: analyze_document, автофикс регистров
   template_builder.py  # Детерминированная сборка JSON-шаблона
   template_importer.py # Импорт существующих .json/.json.jinja шаблонов
   jinja_exporter.py    # Экспорт в .json.jinja с детекцией паттернов
@@ -66,7 +66,6 @@ backend/
   queue_manager.py     # Управление очередями анализа (server + custom)
   sse.py               # Формирование SSE-событий
   request_context.py   # Request ID через ContextVar (middleware)
-  mock_data.py         # Тестовые данные для разработки
   tests/               # pytest: builder, importer, jinja_exporter, key_isolation
 
 frontend/src/

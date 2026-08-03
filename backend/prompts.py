@@ -38,10 +38,18 @@ some devices split registers across tables (e.g. "Input Registers" and "Holding 
    - Example: FC 01, Address 3 → `reg_type: "coil"`, `address: 3` (NOT 2).
    - Example: FC 03, Address 100 → `reg_type: "holding"`, `address: 100`.
 
-   **Case B — No function code column, but addresses use legacy 5-digit format** (4xxxx, 3xxxx):
-   - 4xxxx (e.g. 40001) → holding register, address = xxxx - 1 (40001 → 0)
-   - 3xxxx (e.g. 30001) → input register, address = xxxx - 1 (30001 → 0)
-   - ONLY apply this conversion for 5-digit addresses starting with 3 or 4.
+   **Case B — No function code column, but addresses use legacy 4xxxx / 3xxxx format**:
+   - 5-digit 4xxxx (e.g. 40001) → holding register, address = value - 40001 (40001 → 0)
+   - 5-digit 3xxxx (e.g. 30001) → input register, address = value - 30001 (30001 → 0)
+   - 6-digit 4xxxxx (e.g. 461457) → holding register, address = value - 400001 (461457 → 61456)
+   - 6-digit 3xxxxx (e.g. 361457) → input register, address = value - 300001 (361457 → 61456)
+   - A datasheet MAY MIX 5-digit and 6-digit notation in the SAME table. Convert EVERY row,
+     picking the subtrahend by the digit count of that row's own address.
+   - The result MUST be ≤ 65535 — Modbus addresses are 16-bit. If your result is larger,
+     you subtracted the wrong amount: re-check the digit count and convert again.
+   - If the table ALSO has a hex column (e.g. 0xF010), trust the hex column — it is the real
+     Modbus address. Convert it to decimal and use that.
+   - ONLY apply this conversion for addresses starting with 3 or 4 in this legacy notation.
 
    **Case C — All other addresses** (plain numbers, hex, etc.):
    - Use addresses EXACTLY as given in the document — do NOT subtract 1.

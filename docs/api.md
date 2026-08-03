@@ -5,7 +5,6 @@
 | Метод | Путь | Назначение |
 |-------|------|-----------|
 | POST | `/api/analyze` | **SSE** — анализ документа через LLM |
-| POST | `/api/cancel-analyze` | Отмена запроса в очереди |
 | POST | `/api/build` | Сборка JSON-шаблона из регистров |
 | POST | `/api/build-jinja` | Сборка Jinja-шаблона (.json.jinja) |
 | POST | `/api/import-template` | Импорт .json / .json.jinja |
@@ -38,23 +37,32 @@ event: done       → {message, request_id}
 event: error      → {message, request_id}
 ```
 
-Стадии: `queued` → `uploading` → `converting` → `analyzing` → `merging` → done/error.
+Стадии: `queued` → `uploading` → `converting` → `analyzing` → `merging` → `validating` → `autofix?` → done/error.
+
+- **Мягкий таймаут (`slow`)**: не звено цепочки, а замена `analyzing` после `LLM_SOFT_TIMEOUT` (по умолчанию 3 мин). Анализ продолжается, клиенту предлагается подождать или отменить.
+- **Автофикс (`autofix`)**: если после валидации остались ERROR — `детерминированный auto_fix → один LLM-фикс кривых регистров → повторная валидация`. Документ в фикс не передаётся. Остаток ошибок — под ручной кнопкой «Исправить через AI». Шаги видны в прогрессе, итог (было/стало) пишется в лог сервера, счётчики — в `/api/metrics`.
 
 ## Продакшен-инфраструктура
 
 - **Request ID**: 8 hex символов, ContextVar, заголовок X-Request-Id, во всех SSE и логах
-- **Очереди**: server (max 15) + custom (max 15), asyncio.Event, позиция + ETA в SSE, антиспам-задержка
+- **Очереди**: server (max 15) + custom (max 15), asyncio.Semaphore, позиция + ETA в SSE, антиспам-задержка. Отмена ожидания отдельного эндпоинта не требует — клиент рвёт SSE, и сервер снимает ожидание сам
 - **Rate limiter**: sliding window по IP (10 запросов/60 сек)
 - **Изоляция LLM**: при серверном LLM пользовательский system_prompt игнорируется
 - **Кастомный промпт**: `customSystemPrompt` хранится в localStorage, передаётся только при пользовательском LLM
 - **Метрики**: in-memory счётчики и гистограммы в `/api/metrics`. В ответе:
   - `analyze_total`, `analyze_errors`, `rate_limit_hits`,
-  - `analyze_duration_avg`, `analyze_duration_count`,
+  - `analyze_duration_avg`, `analyze_duration_count` — только время самого анализа,
+    без ожидания слота в очереди. Запросы, не дошедшие до анализа (отменены в очереди,
+    оборваны клиентом, отбиты по размеру), в гистограмму не попадают, поэтому
+    `analyze_duration_count` меньше `analyze_total`,
   - `llm_errors_by_category` — словарь `{category: count}` по категориям
     ошибок OpenAI API (см. [docs/config.md](config.md) — `quota_exceeded`,
     `auth`, `permission`, `not_found`, `bad_request`, `rate_limit`,
     `timeout`, `connection`, `server_error`, `unknown`). Считается
     только для серверного LLM.
+  - `analysis` — `{autofix_runs, autofix_cleared}`: прогонов, где запускался
+    автофикс; из них тех, где автофикс убрал все ошибки (ручная кнопка не
+    понадобилась).
 - **Telegram-алерты**: при сбоях серверного OpenAI API (квота, auth, 5xx и т. п.)
   бэкенд шлёт уведомления в Telegram-чат (см. [docs/config.md](config.md) →
   «Telegram-уведомления»). Антиспам: CRITICAL — cooldown по категории,

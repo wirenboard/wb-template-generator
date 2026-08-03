@@ -29,12 +29,26 @@ export default function App() {
   const appVersion = useStore((s) => s.appVersion);
   const validationErrorCount = useStore((s) => s.validationErrorCount);
   const validationWarningCount = useStore((s) => s.validationWarningCount);
+  const analyzeStatus = useStore((s) => s.analyzeStatus);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [validationGateOpen, setValidationGateOpen] = useState(false);
   const [pendingDownloadAction, setPendingDownloadAction] = useState<'json' | 'jinja' | null>(null);
   const downloadRef = useRef<HTMLDivElement>(null);
+
+  // Предупреждение при закрытии страницы во время анализа: результат нигде не
+  // сохраняется, а серверный запрос к LLM при обрыве отменяется, то есть уход
+  // со страницы отменяет анализ безвозвратно.
+  useEffect(() => {
+    if (analyzeStatus !== 'loading') return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';  // текст задаёт браузер, свой показать нельзя
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [analyzeStatus]);
 
   // Закрытие dropdown при клике вне
   useEffect(() => {

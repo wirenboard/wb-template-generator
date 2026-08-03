@@ -566,3 +566,87 @@ class TestFormatValidationErrors:
         text = format_validation_errors(result, regs)
         assert "Reg1" in text
         assert "Reg2" in text
+
+
+# ===================================================================
+# Баг 4X: шестизначная legacy-нотация адреса (Eastron SDM630MCT)
+# ===================================================================
+
+
+class TestLegacySixDigitAddress:
+    """Даташит мешает 5- и 6-значную запись 4X, модель конвертирует только 5-значную.
+
+    Шестизначный адрес всегда > 65535 (16-битный Modbus), поэтому опознаётся
+    однозначно и правится детерминированно, до валидации и без обращения к LLM.
+    """
+
+    def test_holding_6digit_converted(self):
+        """461457 → 61456 (вычитаем 400001), реальные адреса SDM630MCT."""
+        for raw_addr, expected in ((461457, 61456), (464513, 64512),
+                                   (464515, 64514), (464516, 64515)):
+            fixed, fixes = auto_fix_register({"address": raw_addr, "name": "Reset"})
+            assert fixed["address"] == expected, raw_addr
+            assert [f.field for f in fixes] == ["address"]
+
+    def test_input_6digit_converted(self):
+        """361457 → 61456 (вычитаем 300001)."""
+        fixed, fixes = auto_fix_register({"address": 361457})
+        assert fixed["address"] == 61456
+        assert fixes[0].field == "address"
+
+    def test_numeric_string_converted(self):
+        """Адрес строкой из цифр правится так же."""
+        fixed, _ = auto_fix_register({"address": "464513"})
+        assert fixed["address"] == 64512
+
+    def test_valid_address_untouched(self):
+        """Корректный offset не трогаем — он всегда ≤ 65535."""
+        for addr in (0, 1, 40001, 65535):
+            fixed, fixes = auto_fix_register({"address": addr})
+            assert fixed["address"] == addr
+            assert fixes == []
+
+    def test_bitwise_and_hex_untouched(self):
+        """Побитовый и hex-адрес не наши клиенты — приводит к числу драйвер."""
+        for addr in ("109:0:1", "0xF010"):
+            fixed, fixes = auto_fix_register({"address": addr})
+            assert fixed["address"] == addr
+            assert fixes == []
+
+    def test_unrepairable_address_is_error(self):
+        """Что не удалось починить — ERROR, а не тихий проезд на железо."""
+        result = validate_register(_reg(address=999999))
+        assert any(e.field == "address" and e.severity == Severity.ERROR for e in result.errors)
+
+    def test_max_address_is_valid(self):
+        """65535 — верхняя граница, ошибкой быть не должна."""
+        result = validate_register(_reg(address=65535))
+        assert not any(e.field == "address" and e.severity == Severity.ERROR for e in result.errors)
+
+    def test_end_to_end_via_auto_fix_and_validate(self):
+        """Сквозной путь парсинга: 6-значный адрес приходит починенным и без ошибок."""
+        regs, result, fixed_count = auto_fix_and_validate([
+            {"address": 464513, "name": "Serial Number", "reg_type": "holding",
+             "format": "u16", "channel_type": "value"},
+        ])
+        assert regs[0].address == 64512
+        assert fixed_count >= 1
+        assert result.error_count == 0
+
+    def test_numeric_string_address_is_checked_too(self):
+        """Адрес строкой «999999» — тоже ERROR: модель нередко отдаёт числа строками."""
+        result = validate_register(_reg(address="999999"))
+        assert any(e.field == "address" and e.severity == Severity.ERROR for e in result.errors)
+
+    def test_hex_and_bitwise_addresses_are_not_range_checked(self):
+        """Hex и побитовая запись под правило 65535 не попадают.
+
+        У не-Modbus протоколов (neva, energomera_iec, energomera_ce) адрес — код
+        параметра: в официальных шаблонах wb-mqtt-serial 125 таких значений, например
+        0x012F0000. Проверка диапазона пометила бы рабочие шаблоны сломанными.
+        """
+        for addr in ("0x012F0000", "0x400304", "109:0:1"):
+            result = validate_register(_reg(address=addr))
+            assert not any(
+                e.field == "address" and e.severity == Severity.ERROR for e in result.errors
+            ), f"адрес {addr} не должен считаться ошибкой"
