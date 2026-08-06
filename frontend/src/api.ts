@@ -2,6 +2,52 @@ import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress }
 import { LANGUAGE_NAMES } from './constants';
 import { getT } from './i18n';
 
+/** Ошибка бэкенда в виде ключа локализации: `message_key` + `message_params`.
+ *
+ * Тот же контракт, что у валидатора регистров. Параметр с именем на `Key` —
+ * вложенный ключ: значение переводится и подставляется под именем без суффикса.
+ * Бэкенд рендерит так же, см. `backend/user_errors.py`.
+ */
+export function resolveMessage(
+  data: { message_key?: unknown; message_params?: unknown },
+  fallback: string,
+): string {
+  if (typeof data.message_key !== 'string') return fallback;
+  const t = getT();
+  const raw = (data.message_params ?? {}) as Record<string, string | number>;
+  const params: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (name.endsWith('Key') && typeof value === 'string') {
+      params[name.slice(0, -3)] = t(value);
+    } else {
+      params[name] = value;
+    }
+  }
+  const translated = t(data.message_key, params);
+  // Ключа нет ни в одной локали (старый бандл, новый бэкенд) — показываем detail
+  return translated === data.message_key ? fallback : translated;
+}
+
+/** Текст ошибки из тела ответа: перевод по ключу, иначе detail, иначе фолбек.
+ *
+ * Проверка типа отсекает 422 от pydantic, где detail это массив объектов —
+ * там остаётся фолбек с кодом, а не «[object Object]».
+ */
+async function errorDetail(
+  res: Response,
+  fallback: string,
+): Promise<{ detail: string; requestId?: string }> {
+  let detail = fallback;
+  let requestId: string | undefined;
+  try {
+    const errData = await res.json();
+    if (typeof errData.detail === 'string') detail = errData.detail;
+    if (typeof errData.request_id === 'string') requestId = errData.request_id;
+    detail = resolveMessage(errData, detail);
+  } catch { /* тело не JSON — остаётся фолбек */ }
+  return { detail, requestId };
+}
+
 export interface ServerStatus {
   llm_available: boolean;
   max_file_size_mb: number;
@@ -268,19 +314,7 @@ export async function importTemplate(
   formData.append('file', file);
   const res = await fetch('/api/import-template', { method: 'POST', body: formData });
   if (!res.ok) {
-    const t = getT();
-    let detail = t('api.importError', { code: res.status });
-    try {
-      const errData = await res.json();
-      if (errData.detail) {
-        // Известные ошибки бэкенда — переводим на фронте
-        if (errData.detail.includes('Not a wb-mqtt-serial template')) {
-          detail = t('api.importNotTemplate');
-        } else {
-          detail = errData.detail;
-        }
-      }
-    } catch { /* текст ошибки недоступен */ }
+    const { detail } = await errorDetail(res, getT()('api.importError', { code: res.status }));
     throw new Error(detail);
   }
   return res.json();
