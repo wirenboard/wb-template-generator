@@ -344,7 +344,7 @@ def import_jinja_template(text: str) -> dict:
     """
     if len(text) > MAX_JINJA_SOURCE_CHARS:
         raise TemplateImportError(
-            "serverError.importJinjaTooLarge", max=MAX_JINJA_SOURCE_CHARS // 1024,
+            "serverError.importJinjaTooLarge", max=MAX_JINJA_SOURCE_CHARS // (1024 * 1024),
         )
 
     try:
@@ -353,6 +353,10 @@ def import_jinja_template(text: str) -> dict:
         return import_template(raw)
     except SecurityError as e:
         raise TemplateImportError("serverError.importJinjaUnsafe") from e
+    except OverflowError as e:
+        # Ресурсные лимиты песочницы (range больше MAX_RANGE) не наследуют
+        # TemplateError, поэтому им нужна своя ветка
+        raise TemplateImportError("serverError.importJinjaLimit", error=str(e)) from e
     except (jinja2.TemplateNotFound, TypeError):
         # Шаблон использует {% include %} — извлекаем что можно из {% with %}.
         # Эта ветка и SecurityError выше — подклассы TemplateError, поэтому обе

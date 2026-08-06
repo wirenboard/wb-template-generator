@@ -29,13 +29,14 @@ _TEXTS: dict[str, str] = {
         "Файл не похож на шаблон wb-mqtt-serial: не найдены каналы, параметры "
         "или тип устройства."
     ),
-    "serverError.importJinjaTooLarge": "Jinja-шаблон больше {max} КБ и не будет обработан.",
+    "serverError.importJinjaTooLarge": "Jinja-шаблон больше {max} МБ и не будет обработан.",
     "serverError.importJinjaUnsafe": (
         "Шаблон содержит конструкции, запрещённые при импорте. "
         "Допустимы только циклы, условия, макросы и фильтры."
     ),
     "serverError.importJinjaError": "Ошибка в Jinja-шаблоне: {error}",
     "serverError.importJinjaErrorLine": "Ошибка в Jinja-шаблоне (строка {line}): {error}",
+    "serverError.importJinjaLimit": "Шаблон упирается в ограничение песочницы: {error}",
 }
 
 

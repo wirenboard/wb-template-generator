@@ -314,8 +314,6 @@ export async function importTemplate(
   formData.append('file', file);
   const res = await fetch('/api/import-template', { method: 'POST', body: formData });
   if (!res.ok) {
-    // Ошибки импорта приходят ключом локализации, подстрочный матч по тексту
-    // бэкенда больше не нужен
     const { detail } = await errorDetail(res, getT()('api.importError', { code: res.status }));
     throw new Error(detail);
   }

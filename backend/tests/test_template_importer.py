@@ -325,6 +325,8 @@ class TestJinjaSandbox:
             detect_and_import(oversized.encode("utf-8"), "big.json.jinja")
 
         assert exc.value.key == "serverError.importJinjaTooLarge"
+        # В сообщении мегабайты, а не «1024 КБ»
+        assert exc.value.params["max"] == 1
 
     def test_large_plain_json_not_limited(self):
         """Лимит не задевает обычный JSON — в wb-mqtt-serial есть шаблоны до 1.8 МБ."""
@@ -550,6 +552,18 @@ class TestJinjaErrorsAreDiagnostic:
             detect_and_import(template, "undef.json.jinja")
 
         assert "has no attribute" in exc.value.params["error"]
+
+    def test_sandbox_resource_limit_is_not_silent(self):
+        """`range` больше MAX_RANGE даёт OverflowError, а он не TemplateError.
+
+        Без своей ветки такой шаблон уходил бы в общий except немым 422 плюс
+        трейсбеком в логе — регресс, который вносит сама песочница.
+        """
+        with pytest.raises(TemplateImportError) as exc:
+            detect_and_import(b"{% for i in range(10000000) %}{}{% endfor %}", "big.json.jinja")
+
+        assert exc.value.key == "serverError.importJinjaLimit"
+        assert "MAX_RANGE" in exc.value.params["error"]
 
     def test_sandbox_branch_not_shadowed(self):
         """SecurityError даёт свой ключ, а не общий диагностический."""

@@ -19,6 +19,7 @@ import main  # noqa: E402, I001
 from user_errors import ALL_KEYS, UserError, render  # noqa: E402
 
 TRANSLATIONS = Path(__file__).parent.parent.parent / "frontend" / "src" / "i18n" / "translations.ts"
+LOCALES = ("ru", "en", "kk", "it")
 
 
 class TestCatalog:
@@ -44,42 +45,58 @@ class TestCatalog:
 # в CI и при локальном прогоне из репозитория, где рядом есть frontend/.
 @pytest.mark.skipif(not TRANSLATIONS.exists(), reason="нет frontend/ рядом с backend/")
 class TestTranslationsParity:
-    """Каталог бэкенда и словарь интерфейса описывают одни и те же ключи."""
+    """Каталог бэкенда и словарь интерфейса описывают одни и те же ключи.
+
+    Каждая локаль проверяется отдельно, а не объединение: по объединению ключ,
+    заведённый только в русской, выглядел бы переведённым во всех четырёх.
+    """
 
     @staticmethod
-    def _frontend_keys() -> set[str]:
+    def _blocks() -> dict[str, str]:
+        """Текст словаря, порезанный по локалям."""
         text = TRANSLATIONS.read_text(encoding="utf-8")
-        return set(re.findall(r"'((?:serverError|llmError)\.[A-Za-z_]+)':", text))
+        starts = sorted((text.index(f"\n  {loc}: {{"), loc) for loc in LOCALES)
+        bounds = [pos for pos, _ in starts] + [len(text)]
+        return {loc: text[bounds[i]:bounds[i + 1]] for i, (_, loc) in enumerate(starts)}
 
-    def test_frontend_has_every_backend_key(self):
-        """Иначе интерфейс покажет сырой ключ вместо фразы."""
-        missing = sorted(set(ALL_KEYS) - self._frontend_keys())
+    @staticmethod
+    def _keys(block: str) -> set[str]:
+        return set(re.findall(r"'((?:serverError|llmError)\.[A-Za-z_]+)':", block))
 
-        assert missing == []
+    def test_every_locale_has_every_backend_key(self):
+        """Иначе интерфейс на этом языке покажет сырой ключ вместо фразы."""
+        missing = {
+            loc: sorted(set(ALL_KEYS) - self._keys(block))
+            for loc, block in self._blocks().items()
+            if set(ALL_KEYS) - self._keys(block)
+        }
 
-    def test_no_orphan_keys_on_frontend(self):
+        assert missing == {}
+
+    def test_no_orphan_keys_in_any_locale(self):
         """Ключ без источника на бэкенде — мёртвый перевод."""
-        orphans = sorted(self._frontend_keys() - set(ALL_KEYS))
+        orphans = {
+            loc: sorted(self._keys(block) - set(ALL_KEYS))
+            for loc, block in self._blocks().items()
+            if self._keys(block) - set(ALL_KEYS)
+        }
 
-        assert orphans == []
+        assert orphans == {}
 
     def test_placeholders_match(self):
-        """Плейсхолдеры совпадают: иначе в интерфейсе останется «{max}».
-
-        Сверяем с русской локалью — она единственная, где текст обязан
-        совпадать с бэкендом дословно.
-        """
-        text = TRANSLATIONS.read_text(encoding="utf-8")
-        ru_block = text[: text.index("  en: {")]
+        """Плейсхолдеры совпадают во всех локалях: иначе останется «{max}»."""
         mismatches = []
 
-        for key in ALL_KEYS:
-            match = re.search(rf"'{re.escape(key)}': (['\"])(.*?)\1,\n", ru_block, re.DOTALL)
-            assert match, f"ключ {key} не найден в русской локали"
-            frontend_params = set(re.findall(r"\{(\w+)\}", match.group(2)))
-            backend_params = set(re.findall(r"\{(\w+)\}", render.__globals__["_TEXTS"][key]))
-            if frontend_params != backend_params:
-                mismatches.append(f"{key}: бэкенд {backend_params}, фронтенд {frontend_params}")
+        for loc, block in self._blocks().items():
+            for key in ALL_KEYS:
+                match = re.search(rf"'{re.escape(key)}': (['\"])(.*?)\1,\n", block, re.DOTALL)
+                assert match, f"ключ {key} не найден в локали {loc}"
+                frontend_params = set(re.findall(r"\{(\w+)\}", match.group(2)))
+                backend_params = set(re.findall(r"\{(\w+)\}", render.__globals__["_TEXTS"][key]))
+                if frontend_params != backend_params:
+                    mismatches.append(
+                        f"{loc}/{key}: бэкенд {backend_params}, фронтенд {frontend_params}"
+                    )
 
         assert mismatches == []
 

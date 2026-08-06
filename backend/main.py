@@ -777,7 +777,8 @@ async def import_template_endpoint(file: UploadFile = File(...)):
             content=UserError("serverError.importInvalidJson", error=str(e)).payload(request_id),
         )
     except TemplateImportError as e:
-        logger.warning("Импорт отклонён: %s", e)
+        # В __cause__ у отказа песочницы лежит атрибут, к которому лез шаблон
+        logger.warning("Импорт отклонён (%s): %s", e.key, e.__cause__ or e)
         return JSONResponse(status_code=400, content=e.payload(request_id))
     except Exception:
         logger.exception("Ошибка импорта шаблона")
