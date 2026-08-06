@@ -32,7 +32,8 @@ from queue_manager import QueueTicket, init_queues
 from request_context import generate_request_id, get_request_id, set_request_id
 from sse import sse_error, sse_progress
 from template_builder import build_template
-from template_importer import detect_and_import
+from template_importer import TemplateImportError, detect_and_import
+from user_errors import UserError
 
 
 def get_version() -> str:
@@ -773,13 +774,16 @@ async def import_template_endpoint(file: UploadFile = File(...)):
     except json.JSONDecodeError as e:
         return JSONResponse(
             status_code=400,
-            content={"detail": f"Невалидный JSON: {e!s}", "request_id": request_id},
+            content=UserError("serverError.importInvalidJson", error=str(e)).payload(request_id),
         )
-    except Exception as e:
+    except TemplateImportError as e:
+        logger.warning("Импорт отклонён: %s", e)
+        return JSONResponse(status_code=400, content=e.payload(request_id))
+    except Exception:
         logger.exception("Ошибка импорта шаблона")
         return JSONResponse(
             status_code=422,
-            content={"detail": f"Ошибка импорта: {e!s}", "request_id": request_id},
+            content=UserError("serverError.importFailed").payload(request_id),
         )
 
     return JSONResponse(content=result)

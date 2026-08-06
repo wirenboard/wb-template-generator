@@ -1,11 +1,17 @@
 """Тесты для template_importer — импорт JSON/Jinja шаблонов в формат редактора."""
 
 import json
+import time
 from pathlib import Path
 
 import pytest
 
-from template_importer import detect_and_import, import_template
+from template_importer import (
+    MAX_JINJA_SOURCE_CHARS,
+    TemplateImportError,
+    detect_and_import,
+    import_template,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -251,18 +257,113 @@ class TestJinjaImport:
         assert result["registers"][1]["name"] == "Ch 2"
 
 
+class TestJinjaSandbox:
+    """Рендер загруженного шаблона идёт в песочнице.
+
+    Лечим RCE: обычный Environment исполнял код из файла, гаджет
+    cycler.__init__.__globals__.os.popen давал команды ОС до разбора JSON.
+    """
+
+    @pytest.mark.parametrize("gadget", [
+        "{{ cycler.__init__.__globals__.os }}",
+        "{{ self.__init__.__globals__ }}",
+        "{{ ''.__class__.__mro__ }}",
+        "{% set x = cycler.__init__.__globals__ %}{}",
+    ])
+    def test_attribute_gadgets_rejected(self, gadget):
+        """Доступ к внутренним атрибутам отклоняется с понятной ошибкой."""
+        with pytest.raises(TemplateImportError) as exc:
+            detect_and_import(gadget.encode("utf-8"), "evil.json.jinja")
+
+        assert exc.value.key == "serverError.importJinjaUnsafe"
+
+    def test_function_globals_do_not_leak(self):
+        """Часть гаджетов песочница не роняет, а обнуляет — уходит пустота.
+
+        Обычный Environment подставил бы сюда словарь модулей.
+        """
+        jinja_text = """{
+    "device_type": "test",
+    "device": {
+        "name": "{{ lipsum.__globals__ }}{{ cycler.__init__ }}{{ range.__self__ }}",
+        "id": "test", "groups": [], "channels": [], "parameters": {}, "translations": {}
+    }
+}"""
+        result = detect_and_import(jinja_text.encode("utf-8"), "probe.json.jinja")
+
+        assert result["device_info"]["name"] == ""
+
+    def test_list_append_still_imports(self):
+        """Накопление в список работает — на нём держится боевой wb-mcm8.
+
+        Страховка от «ужесточения» до ImmutableSandboxedEnvironment.
+        """
+        jinja_text = """{% set names = [] %}
+{% for i in range(1, 3) %}{% set _ = names.append("Ch " ~ i) %}{% endfor %}
+{
+    "device_type": "test",
+    "device": {
+        "name": "Test", "id": "test", "groups": [],
+        "channels": [
+            {% for n in names -%}
+            {"name": "{{ n }}", "address": {{ loop.index0 }}, "reg_type": "holding",
+             "type": "value", "format": "u16", "group": "general"}{% if not loop.last %},{% endif %}
+            {% endfor -%}
+        ],
+        "parameters": {}, "translations": {}
+    }
+}"""
+        result = detect_and_import(jinja_text.encode("utf-8"), "template.json.jinja")
+
+        assert [r["name"] for r in result["registers"]] == ["Ch 1", "Ch 2"]
+
+    def test_oversized_jinja_rejected(self):
+        """Слишком крупный исходник не уходит в рендер."""
+        oversized = "{% raw %}" + "x" * MAX_JINJA_SOURCE_CHARS + "{% endraw %}"
+
+        with pytest.raises(TemplateImportError) as exc:
+            detect_and_import(oversized.encode("utf-8"), "big.json.jinja")
+
+        assert exc.value.key == "serverError.importJinjaTooLarge"
+
+    def test_large_plain_json_not_limited(self):
+        """Лимит не задевает обычный JSON — в wb-mqtt-serial есть шаблоны до 1.8 МБ."""
+        template = {
+            "device_type": "big-device",
+            "device": {
+                "name": "Big", "id": "big", "groups": [],
+                "channels": [{
+                    "name": "Ch", "address": 0, "reg_type": "holding",
+                    "type": "value", "format": "u16", "group": "general",
+                    "description": "y" * (MAX_JINJA_SOURCE_CHARS + 1000),
+                }],
+                "parameters": {}, "translations": {},
+            },
+        }
+        payload = json.dumps(template).encode("utf-8")
+        assert len(payload) > MAX_JINJA_SOURCE_CHARS
+
+        result = detect_and_import(payload, "big.json")
+
+        assert len(result["registers"]) == 1
+
+
 class TestImportValidation:
     """Тесты валидации входного JSON."""
 
     def test_invalid_json_raises(self):
-        """Невалидный JSON (не wb-mqtt-serial) должен выбросить ValueError."""
-        with pytest.raises(ValueError, match="Not a wb-mqtt-serial template"):
+        """Не-шаблон отклоняется с ключом локализации."""
+        with pytest.raises(TemplateImportError) as exc:
             import_template({"name": "package.json", "version": "1.0.0"})
+
+        assert exc.value.key == "serverError.importNotTemplate"
 
     def test_empty_dict_raises(self):
         """Пустой dict — не шаблон."""
-        with pytest.raises(ValueError, match="Not a wb-mqtt-serial template"):
+        with pytest.raises(TemplateImportError) as exc:
             import_template({})
+
+        assert exc.value.key == "serverError.importNotTemplate"
 
     def test_device_type_only_passes(self):
         """Шаблон с device_type, но без channels/parameters — допускается."""
@@ -423,3 +524,81 @@ class TestRoundtrip:
 
         param = built["device"]["parameters"]["serial"]
         assert param.get("readonly") is True
+
+
+class TestJinjaErrorsAreDiagnostic:
+    """Ошибка в самом шаблоне доходит до автора текстом, а не общей фразой.
+
+    Два последних теста стерегут порядок except-веток: SecurityError и
+    TemplateNotFound — подклассы TemplateError и должны ловиться до общей.
+    """
+
+    def test_syntax_error_reaches_author(self):
+        broken = b'{% for i in range(3) %}{"device_type": "x"}'
+
+        with pytest.raises(TemplateImportError) as exc:
+            detect_and_import(broken, "broken.json.jinja")
+
+        assert exc.value.key == "serverError.importJinjaErrorLine"
+        assert "endfor" in exc.value.params["error"]
+        assert exc.value.params["line"] == 1
+
+    def test_undefined_attribute_reaches_author(self):
+        template = b'{% set d = {} %}{"device_type": "{{ d.missing.deep }}"}'
+
+        with pytest.raises(TemplateImportError) as exc:
+            detect_and_import(template, "undef.json.jinja")
+
+        assert "has no attribute" in exc.value.params["error"]
+
+    def test_sandbox_branch_not_shadowed(self):
+        """SecurityError даёт свой ключ, а не общий диагностический."""
+        with pytest.raises(TemplateImportError) as exc:
+            detect_and_import(b"{{ cycler.__init__.__globals__.os }}", "evil.json.jinja")
+
+        assert exc.value.key == "serverError.importJinjaUnsafe"
+
+    def test_include_branch_not_shadowed(self):
+        """Шаблон с {% include %} по-прежнему разбирается, а не падает ошибкой."""
+        text = ('{% with device_id = "dev-1", title_en = "Dev" %}'
+                '{% include "common.json.jinja" %}{% endwith %}')
+
+        result = detect_and_import(text.encode("utf-8"), "with-include.json.jinja")
+
+        assert result["device_info"]["id"] == "dev-1"
+        assert result["include"] == "common.json.jinja"
+
+
+class TestJsonComments:
+    """Комментарии // вычищаются, а пустые строки не делают разбор квадратичным."""
+
+    def test_line_and_inline_comments_stripped(self):
+        # Inline // стрипер поддерживает только после числа/true/false/null
+        text = """{
+    // ведущий комментарий
+    "device_type": "test",
+    "device": {
+        "id": "t",
+        "channels": [{"name": "Ch", "address": 0, "reg_type": "holding",
+                      "type": "value", "format": "u16", "group": "general",
+                      "enabled": true // inline после булева
+                      }],
+        "parameters": {}, "translations": {}
+    }
+}"""
+        result = detect_and_import(text.encode("utf-8"), "with-comments.json")
+
+        assert result["device_info"]["id"] == "t"
+        assert len(result["registers"]) == 1
+
+    def test_many_blank_lines_import_fast(self):
+        """Регресс ReDoS: прежний `^\\s*//` на 100 КБ пустых строк занимал ~13 с."""
+        payload = ('{"device_type": "x", "device": {"id": "x"}}'
+                   + "\n" * (100 * 1024)).encode("utf-8")
+
+        started = time.monotonic()
+        result = detect_and_import(payload, "sparse.json")
+        elapsed = time.monotonic() - started
+
+        assert result["device_info"]["id"] == "x"
+        assert elapsed < 3.0, f"разбор занял {elapsed:.1f} с — регулярка снова квадратична"
