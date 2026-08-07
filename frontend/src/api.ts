@@ -315,7 +315,10 @@ export async function buildJinjaTemplate(request: BuildRequest): Promise<string>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(getT()('api.buildJinjaError', { code: res.status }));
+  if (!res.ok) {
+    const { detail } = await errorDetail(res, getT()('api.buildJinjaError', { code: res.status }));
+    throw new Error(detail);
+  }
   return res.text();
 }
 

@@ -168,4 +168,21 @@ describe('остальные маршруты: ключ и номер запро
       translations.en['serverError.llmNotConfigured'],
     );
   });
+
+  it('buildJinjaTemplate: отказ читается из тела, как у buildTemplate', async () => {
+    useStore.setState({ uiLocale: 'en' });
+    stubFetch({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        detail: 'Внутренняя ошибка сервера',
+        message_key: 'serverError.internal',
+        message_params: {},
+      }),
+    });
+
+    await expect(api.buildJinjaTemplate({} as never)).rejects.toThrow(
+      translations.en['serverError.internal'],
+    );
+  });
 });

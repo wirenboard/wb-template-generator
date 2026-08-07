@@ -144,6 +144,78 @@ class TestImportEndpointCarriesKeys:
         assert body["message_key"] == "serverError.importFailed"
         assert "codec" not in body["detail"]
 
+
+class TestAnalyzeEndpointCarriesKeys:
+    """HTTP-отказы `/api/analyze` несут ключ.
+
+    Тест смотрит на маршрут, а не на хелпер: если эндпоинт перестанет класть
+    ключ, каталог и словари интерфейса останутся согласованными, и остальные
+    тесты этого не заметят.
+    """
+
+    @pytest.fixture
+    def client(self):
+        # Бакет лимитера общий на процесс — чистим с двух сторон, иначе
+        # запросы соседних тестов мешают проверке 429 и наоборот.
+        main._rate_limit_store.clear()
+        yield TestClient(main.app)
+        main._rate_limit_store.clear()
+
+    @staticmethod
+    def _files(name: str, data: bytes = b"%PDF-1.4 stub"):
+        return [("files", (name, data, "application/octet-stream"))]
+
+    # Свой адрес LLM снимает проверку «LLM не настроен», сети при этом не будет —
+    # отказ приходит раньше, на разборе файлов.
+    _CUSTOM_LLM = {"llm_api_url": "http://llm.invalid/v1"}
+
+    def test_unsupported_format(self, client):
+        resp = client.post("/api/analyze", files=self._files("doc.txt"), data=self._CUSTOM_LLM)
+        body = resp.json()
+
+        assert resp.status_code == 400
+        assert body["message_key"] == "serverError.unsupportedFormat"
+        assert body["message_params"]["file"] == "doc.txt"
+
+    def test_file_too_large(self, client):
+        settings = main.get_settings()
+        oversized = b"0" * (settings.MAX_FILE_SIZE_MB * 1024 * 1024 + 1024)
+
+        resp = client.post(
+            "/api/analyze", files=self._files("doc.pdf", oversized), data=self._CUSTOM_LLM,
+        )
+        body = resp.json()
+
+        assert resp.status_code == 413
+        assert body["message_key"] == "serverError.fileTooLarge"
+        assert body["message_params"]["max"] == settings.MAX_FILE_SIZE_MB
+
+    def test_llm_not_configured(self, client, monkeypatch):
+        """Без своего адреса и без серверного LLM — 503 с ключом."""
+        monkeypatch.setattr(main.get_settings(), "LLM_API_URL", "")
+
+        resp = client.post("/api/analyze", files=self._files("doc.pdf"))
+        body = resp.json()
+
+        assert resp.status_code == 503
+        assert body["message_key"] == "serverError.llmNotConfigured"
+
+    def test_rate_limit(self, client):
+        settings = main.get_settings()
+
+        for _ in range(settings.RATE_LIMIT_REQUESTS):
+            client.post("/api/analyze", files=self._files("doc.txt"), data=self._CUSTOM_LLM)
+        resp = client.post("/api/analyze", files=self._files("doc.txt"), data=self._CUSTOM_LLM)
+        body = resp.json()
+
+        assert resp.status_code == 429
+        assert body["message_key"] == "serverError.rateLimit"
+        assert body["message_params"] == {
+            "requests": settings.RATE_LIMIT_REQUESTS,
+            "window": settings.RATE_LIMIT_WINDOW,
+        }
+
+
 class TestSseCarriesKeys:
     """SSE-события ошибок несут ключ так же, как HTTP-ответы.
 
