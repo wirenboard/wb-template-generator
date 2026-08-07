@@ -5,6 +5,7 @@
 curl, интеграций и лога.
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -142,3 +143,33 @@ class TestImportEndpointCarriesKeys:
         assert resp.status_code == 422
         assert body["message_key"] == "serverError.importFailed"
         assert "codec" not in body["detail"]
+
+class TestSseCarriesKeys:
+    """SSE-события ошибок несут ключ так же, как HTTP-ответы.
+
+    Половина ошибок анализа уходит потоком, а не ответом, и до локализации
+    интерфейс показывал их русский текст независимо от выбранного языка.
+    """
+
+    def test_sse_user_error_carries_key_and_params(self):
+        from sse import sse_user_error
+
+        event = sse_user_error(
+            UserError("serverError.rateLimit", requests=10, window=60), request_id="r-1",
+        )
+
+        assert event.startswith("event: error")
+        payload = json.loads(event.split("data: ", 1)[1].strip())
+        assert payload["message_key"] == "serverError.rateLimit"
+        assert payload["message_params"] == {"requests": 10, "window": 60}
+        assert payload["request_id"] == "r-1"
+        # Русский текст остаётся в message — фолбек и запись для лога
+        assert "10" in payload["message"]
+
+    def test_plain_sse_error_has_no_key(self):
+        """Строковая форма осталась для ошибок вне каталога — ключа быть не должно."""
+        from sse import sse_error
+
+        payload = json.loads(sse_error("что-то пошло не так").split("data: ", 1)[1].strip())
+
+        assert "message_key" not in payload

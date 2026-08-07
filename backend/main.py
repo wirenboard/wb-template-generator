@@ -30,7 +30,7 @@ from notifier import (
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueTicket, init_queues
 from request_context import generate_request_id, get_request_id, set_request_id
-from sse import sse_error, sse_progress
+from sse import sse_progress, sse_user_error
 from template_builder import build_template
 from template_importer import TemplateImportError, detect_and_import
 from user_errors import UserError
@@ -212,10 +212,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.exception("Необработанная ошибка в %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
-        content={
-            "detail": "Внутренняя ошибка сервера",
-            "request_id": rid,
-        },
+        content=UserError("serverError.internal").payload(rid),
     )
 
 
@@ -303,7 +300,7 @@ async def list_models(
     if not effective_url:
         return JSONResponse(
             status_code=503,
-            content={"detail": "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках."},
+            content=UserError("serverError.llmNotConfigured").payload(get_request_id()),
         )
 
     # Нормализуем base_url: убираем /v1, /v1/ и т.д.
@@ -335,7 +332,7 @@ async def list_models(
         )
         return JSONResponse(
             status_code=502,
-            content={"detail": f"Не удалось получить список моделей: {e!s}"},
+            content=UserError("serverError.modelsFailed", reason=str(e)).payload(get_request_id()),
         )
 
 
@@ -366,13 +363,13 @@ async def analyze(
     client_ip = request.client.host if request.client else "unknown"
     if _check_rate_limit(client_ip, settings.RATE_LIMIT_REQUESTS, settings.RATE_LIMIT_WINDOW):
         _metrics["rate_limit_hits"] += 1
-        limit_msg = (
-            f"Превышен лимит запросов ({settings.RATE_LIMIT_REQUESTS} "
-            f"за {settings.RATE_LIMIT_WINDOW} сек). Попробуйте позже."
-        )
         return JSONResponse(
             status_code=429,
-            content={"detail": limit_msg, "request_id": request_id},
+            content=UserError(
+                "serverError.rateLimit",
+                requests=settings.RATE_LIMIT_REQUESTS,
+                window=settings.RATE_LIMIT_WINDOW,
+            ).payload(request_id),
         )
 
     _metrics["analyze_requests"] += 1
@@ -381,10 +378,7 @@ async def analyze(
     if not llm_api_url and not settings.LLM_API_URL:
         return JSONResponse(
             status_code=503,
-            content={
-                "detail": "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках.",
-                "request_id": request_id,
-            },
+            content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
 
     # Проверка допустимых расширений файлов
@@ -393,13 +387,9 @@ async def analyze(
         if ext not in _ALLOWED_EXTENSIONS:
             return JSONResponse(
                 status_code=400,
-                content={
-                    "detail": (
-                        f"Неподдерживаемый формат файла: \u00ab{f.filename}\u00bb. "
-                        f"Допустимые форматы: PDF, Excel (xlsx), изображения (PNG, JPG, WebP)."
-                    ),
-                    "request_id": request_id,
-                },
+                content=UserError(
+                    "serverError.unsupportedFormat", file=f.filename,
+                ).payload(request_id),
             )
 
     # Читаем содержимое файлов и проверяем размер
@@ -410,14 +400,12 @@ async def analyze(
         if len(content) > max_bytes:
             return JSONResponse(
                 status_code=413,
-                content={
-                    "detail": (
-                        f"Файл «{f.filename}» ({len(content) / 1024 / 1024:.1f} МБ) "
-                        f"превышает лимит {settings.MAX_FILE_SIZE_MB} МБ. "
-                        f"Попробуйте разделить документ на части или конвертировать в изображения."
-                    ),
-                    "request_id": request_id,
-                },
+                content=UserError(
+                    "serverError.fileTooLarge",
+                    file=f.filename,
+                    size=f"{len(content) / 1024 / 1024:.1f}",
+                    max=settings.MAX_FILE_SIZE_MB,
+                ).payload(request_id),
             )
         file_data.append((f.filename or "unknown", content))
 
@@ -459,9 +447,8 @@ async def analyze(
                         yield queued_event(ticket)
                         while not await ticket.wait(timeout=5.0):
                             if ticket.drained:
-                                yield sse_error(
-                                    "Сервис останавливается, попробуйте позже.",
-                                    request_id=request_id,
+                                yield sse_user_error(
+                                    UserError("serverError.serviceStopping"), request_id=request_id,
                                 )
                                 return
                             yield queued_event(ticket)
@@ -486,10 +473,10 @@ async def analyze(
                 ):
                     yield event
 
-        except Exception as e:
+        except Exception:
             logger.exception("Ошибка в очереди/анализе")
             _metrics["analyze_errors"] += 1
-            yield sse_error(f"Ошибка: {e!s}", request_id=request_id)
+            yield sse_user_error(UserError("serverError.internalAnalyze"), request_id=request_id)
 
         finally:
             # Ожидание в очереди в длительность анализа не входит: ETA считается из
@@ -591,7 +578,7 @@ async def fix_registers_endpoint(
     if not effective_url:
         return JSONResponse(
             status_code=503,
-            content={"detail": "LLM не настроен."},
+            content=UserError("serverError.llmNotConfigured").payload(get_request_id()),
         )
 
     effective_model = (llm_model if is_custom_llm else None) or settings.LLM_MODEL
@@ -671,10 +658,7 @@ async def translate(request: TranslateRequest):
     if not effective_url:
         return JSONResponse(
             status_code=503,
-            content={
-                "detail": "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках.",
-                "request_id": request_id,
-            },
+            content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
 
     if not request.strings:
@@ -752,10 +736,7 @@ async def translate(request: TranslateRequest):
         )
         return JSONResponse(
             status_code=500,
-            content={
-                "detail": f"Ошибка перевода: {e!s}",
-                "request_id": request_id,
-            },
+            content=UserError("serverError.translateFailed", reason=str(e)).payload(request_id),
         )
 
 

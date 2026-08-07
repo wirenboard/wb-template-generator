@@ -20,6 +20,54 @@ from __future__ import annotations
 # Плейсхолдеры совпадают с теми, что лежат в `frontend/src/i18n/translations.ts`
 # под тем же ключом. Расхождение ловит тест паритета.
 _TEXTS: dict[str, str] = {
+    # --- Общие ---
+    "serverError.internal": "Внутренняя ошибка сервера",
+    "serverError.serviceStopping": "Сервис останавливается, попробуйте позже.",
+    "serverError.rateLimit": (
+        "Превышен лимит запросов ({requests} за {window} сек). Попробуйте позже."
+    ),
+    # --- Настройка и вызов LLM ---
+    "serverError.llmNotConfigured": (
+        "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках."
+    ),
+    "serverError.modelsFailed": "Не удалось получить список моделей — {reason}.",
+    "serverError.translateFailed": "Ошибка перевода — {reason}.",
+    # --- Приём файлов ---
+    "serverError.unsupportedFormat": (
+        "Неподдерживаемый формат файла: «{file}». "
+        "Допустимые форматы: PDF, Excel (xlsx), изображения (PNG, JPG, WebP)."
+    ),
+    "serverError.fileTooLarge": (
+        "Файл «{file}» ({size} МБ) превышает лимит {max} МБ. "
+        "Попробуйте разделить документ на части или конвертировать в изображения."
+    ),
+    # --- Анализ документа ---
+    "serverError.noData": "Нет данных для анализа. Загрузите PDF, Excel или изображение.",
+    "serverError.noRegisters": (
+        "Не удалось извлечь регистры из документа. "
+        "Проверьте, что документ содержит таблицу Modbus-регистров."
+    ),
+    "serverError.brokenImage": (
+        "Файл «{file}» повреждён или не является изображением. "
+        "Проверьте файл и загрузите заново."
+    ),
+    "serverError.modelUnsupportedFile": (
+        "Модель не поддерживает переданный формат файла. Используйте модель "
+        "с поддержкой PDF/Excel или конвертируйте в изображения вручную."
+        "\n\nОшибка API: {reason}"
+    ),
+    "serverError.internalAnalyze": "Внутренняя ошибка при анализе документа. Повторите попытку.",
+    "serverError.internalFix": "Внутренняя ошибка при исправлении регистров. Повторите попытку.",
+    "serverError.llmNoResponse": (
+        "Не удалось получить ответ от LLM API. Проверьте ключ, доступность "
+        "провайдера и остаток квоты.\n\nОшибка LLM API: {reason}"
+    ),
+    "serverError.llmUnusableResults": "LLM не вернула пригодных результатов. Проверьте формат документа.",
+    "serverError.llmUnusableResultsWithFragment": (
+        "LLM не вернула пригодных результатов. Проверьте формат документа."
+        "\n\nОтвет LLM (фрагмент):\n{fragment}"
+    ),
+    # --- Импорт шаблона ---
     "serverError.importInvalidJson": "Невалидный JSON: {error}",
     "serverError.importFailed": (
         "Не удалось импортировать шаблон. Проверьте, что файл — корректный JSON "

@@ -23,7 +23,8 @@ from file_converter import (
 from models import AnalyzeResponse, DeviceInfo, Register
 from notifier import report_llm_api_error
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
-from sse import sse_done, sse_error, sse_progress, sse_result
+from sse import sse_done, sse_error, sse_progress, sse_result, sse_user_error
+from user_errors import UserError
 
 # Интервал SSE keepalive (сек) — поддерживает соединение через nginx
 _KEEPALIVE_INTERVAL = 15
@@ -594,9 +595,8 @@ async def analyze_document(
                     img.load()  # PIL ленив, битые данные вылезают здесь, а не на open()
                 except Exception as e:  # noqa: BLE001 — любую ошибку PIL показываем понятным текстом
                     logger.warning("Битое изображение %s: %s", filename, e)
-                    yield sse_error(
-                        f"Файл «{filename}» повреждён или не является изображением. "
-                        f"Проверьте файл и загрузите заново.",
+                    yield sse_user_error(
+                        UserError("serverError.brokenImage", file=filename),
                         request_id=request_id,
                     )
                     return
@@ -637,7 +637,7 @@ async def analyze_document(
         llm_content = assemble_llm_content(text_parts, direct_files, all_images)
 
         if not llm_content:
-            yield sse_error("Нет данных для анализа. Загрузите PDF, Excel или изображение.", request_id=request_id)
+            yield sse_user_error(UserError("serverError.noData"), request_id=request_id)
             return
 
         file_names = ", ".join(fn for fn, _ in files)
@@ -678,10 +678,8 @@ async def analyze_document(
             unsupported_file = _is_file_unsupported(err_msg)
 
         if unsupported_file:
-            yield sse_error(
-                f"Модель не поддерживает переданный формат файла. "
-                f"Используйте модель с поддержкой PDF/Excel или конвертируйте в изображения вручную.\n\n"
-                f"Ошибка API: {last_api_error}",
+            yield sse_user_error(
+                UserError("serverError.modelUnsupportedFile", reason=last_api_error),
                 request_id=request_id,
             )
             return
@@ -691,15 +689,14 @@ async def analyze_document(
             if last_api_error:
                 # Запрос до модели не дошёл (ключ, квота, лимит, недоступность) —
                 # с форматом документа это не связано, иначе диагностика уводится не туда.
-                msg = (
-                    "Не удалось получить ответ от LLM API. Проверьте ключ, доступность "
-                    f"провайдера и остаток квоты.\n\nОшибка LLM API: {last_api_error}"
+                err = UserError("serverError.llmNoResponse", reason=last_api_error)
+            elif last_parse_error:
+                err = UserError(
+                    "serverError.llmUnusableResultsWithFragment", fragment=last_parse_error,
                 )
             else:
-                msg = "LLM не вернула пригодных результатов. Проверьте формат документа."
-                if last_parse_error:
-                    msg += f"\n\nОтвет LLM (фрагмент):\n{last_parse_error}"
-            yield sse_error(msg, request_id=request_id)
+                err = UserError("serverError.llmUnusableResults")
+            yield sse_user_error(err, request_id=request_id)
             return
 
         yield sse_progress(
@@ -710,10 +707,8 @@ async def analyze_document(
         device_info, registers, total_auto_fixed = _merge_batch_results(batch_results)
 
         if not registers:
-            yield sse_error(
-                "Не удалось извлечь регистры из документа. "
-                "Проверьте, что документ содержит таблицу Modbus-регистров.",
-                request_id=request_id,
+            yield sse_user_error(
+                UserError("serverError.noRegisters"), request_id=request_id,
             )
             return
 
@@ -831,9 +826,9 @@ async def analyze_document(
             request_id, len(registers), final_validation.error_count,
         )
 
-    except Exception as e:
+    except Exception:
         logger.exception("Ошибка при анализе документа")
-        yield sse_error(f"Ошибка анализа: {e!s}", request_id=request_id)
+        yield sse_user_error(UserError("serverError.internalAnalyze"), request_id=request_id)
 
 
 async def _analyze_single_batch(
@@ -1168,6 +1163,6 @@ async def fix_registers(
         yield sse_result(response, request_id=request_id)
         yield sse_done(request_id=request_id)
 
-    except Exception as e:
+    except Exception:
         logger.exception("Ошибка при исправлении регистров через AI")
-        yield sse_error(f"Ошибка: {e!s}", request_id=request_id)
+        yield sse_user_error(UserError("serverError.internalFix"), request_id=request_id)
