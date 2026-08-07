@@ -34,8 +34,10 @@
 event: progress   → {stage, message, current?, total?, request_id, queue_position?, queue_eta?}
 event: result     → {request_id, device_info, registers}
 event: done       → {message, request_id}
-event: error      → {message, request_id}
+event: error      → {message, request_id, message_key?, message_params?}
 ```
+
+Ошибки, у которых есть ключ локализации, несут `message_key` и `message_params` — интерфейс рендерит фразу на своём языке, а `message` остаётся русским фолбеком для незнакомого ключа и записью для лога. Тот же контракт у HTTP-отказов, только поле там называется `detail`. Каталог ключей с русскими текстами — `backend/user_errors.py`.
 
 Стадии: `queued` → `uploading` → `converting` → `analyzing` → `merging` → `validating` → `autofix?` → done/error.
 
@@ -46,7 +48,7 @@ event: error      → {message, request_id}
 
 - **Request ID**: 8 hex символов, ContextVar, заголовок X-Request-Id, во всех SSE и логах
 - **Очереди**: server (max 15) + custom (max 15), asyncio.Semaphore, позиция + ETA в SSE, антиспам-задержка. Отмена ожидания отдельного эндпоинта не требует — клиент рвёт SSE, и сервер снимает ожидание сам
-- **Rate limiter**: sliding window по IP (10 запросов/60 сек)
+- **Rate limiter**: sliding window (10 запросов/60 сек), только на `/api/analyze`. Ключ бакета — `request.client.host`, то есть за обратным прокси это адрес прокси, и бакет получается общий на всех клиентов. Пер-пользовательский лимит требует доверенного `X-Forwarded-For` на входном nginx
 - **Изоляция LLM**: при серверном LLM пользовательский system_prompt игнорируется
 - **Кастомный промпт**: `customSystemPrompt` хранится в localStorage, передаётся только при пользовательском LLM
 - **Метрики**: in-memory счётчики и гистограммы в `/api/metrics`. В ответе:

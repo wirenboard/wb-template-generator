@@ -73,7 +73,10 @@ export async function buildTemplate(request: BuildRequest): Promise<WBTemplate> 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(getT()('api.buildError', { code: res.status }));
+  if (!res.ok) {
+    const { detail } = await errorDetail(res, getT()('api.buildError', { code: res.status }));
+    throw new Error(detail);
+  }
   return res.json();
 }
 
@@ -116,11 +119,7 @@ export async function fetchModels(
   }
   const res = await fetch('/api/models', init);
   if (!res.ok) {
-    let detail = getT()('api.modelsError', { code: res.status });
-    try {
-      const errData = await res.json();
-      if (errData.detail) detail = errData.detail;
-    } catch { /* текст ошибки недоступен */ }
+    const { detail } = await errorDetail(res, getT()('api.modelsError', { code: res.status }));
     throw new Error(detail);
   }
   const data = await res.json();
@@ -158,7 +157,10 @@ export async function analyzeFiles(
     const response = await fetch('/api/analyze', { method: 'POST', body: formData, signal });
 
     if (!response.ok) {
-      callbacks.onError(getT()('api.serverError', { code: response.status }));
+      const { detail, requestId } = await errorDetail(
+        response, getT()('api.serverError', { code: response.status }),
+      );
+      callbacks.onError(detail, requestId);
       return;
     }
     const reader = response.body?.getReader();
@@ -194,7 +196,9 @@ export async function analyzeFiles(
               }
               if (eventType === 'progress') callbacks.onProgress(data);
               else if (eventType === 'result') callbacks.onResult(data);
-              else if (eventType === 'error') callbacks.onError(data.message, data.request_id);
+              else if (eventType === 'error') {
+                callbacks.onError(resolveMessage(data, data.message), data.request_id);
+              }
               else if (eventType === 'done') callbacks.onDone(data.request_id);
             } catch (e) {
               console.warn('SSE parse error:', e, 'line length:', line.length);
@@ -225,7 +229,10 @@ export async function validateRegisters(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ registers }),
   });
-  if (!res.ok) throw new Error(getT()('api.validateError', { code: res.status }));
+  if (!res.ok) {
+    const { detail } = await errorDetail(res, getT()('api.validateError', { code: res.status }));
+    throw new Error(detail);
+  }
   return res.json();
 }
 
@@ -238,7 +245,10 @@ export async function validateSchema(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(getT()('api.validateError', { code: res.status }));
+  if (!res.ok) {
+    const { detail } = await errorDetail(res, getT()('api.validateError', { code: res.status }));
+    throw new Error(detail);
+  }
   return res.json();
 }
 
@@ -259,7 +269,8 @@ export async function fixRegisters(
       body: JSON.stringify({ registers }),
     });
     if (!res.ok) {
-      callbacks.onError(getT()('api.fixError', { code: res.status }));
+      const { detail } = await errorDetail(res, getT()('api.fixError', { code: res.status }));
+      callbacks.onError(detail);
       return;
     }
     const reader = res.body?.getReader();
@@ -285,7 +296,9 @@ export async function fixRegisters(
           const parsed = JSON.parse(eventData);
           if (eventType === 'progress') callbacks.onProgress(parsed);
           else if (eventType === 'result') callbacks.onResult(parsed);
-          else if (eventType === 'error') callbacks.onError(parsed.message || 'Unknown error');
+          else if (eventType === 'error') {
+            callbacks.onError(resolveMessage(parsed, parsed.message || 'Unknown error'));
+          }
           else if (eventType === 'done') callbacks.onDone();
         } catch { /* skip unparseable */ }
       }
@@ -302,7 +315,10 @@ export async function buildJinjaTemplate(request: BuildRequest): Promise<string>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(getT()('api.buildJinjaError', { code: res.status }));
+  if (!res.ok) {
+    const { detail } = await errorDetail(res, getT()('api.buildJinjaError', { code: res.status }));
+    throw new Error(detail);
+  }
   return res.text();
 }
 
@@ -343,11 +359,7 @@ export async function translateStrings(
     }),
   });
   if (!res.ok) {
-    let detail = getT()('api.translateError', { code: res.status });
-    try {
-      const errData = await res.json();
-      if (errData.detail) detail = errData.detail;
-    } catch { /* текст ошибки недоступен */ }
+    const { detail } = await errorDetail(res, getT()('api.translateError', { code: res.status }));
     throw new Error(detail);
   }
   const data = await res.json();
