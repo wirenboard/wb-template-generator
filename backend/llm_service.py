@@ -8,6 +8,7 @@ import logging
 import re
 import time
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 
 from openai import AsyncOpenAI
 from PIL import Image
@@ -69,6 +70,81 @@ def resolve_llm_credentials(
     if user_url:
         return user_url, user_key
     return settings.LLM_API_URL, settings.LLM_API_KEY
+
+
+@dataclass(frozen=True)
+class LlmTarget:
+    """Куда и с какими параметрами уходит запрос к LLM."""
+
+    url: str | None
+    key: str | None
+    model: str
+    timeout: int
+    max_tokens: int          # 0 = не задан, свой потолок выбирает вызывающий код
+    legacy_max_tokens: bool
+    temperature: float | None  # None = не отправлять параметр вовсе
+    proxy: str | None
+    is_custom: bool
+
+
+def resolve_llm_target(
+    settings: Settings,
+    *,
+    url: str | None = None,
+    key: str | None = None,
+    model: str | None = None,
+    timeout: int | None = None,
+    max_tokens: int | None = None,
+    legacy_max_tokens: bool | None = None,
+    temperature: float | None = None,
+) -> LlmTarget:
+    """Определяет, куда и с какими параметрами уходит запрос к LLM.
+
+    Адрес, ключ и прокси изолированы — со своим адресом серверный ключ не
+    подставляется, через прокси оператора чужой адрес не гоняется. Модель,
+    таймаут, лимит токенов и температура применяются и к серверному LLM, так
+    задумано окно «Настройки LLM». Системный промпт в правило не входит, он
+    остаётся только для своего адреса (изоляция в `analyze_document`).
+
+    Пустое значение означает «клиент не прислал». У температуры и флага
+    токенов это строго None, ноль и False значимы.
+
+    Returns:
+        Разрешённая цель со всеми параметрами запроса.
+    """
+    is_custom = bool(url)
+    effective_url, effective_key = resolve_llm_credentials(settings, url, key)
+
+    def pick(value, fallback):
+        """Для строк и чисел незаданное — это пусто или ноль."""
+        return value or fallback
+
+    def pick_exact(value, fallback):
+        """Для флагов и температуры незаданное — только None."""
+        return value if value is not None else fallback
+
+    # Таймаут на серверном ключе можно опустить, но не поднять — длинный запрос
+    # держит воркер, а троттлинга на исправлении регистров и переводе нет.
+    effective_timeout = pick(timeout, settings.LLM_TIMEOUT)
+    if not is_custom and settings.LLM_TIMEOUT > 0 and effective_timeout > settings.LLM_TIMEOUT:
+        logger.warning(
+            "Присланный таймаут %s с больше потолка сервера, уменьшаем до %s с.",
+            effective_timeout, settings.LLM_TIMEOUT,
+        )
+        effective_timeout = settings.LLM_TIMEOUT
+
+    return LlmTarget(
+        url=effective_url,
+        key=effective_key,
+        model=pick(model, settings.LLM_MODEL),
+        timeout=effective_timeout,
+        max_tokens=pick(max_tokens, settings.LLM_MAX_TOKENS),
+        legacy_max_tokens=pick_exact(legacy_max_tokens, settings.LLM_LEGACY_MAX_TOKENS),
+        temperature=pick_exact(temperature, settings.LLM_TEMPERATURE),
+        # Прокси оператора только для его же адреса
+        proxy=None if is_custom else (settings.LLM_PROXY or None),
+        is_custom=is_custom,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -508,7 +584,7 @@ async def analyze_document(
     custom_system_prompt: str | None = None,
     translation_languages: list[str] | None = None,
     legacy_max_tokens: bool | None = None,
-    temperature: float | None = -1,  # -1 = использовать настройки сервера
+    temperature: float | None = None,  # None = клиент не прислал, берём настройку сервера
     request_id: str | None = None,
     is_custom_llm: bool = False,
 ) -> AsyncGenerator[str, None]:
@@ -539,15 +615,22 @@ async def analyze_document(
         if not is_custom_llm:
             custom_system_prompt = None
 
-        # Изоляция ключей: при пользовательском LLM НЕ фолбечим на серверный ключ
-        effective_url, effective_key = resolve_llm_credentials(
-            settings, api_url if is_custom_llm else None, api_key if is_custom_llm else None,
+        target = resolve_llm_target(
+            settings,
+            url=api_url if is_custom_llm else None,
+            key=api_key if is_custom_llm else None,
+            model=model,
+            timeout=timeout,
+            max_tokens=max_tokens,
+            legacy_max_tokens=legacy_max_tokens,
+            temperature=temperature,
         )
-        effective_model = model or settings.LLM_MODEL
-        effective_max_tokens = max_tokens or settings.LLM_MAX_TOKENS
-        effective_timeout = timeout or settings.LLM_TIMEOUT
-        effective_legacy = legacy_max_tokens if legacy_max_tokens is not None else settings.LLM_LEGACY_MAX_TOKENS
-        effective_temperature = temperature if temperature != -1 else settings.LLM_TEMPERATURE
+        effective_url, effective_key = target.url, target.key
+        effective_model = target.model
+        effective_max_tokens = target.max_tokens
+        effective_timeout = target.timeout
+        effective_legacy = target.legacy_max_tokens
+        effective_temperature = target.temperature
         soft_timeout = settings.LLM_SOFT_TIMEOUT
 
         # --- Этап 1: загрузка и классификация файлов ---

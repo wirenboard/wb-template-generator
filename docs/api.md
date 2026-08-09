@@ -8,6 +8,7 @@
 | POST | `/api/build` | Сборка JSON-шаблона из регистров |
 | POST | `/api/build-jinja` | Сборка Jinja-шаблона (.json.jinja) |
 | POST | `/api/import-template` | Импорт .json / .json.jinja |
+| POST | `/api/fix-registers` | **SSE** — исправление ошибочных регистров через LLM |
 | POST | `/api/translate` | Перевод строк через LLM |
 | POST | `/api/models` | Список моделей LLM API |
 | GET | `/api/status` | Статус сервера (LLM, лимиты) |
@@ -23,10 +24,27 @@
 | `files` | File[] | — | Файлы документации (PDF, Excel, изображения) |
 | `template_type` | str | `"full"` | Тип шаблона: `small`, `medium`, `full` |
 | `translation_languages` | str | `null` | Языки переводов через запятую, напр. `"ru,kz"` |
-| `custom_llm_url` | str | `null` | URL пользовательского LLM API |
-| `custom_llm_key` | str | `null` | Ключ пользовательского LLM API |
-| `custom_llm_model` | str | `null` | Модель пользовательского LLM |
-| `custom_system_prompt` | str | `null` | Кастомный промпт (только для пользовательского LLM) |
+| `system_prompt` | str | `null` | Кастомный промпт (только для своего LLM) |
+| `llm_*` | — | `null` | Настройки LLM, см. таблицу ниже |
+
+### Настройки LLM
+
+Одинаковый набор полей у `/api/analyze` (частями multipart-формы), `/api/fix-registers`
+и `/api/translate` (полями JSON-тела), у `/api/models` только адрес и ключ. В строку
+запроса они не выносятся — ключ попал бы в access-логи nginx и uvicorn.
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `llm_api_url` | str | Адрес своего LLM. Задан — серверный ключ не подставляется, прокси оператора не используется |
+| `llm_api_key` | str | Ключ своего LLM |
+| `llm_model` | str | Модель. Применяется и к серверному LLM |
+| `llm_timeout` | int | Таймаут запроса, сек |
+| `llm_legacy_max_tokens` | bool | Старое имя параметра токенов (`max_tokens` вместо `max_completion_tokens`) |
+| `llm_temperature` | float | Температура. Ноль значим, не передано — берётся настройка сервера |
+| `llm_max_tokens` | int | Потолок ответа. **Только `/api/analyze`** |
+
+Пустое поле означает «клиент не прислал» — подставляется настройка сервера. Правило
+приоритета живёт в одном месте, `resolve_llm_target` в `backend/llm_service.py`.
 
 ## SSE-события `/api/analyze`
 

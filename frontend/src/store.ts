@@ -1,5 +1,8 @@
 import { create } from 'zustand';
-import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress, Language } from './types';
+import type {
+  Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress, Language,
+  AnalyzeLlmConfig,
+} from './types';
 import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi, validateRegisters as validateRegistersApi, fixRegisters as fixRegistersApi } from './api';
 import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN, DEFAULT_MAX_FILE_SIZE_MB } from './constants';
 import { generateId } from './utils';
@@ -53,7 +56,7 @@ interface SavedState {
   registers: Register[];
   groups: RegisterGroup[];
   deviceInfo: DeviceInfo;
-  llmConfig: { apiUrl?: string; apiKey?: string; model?: string; maxTokens?: number; timeout?: number; legacyMaxTokens?: boolean; temperature?: number };
+  llmConfig: AnalyzeLlmConfig;
 }
 
 function loadState(): Partial<SavedState> {
@@ -96,7 +99,7 @@ interface TemplateStore {
   lastActiveGroup: string;
   newlyAddedRegisterId: string | null;
   expandedRows: Set<string>;
-  llmConfig: { apiUrl?: string; apiKey?: string; model?: string; maxTokens?: number; timeout?: number; legacyMaxTokens?: boolean; temperature?: number };
+  llmConfig: AnalyzeLlmConfig;
   llmAvailable: boolean | null;
   serverModel: string | null;
   maxFileSizeMb: number;
@@ -121,7 +124,7 @@ interface TemplateStore {
   setAnalyzeAbortController: (controller: AbortController | null) => void;
   setHighlightedRegister: (id: string | null) => void;
   clearNewlyAdded: () => void;
-  setLlmConfig: (config: Partial<{ apiUrl?: string; apiKey?: string; model?: string; maxTokens?: number; timeout?: number; legacyMaxTokens?: boolean; temperature?: number }>) => void;
+  setLlmConfig: (config: Partial<AnalyzeLlmConfig>) => void;
   setPreviewLang: (lang: string) => void;
   triggerBuild: () => void;
   cancelAnalyze: () => void;
@@ -834,7 +837,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
   },
 
   fixWithAi: () => {
-    const { registers, fixingWithAi } = get();
+    const { registers, fixingWithAi, llmConfig } = get();
     if (fixingWithAi || registers.length === 0) return;
     set({ fixingWithAi: true, fixWithAiError: null });
 
@@ -852,7 +855,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
       onDone: () => {
         set({ fixingWithAi: false });
       },
-    });
+    }, llmConfig);
   },
 
   resetAll: () => {
@@ -963,13 +966,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
       files,
       {
         templateType,
-        llmApiUrl: llmConfig.apiUrl,
-        llmApiKey: llmConfig.apiKey,
-        llmModel: llmConfig.model,
-        llmMaxTokens: llmConfig.maxTokens,
-        llmTimeout: llmConfig.timeout,
-        llmLegacyMaxTokens: llmConfig.legacyMaxTokens,
-        llmTemperature: llmConfig.temperature,
+        llm: llmConfig,
         // Системный промпт передаём только при кастомном LLM
         systemPrompt: isCustomLlm ? (customSystemPrompt ?? undefined) : undefined,
         translationLanguages: getHasTranslations() ? languages.map((l) => l.code) : [],

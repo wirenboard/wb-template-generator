@@ -1,4 +1,7 @@
-import type { Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress } from './types';
+import type {
+  Register, RegisterGroup, DeviceInfo, WBTemplate, AnalyzeProgress,
+  LlmConfig, AnalyzeLlmConfig,
+} from './types';
 import { LANGUAGE_NAMES } from './constants';
 import { getT } from './i18n';
 
@@ -82,15 +85,21 @@ export async function buildTemplate(request: BuildRequest): Promise<WBTemplate> 
 
 export interface AnalyzeOptions {
   templateType: string;
-  llmApiUrl?: string;
-  llmApiKey?: string;
-  llmModel?: string;
-  llmMaxTokens?: number;
-  llmTimeout?: number;
-  llmLegacyMaxTokens?: boolean;
-  llmTemperature?: number;
+  llm?: AnalyzeLlmConfig;
   systemPrompt?: string;
   translationLanguages?: string[];
+}
+
+/** Настройки LLM в тело запроса, в именах бэкенда. Единственное место, где camelCase становится snake_case */
+function llmBody(config?: LlmConfig): Record<string, unknown> {
+  return {
+    llm_api_url: config?.apiUrl,
+    llm_api_key: config?.apiKey,
+    llm_model: config?.model,
+    llm_timeout: config?.timeout,
+    llm_legacy_max_tokens: config?.legacyMaxTokens,
+    llm_temperature: config?.temperature,
+  };
 }
 
 /** Получить сырые шаблоны промптов с сервера */
@@ -105,7 +114,7 @@ export async function fetchPrompts(): Promise<{
 
 /** Получить список моделей от LLM API провайдера */
 export async function fetchModels(
-  config?: { apiUrl?: string; apiKey?: string },
+  config?: Pick<LlmConfig, 'apiUrl' | 'apiKey'>,
 ): Promise<string[]> {
   // В серверном режиме (без своего URL/ключа) тело не отправляем: пустой
   // multipart/form-data FastAPI не может распарсить и отвечает 400. Бэкенд
@@ -141,13 +150,12 @@ export async function analyzeFiles(
   const formData = new FormData();
   files.forEach((f) => formData.append('files', f));
   formData.append('template_type', options.templateType);
-  if (options.llmApiUrl) formData.append('llm_api_url', options.llmApiUrl);
-  if (options.llmApiKey) formData.append('llm_api_key', options.llmApiKey);
-  if (options.llmModel) formData.append('llm_model', options.llmModel);
-  if (options.llmMaxTokens) formData.append('llm_max_tokens', String(options.llmMaxTokens));
-  if (options.llmTimeout) formData.append('llm_timeout', String(options.llmTimeout));
-  if (options.llmLegacyMaxTokens !== undefined) formData.append('llm_legacy_max_tokens', String(options.llmLegacyMaxTokens));
-  if (options.llmTemperature !== undefined) formData.append('llm_temperature', String(options.llmTemperature));
+  // Незаданное не отправляем, бэкенд подставит настройку сервера. Ноль и false значимы
+  for (const [field, value] of Object.entries(llmBody(options.llm))) {
+    if (value !== undefined && value !== '') formData.append(field, String(value));
+  }
+  // Лимит токенов принимает только анализ, поэтому его нет в общем маппинге
+  if (options.llm?.maxTokens) formData.append('llm_max_tokens', String(options.llm.maxTokens));
   if (options.systemPrompt) formData.append('system_prompt', options.systemPrompt);
   if (options.translationLanguages && options.translationLanguages.length > 0) {
     formData.append('translation_languages', options.translationLanguages.join(','));
@@ -261,12 +269,13 @@ export async function fixRegisters(
     onError: (message: string) => void;
     onDone: () => void;
   },
+  llmConfig?: LlmConfig,
 ): Promise<void> {
   try {
     const res = await fetch('/api/fix-registers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ registers }),
+      body: JSON.stringify({ registers, ...llmBody(llmConfig) }),
     });
     if (!res.ok) {
       const { detail } = await errorDetail(res, getT()('api.fixError', { code: res.status }));
@@ -340,7 +349,7 @@ export async function importTemplate(
 export async function translateStrings(
   strings: Record<string, string>,
   targetLang: string,
-  llmConfig?: { apiUrl?: string; apiKey?: string; model?: string; temperature?: number; timeout?: number; legacyMaxTokens?: boolean },
+  llmConfig?: LlmConfig,
 ): Promise<Record<string, string>> {
   const targetLangName = LANGUAGE_NAMES[targetLang] || targetLang;
   const res = await fetch('/api/translate', {
@@ -350,12 +359,7 @@ export async function translateStrings(
       strings,
       target_lang: targetLang,
       target_lang_name: targetLangName,
-      llm_api_url: llmConfig?.apiUrl,
-      llm_api_key: llmConfig?.apiKey,
-      llm_model: llmConfig?.model,
-      llm_temperature: llmConfig?.temperature,
-      llm_timeout: llmConfig?.timeout,
-      llm_legacy_max_tokens: llmConfig?.legacyMaxTokens,
+      ...llmBody(llmConfig),
     }),
   });
   if (!res.ok) {
