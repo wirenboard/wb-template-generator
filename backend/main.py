@@ -19,8 +19,8 @@ import queue_manager
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_errors import ALL_CATEGORIES, ErrorCategory
-from llm_service import analysis_metrics, analyze_document, resolve_llm_credentials
-from models import BuildRequest, TranslateRequest, ValidateRequest
+from llm_service import analysis_metrics, analyze_document, resolve_llm_target
+from models import BuildRequest, FixRegistersRequest, TranslateRequest, ValidateRequest
 from notifier import (
     init_notifier,
     register_metric_hook,
@@ -295,16 +295,16 @@ async def list_models(
     """Получение списка доступных моделей от LLM API провайдера."""
     settings = get_settings()
 
-    effective_url, effective_key = resolve_llm_credentials(settings, llm_api_url, llm_api_key)
+    target = resolve_llm_target(settings, url=llm_api_url, key=llm_api_key)
 
-    if not effective_url:
+    if not target.url:
         return JSONResponse(
             status_code=503,
             content=UserError("serverError.llmNotConfigured").payload(get_request_id()),
         )
 
     # Нормализуем base_url: убираем /v1, /v1/ и т.д.
-    base_url = effective_url.rstrip("/")
+    base_url = target.url.rstrip("/")
     if base_url.endswith("/v1"):
         base_url = base_url[:-3]
 
@@ -313,11 +313,11 @@ async def list_models(
     try:
         import httpx
         http_kwargs: dict = {"timeout": 15.0}
-        if not llm_api_url and settings.LLM_PROXY:
-            http_kwargs["proxy"] = settings.LLM_PROXY
+        if target.proxy:
+            http_kwargs["proxy"] = target.proxy
         headers = {}
-        if effective_key:
-            headers["Authorization"] = f"Bearer {effective_key}"
+        if target.key:
+            headers["Authorization"] = f"Bearer {target.key}"
         async with httpx.AsyncClient(**http_kwargs) as client:
             resp = await client.get(models_url, headers=headers)
             resp.raise_for_status()
@@ -328,7 +328,7 @@ async def list_models(
         logger.exception("Ошибка получения списка моделей")
         await report_llm_api_error(
             e, endpoint="list_models", request_id=get_request_id(),
-            model="", is_custom_llm=bool(llm_api_url),
+            model="", is_custom_llm=target.is_custom,
         )
         return JSONResponse(
             status_code=502,
@@ -467,7 +467,7 @@ async def analyze(
                     custom_system_prompt=system_prompt,
                     translation_languages=langs,
                     legacy_max_tokens=llm_legacy_max_tokens,
-                    temperature=llm_temperature if llm_temperature is not None else -1,
+                    temperature=llm_temperature,
                     request_id=request_id,
                     is_custom_llm=is_custom_llm,
                 ):
@@ -547,16 +547,7 @@ async def validate(request: ValidateRequest):
 
 
 @app.post("/api/fix-registers")
-async def fix_registers_endpoint(
-    request: Request,
-    body: ValidateRequest,
-    llm_api_url: Optional[str] = None,
-    llm_api_key: Optional[str] = None,
-    llm_model: Optional[str] = None,
-    llm_timeout: Optional[int] = None,
-    llm_legacy_max_tokens: Optional[bool] = None,
-    llm_temperature: Optional[float] = None,
-):
+async def fix_registers_endpoint(request: Request, body: FixRegistersRequest):
     """Исправление регистров через AI — SSE-поток."""
     from llm_service import fix_registers
     from register_validator import (
@@ -567,26 +558,21 @@ async def fix_registers_endpoint(
 
     settings = get_settings()
     request_id = get_request_id()
-    is_custom_llm = bool(llm_api_url)
-
-    effective_url, effective_key = resolve_llm_credentials(
+    target = resolve_llm_target(
         settings,
-        llm_api_url if is_custom_llm else None,
-        llm_api_key if is_custom_llm else None,
+        url=body.llm_api_url,
+        key=body.llm_api_key,
+        model=body.llm_model,
+        timeout=body.llm_timeout,
+        legacy_max_tokens=body.llm_legacy_max_tokens,
+        temperature=body.llm_temperature,
     )
 
-    if not effective_url:
+    if not target.url:
         return JSONResponse(
             status_code=503,
-            content=UserError("serverError.llmNotConfigured").payload(get_request_id()),
+            content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
-
-    effective_model = (llm_model if is_custom_llm else None) or settings.LLM_MODEL
-    effective_timeout = (llm_timeout if is_custom_llm else None) or settings.LLM_TIMEOUT
-    effective_legacy = (
-        llm_legacy_max_tokens if llm_legacy_max_tokens is not None else settings.LLM_LEGACY_MAX_TOKENS
-    )
-    effective_temperature = llm_temperature if is_custom_llm else settings.LLM_TEMPERATURE
 
     # Валидируем текущие регистры для получения описания ошибок
     validation = validate_registers(body.registers)
@@ -601,16 +587,16 @@ async def fix_registers_endpoint(
         error_desc,
         all_registers=body.registers,
         error_positions=error_positions,
-        effective_url=effective_url,
-        effective_key=effective_key,
-        effective_model=effective_model,
-        effective_timeout=effective_timeout,
-        max_tokens=settings.LLM_MAX_TOKENS or 16384,
-        legacy_max_tokens=effective_legacy,
-        temperature=effective_temperature,
-        proxy=settings.LLM_PROXY if not is_custom_llm else "",
+        effective_url=target.url,
+        effective_key=target.key,
+        effective_model=target.model,
+        effective_timeout=target.timeout,
+        max_tokens=target.max_tokens or 16384,
+        legacy_max_tokens=target.legacy_max_tokens,
+        temperature=target.temperature,
+        proxy=target.proxy or "",
         request_id=request_id,
-        is_custom_llm=is_custom_llm,
+        is_custom_llm=target.is_custom,
     )
 
     return StreamingResponse(
@@ -634,28 +620,22 @@ async def translate(request: TranslateRequest):
     settings = get_settings()
     request_id = get_request_id()
 
-    is_custom_llm = bool(request.llm_api_url)
-
-    # Изоляция ключей через единую функцию
-    effective_url, effective_key = resolve_llm_credentials(
-        settings, request.llm_api_url if is_custom_llm else None,
-        request.llm_api_key if is_custom_llm else None,
+    target = resolve_llm_target(
+        settings,
+        url=request.llm_api_url,
+        key=request.llm_api_key,
+        model=request.llm_model,
+        timeout=request.llm_timeout,
+        legacy_max_tokens=request.llm_legacy_max_tokens,
+        temperature=request.llm_temperature,
     )
-    if is_custom_llm:
-        effective_model = request.llm_model or settings.LLM_MODEL
-        effective_legacy = (
-            request.llm_legacy_max_tokens if request.llm_legacy_max_tokens is not None
-            else settings.LLM_LEGACY_MAX_TOKENS
-        )
-        effective_temperature = request.llm_temperature  # None = дефолт модели
-        effective_timeout = request.llm_timeout or settings.LLM_TIMEOUT
-    else:
-        effective_model = settings.LLM_MODEL
-        effective_legacy = settings.LLM_LEGACY_MAX_TOKENS
-        effective_temperature = settings.LLM_TEMPERATURE
-        effective_timeout = settings.LLM_TIMEOUT
+    is_custom_llm = target.is_custom
+    effective_model = target.model
+    effective_legacy = target.legacy_max_tokens
+    effective_temperature = target.temperature
+    effective_timeout = target.timeout
 
-    if not effective_url:
+    if not target.url:
         return JSONResponse(
             status_code=503,
             content=UserError("serverError.llmNotConfigured").payload(request_id),
@@ -668,13 +648,13 @@ async def translate(request: TranslateRequest):
     strings_json = json.dumps(request.strings, ensure_ascii=False)
 
     http_client = None
-    if not is_custom_llm and settings.LLM_PROXY:
+    if target.proxy:
         import httpx
-        http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
+        http_client = httpx.AsyncClient(proxy=target.proxy)
     # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
     client = AsyncOpenAI(
-        base_url=effective_url,
-        api_key=effective_key or "no-key-provided",
+        base_url=target.url,
+        api_key=target.key or "no-key-provided",
         http_client=http_client,
     )
 

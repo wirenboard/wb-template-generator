@@ -34,4 +34,7 @@ vi.mock('../api', () => ({
   fetchStatus: vi.fn().mockResolvedValue({ llm_available: true, max_file_size_mb: 2, server_model: null }),
   translateStrings: vi.fn().mockResolvedValue({}),
   importTemplate: vi.fn().mockResolvedValue({ registers: [], groups: [], device_info: { name: '', id: '' } }),
+  // Без заглушек обе функции в моке undefined, и падает не там, где ошибка
+  validateRegisters: vi.fn().mockResolvedValue({ registers: [], error_count: 0, warning_count: 0 }),
+  fixRegisters: vi.fn(),
 }));
