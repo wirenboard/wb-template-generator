@@ -126,8 +126,12 @@ def resolve_llm_target(
     # Таймаут на серверном ключе можно опустить, но не поднять — длинный запрос
     # держит воркер, а троттлинга на исправлении регистров и переводе нет.
     effective_timeout = pick(timeout, settings.LLM_TIMEOUT)
-    if not is_custom and settings.LLM_TIMEOUT > 0:
-        effective_timeout = min(effective_timeout, settings.LLM_TIMEOUT)
+    if not is_custom and settings.LLM_TIMEOUT > 0 and effective_timeout > settings.LLM_TIMEOUT:
+        logger.warning(
+            "Присланный таймаут %s с больше потолка сервера, уменьшаем до %s с.",
+            effective_timeout, settings.LLM_TIMEOUT,
+        )
+        effective_timeout = settings.LLM_TIMEOUT
 
     return LlmTarget(
         url=effective_url,
