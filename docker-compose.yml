@@ -5,33 +5,7 @@ services:
       dockerfile: backend/Dockerfile
     network_mode: host
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000"]
-    environment:
-      - LLM_API_URL=${LLM_API_URL:-}
-      - LLM_API_KEY=${LLM_API_KEY}
-      # Дефолт модели задаётся в config.py. Если LLM_MODEL нет в .env, применится дефолт config.py, если есть, значение прокинется в контейнер.
-      - LLM_MODEL
-      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-0}
-      - LLM_LEGACY_MAX_TOKENS=${LLM_LEGACY_MAX_TOKENS:-false}
-      - LLM_TIMEOUT=${LLM_TIMEOUT:-600}
-      - LLM_SOFT_TIMEOUT=${LLM_SOFT_TIMEOUT:-180}
-      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-2}
-      - QUEUE_SERVER_MAX_CONCURRENT=${QUEUE_SERVER_MAX_CONCURRENT:-15}
-      - QUEUE_CUSTOM_MAX_CONCURRENT=${QUEUE_CUSTOM_MAX_CONCURRENT:-15}
-      - QUEUE_ACTIVATION_DELAY=${QUEUE_ACTIVATION_DELAY:-1.0}
-      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-10}
-      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      # Telegram-уведомления о сбоях OpenAI API (только серверный LLM)
-      - TELEGRAM_NOTIFY_ENABLED=${TELEGRAM_NOTIFY_ENABLED:-false}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-      - TELEGRAM_MESSAGE_THREAD_ID=${TELEGRAM_MESSAGE_THREAD_ID:-0}
-      - TELEGRAM_API_URL=${TELEGRAM_API_URL:-https://api.telegram.org}
-      - TELEGRAM_PROXY=${TELEGRAM_PROXY:-}
-      - TELEGRAM_REQUEST_TIMEOUT=${TELEGRAM_REQUEST_TIMEOUT:-10}
-      - TELEGRAM_NOTIFY_COOLDOWN_SECONDS=${TELEGRAM_NOTIFY_COOLDOWN_SECONDS:-900}
-      - TELEGRAM_NOTIFY_THRESHOLD_WINDOW_SECONDS=${TELEGRAM_NOTIFY_THRESHOLD_WINDOW_SECONDS:-300}
-      - TELEGRAM_NOTIFY_THRESHOLD_COUNT=${TELEGRAM_NOTIFY_THRESHOLD_COUNT:-5}
+    env_file: .env
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9000/api/health"]
