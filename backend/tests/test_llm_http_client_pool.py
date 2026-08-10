@@ -24,13 +24,13 @@ PROXY = "http://proxy.example:3128"
 
 @pytest.fixture
 def factory_calls(monkeypatch):
-    """Запоминает, с какими аргументами создавались клиенты."""
-    calls: list[tuple] = []
+    """Запоминает, с каким прокси создавались клиенты."""
+    calls: list[str | None] = []
     original = llm_service.build_llm_http_client
 
-    def spy(proxy=None, limits=None):
-        calls.append((proxy, limits))
-        return original(proxy, limits)
+    def spy(proxy=None):
+        calls.append(proxy)
+        return original(proxy)
 
     monkeypatch.setattr(llm_service, "build_llm_http_client", spy)
     return calls
@@ -44,7 +44,7 @@ class TestSharedClients:
         await close_llm_http_clients()
 
     async def test_server_and_custom_are_different(self):
-        """Чужой медленный хост не должен выбирать пул соединений на всех."""
+        """У пользовательского трафика свой пул, соединения серверного он не занимает."""
         server = get_llm_http_client()
         custom = get_llm_http_client(is_custom=True)
 
@@ -71,20 +71,20 @@ class TestSharedClients:
         await close_llm_http_clients()
 
 
-class TestProxyAndLimits:
-    """Прокси оператора и потолок соединений раздаются по признаку «чей адрес»."""
+class TestProxy:
+    """Прокси оператора раздаётся по признаку «чей адрес»."""
 
     async def test_server_client_gets_proxy(self, factory_calls):
         get_llm_http_client(PROXY)
 
-        assert factory_calls == [(PROXY, None)]
+        assert factory_calls == [PROXY]
         await close_llm_http_clients()
 
     async def test_custom_client_never_gets_proxy(self, factory_calls):
         """Прокси не уходит чужому адресу, даже если его передали аргументом."""
         get_llm_http_client(PROXY, is_custom=True)
 
-        assert factory_calls == [(None, llm_service._CUSTOM_LIMITS)]
+        assert factory_calls == [None]
         await close_llm_http_clients()
 
 

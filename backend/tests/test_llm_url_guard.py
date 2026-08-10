@@ -10,7 +10,9 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
+from openai import APIStatusError, AsyncOpenAI
 
 # Добавляем backend/ в sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -79,12 +81,14 @@ class TestAddressRanges:
         "100.64.0.1",          # CGNAT, он же диапазон Tailscale
         "100.127.255.254",     # верхняя граница того же диапазона
         "fec0::1",             # site-local IPv6
+        "2002:0a00:0001::1",   # 6to4-обёртка 10.0.0.1
     ])
     async def test_internal_address_rejected(self, address):
         """Хост, разрешающийся во внутренний адрес, отклоняется.
 
-        Последние три пункта `ipaddress` приватными не считает, у site-local
-        вдобавок is_global=True — они закрыты отдельным списком сетей.
+        Последние четыре пункта закрыты отдельным списком сетей — CGNAT и
+        site-local `ipaddress` приватными не считает (у site-local вдобавок
+        is_global=True), а 6to4 считает только начиная с Python 3.12.4.
         """
         with patch("llm_service._resolve_host", AsyncMock(return_value=[address])):
             with pytest.raises(UnsafeLLMUrlError):
@@ -150,6 +154,34 @@ class TestHttpClient:
         finally:
             await client.aclose()
 
+    async def test_sdk_does_not_follow_redirect(self):
+        """Запрос через AsyncOpenAI на 302 внутрь не идёт.
+
+        Настройки клиента мало — SDK умеет перекрывать её на уровне запроса, а версия
+        openai у нас диапазоном, так что свойство надо проверять поведением. Транспорт
+        подменяем на готовом клиенте, аргументом фабрика его не принимает.
+        """
+        seen: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(str(request.url))
+            if len(seen) == 1:
+                return httpx.Response(302, headers={"location": "http://10.0.0.1/v1/chat/completions"})
+            return httpx.Response(200, json={"choices": [{"message": {"content": "внутренний ответ"}}]})
+
+        client = build_llm_http_client()
+        client._transport = httpx.MockTransport(handler)
+        sdk = AsyncOpenAI(
+            base_url="https://provider.example/v1", api_key="k", http_client=client, max_retries=0,
+        )
+        try:
+            with pytest.raises(APIStatusError):
+                await sdk.chat.completions.create(model="m", messages=[{"role": "user", "content": "x"}])
+        finally:
+            await client.aclose()
+
+        assert seen == ["https://provider.example/v1/chat/completions"]
+
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +192,16 @@ class TestEndpointRejection:
     """Проверка стоит на маршруте, а не только в функции."""
 
     INTERNAL_URL = "http://127.0.0.1:8080/v1"
+
+    @pytest.fixture(autouse=True)
+    def _clean_rate_limit(self):
+        # Бакет лимитера общий на процесс, а /api/analyze троттлится по IP — чистим
+        # с двух сторон, иначе соседние тесты дают здесь 429 вместо 400 и наоборот.
+        import main
+
+        main._rate_limit_store.clear()
+        yield
+        main._rate_limit_store.clear()
 
     @staticmethod
     def _client():
@@ -175,7 +217,7 @@ class TestEndpointRejection:
         resp = self._client().post("/api/models", data={"llm_api_url": self.INTERNAL_URL})
 
         assert resp.status_code == 400
-        assert "внутреннюю сеть" in resp.json()["detail"]
+        assert resp.json()["message_key"] == "serverError.llmUrlPrivate"
 
     def test_analyze_rejects_internal_url(self):
         """Ответ обычный 400, хотя маршрут отдаёт SSE: адрес проверяется до потока."""

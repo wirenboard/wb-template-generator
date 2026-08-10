@@ -170,12 +170,15 @@ class UnsafeLLMUrlError(UserError):
 
 _ALLOWED_LLM_SCHEMES = frozenset({"http", "https"})
 
-# Эти диапазоны ведут внутрь, но приватными не считаются — 100.64.0.0/10 это CGNAT
-# и адреса Tailscale, fec0::/10 — site-local IPv6 (у него вдобавок is_global=True).
-# Проверять через is_global нельзя, оно пропускает site-local и ловит multicast.
+# Диапазоны, которые ведут внутрь, но под is_private попадают не всегда. 100.64.0.0/10
+# это CGNAT и адреса Tailscale, fec0::/10 — site-local IPv6 (у него вдобавок
+# is_global=True), 2002::/16 — 6to4, обёртка произвольного IPv4, которую приватной
+# считает только Python 3.12.4+. Проверять через is_global нельзя, оно пропускает
+# site-local и ловит multicast.
 _EXTRA_INTERNAL_NETS = (
     ipaddress.ip_network("100.64.0.0/10"),
     ipaddress.ip_network("fec0::/10"),
+    ipaddress.ip_network("2002::/16"),
 )
 
 # Потолок на разрешение имени. Молчащий NS в присланном адресе иначе занимает
@@ -219,8 +222,12 @@ async def ensure_public_llm_url(url: str, allow_private: bool = False) -> None:
 
     try:
         addresses = await _resolve_host(hostname)
+    except TimeoutError as e:
+        # Выше OSError — TimeoutError его подкласс, иначе ветка недостижима
+        logger.warning("Имя «%s» не разрешилось за %s с, отклоняем адрес LLM", hostname, _DNS_TIMEOUT)
+        raise UnsafeLLMUrlError("serverError.llmUrlUnresolvable", host=hostname) from e
     except (OSError, UnicodeError) as e:
-        # TimeoutError — подкласс OSError, молчащий NS попадает сюда же
+        logger.info("Имя «%s» не разрешилось (%s), отклоняем адрес LLM", hostname, e)
         raise UnsafeLLMUrlError("serverError.llmUrlUnresolvable", host=hostname) from e
 
     for raw in addresses:
@@ -237,13 +244,11 @@ async def ensure_public_llm_url(url: str, allow_private: bool = False) -> None:
         internal = any(ip.version == net.version and ip in net for net in _EXTRA_INTERNAL_NETS)
         if (ip.is_private or ip.is_loopback or ip.is_link_local
                 or ip.is_reserved or ip.is_multicast or ip.is_unspecified or internal):
+            logger.warning("Имя «%s» разрешилось во внутренний адрес %s, отклоняем", hostname, ip)
             raise UnsafeLLMUrlError("serverError.llmUrlPrivate")
 
 
-def build_llm_http_client(
-    proxy: str | None = None,
-    limits: httpx.Limits | None = None,
-) -> httpx.AsyncClient:
+def build_llm_http_client(proxy: str | None = None) -> httpx.AsyncClient:
     """Создаёт httpx-клиент для обращений к LLM API.
 
     Свой клиент нужен всегда, а не только под прокси. openai-python поднимает
@@ -253,8 +258,6 @@ def build_llm_http_client(
     kwargs: dict = {"follow_redirects": False}
     if proxy:
         kwargs["proxy"] = proxy
-    if limits is not None:
-        kwargs["limits"] = limits
     return httpx.AsyncClient(**kwargs)
 
 
@@ -263,24 +266,18 @@ def build_llm_http_client(
 # создаётся. Закрывает клиенты lifespan.
 _llm_http_clients: dict[bool, httpx.AsyncClient] = {}
 
-# Потолок соединений для пользовательских адресов, у серверного остаётся дефолт httpx
-_CUSTOM_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=5)
-
 
 def get_llm_http_client(proxy: str | None = None, *, is_custom: bool = False) -> httpx.AsyncClient:
     """Возвращает общий httpx-клиент процесса для обращений к LLM API.
 
-    Пользовательский отделён от серверного, чтобы чужой медленный хост не выбрал
-    пул соединений на всех, и прокси оператора не получает ни при каких аргументах.
-    Закрытый клиент пересоздаём — его закрывает lifespan на остановке, а ещё
-    закроет AsyncOpenAI.close(), если кто-то его позовёт.
+    У пользовательского свой пул соединений, поэтому чужой медленный хост не
+    занимает соединения серверного трафика, и прокси оператора этот клиент не
+    получает ни при каких аргументах. Закрытый клиент пересоздаём — его закрывает
+    lifespan на остановке, а ещё закроет AsyncOpenAI.close(), если кто-то его позовёт.
     """
     client = _llm_http_clients.get(is_custom)
     if client is None or client.is_closed:
-        client = build_llm_http_client(
-            None if is_custom else proxy,
-            limits=_CUSTOM_LIMITS if is_custom else None,
-        )
+        client = build_llm_http_client(None if is_custom else proxy)
         _llm_http_clients[is_custom] = client
     if is_custom:
         client.cookies.clear()
