@@ -8,6 +8,7 @@ const STAGE_KEYS: Record<string, string> = {
   analyzing: 'progress.analyzing',
   merging: 'progress.merging',
   validating: 'analyze.validating',
+  autofix: 'progress.autofix',
   slow: 'progress.slow',
 };
 
@@ -21,7 +22,6 @@ export default function AnalyzeProgress({ onCancel }: AnalyzeProgressProps) {
   const t = useT();
   const analyzeStatus = useStore((s) => s.analyzeStatus);
   const progress = useStore((s) => s.analyzeProgress);
-  const requestId = useStore((s) => s.analyzeRequestId);
   const cancelAnalyze = useStore((s) => s.cancelAnalyze);
 
   if (analyzeStatus !== 'loading') return null;
@@ -36,21 +36,12 @@ export default function AnalyzeProgress({ onCancel }: AnalyzeProgressProps) {
 
   const stageLabel = progress?.stage ? (STAGE_KEYS[progress.stage] ? t(STAGE_KEYS[progress.stage]) : progress.stage) : '';
 
-  const handleCancel = async () => {
+  const handleCancel = () => {
     if (onCancel) {
       onCancel();
       return;
     }
-    // Если в очереди — отменяем через API
-    if (isQueued && requestId) {
-      try {
-        await fetch('/api/cancel-analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ request_id: requestId }),
-        });
-      } catch { /* игнорируем */ }
-    }
+    // cancelAnalyze() рвёт SSE-соединение, и сервер сам снимает ожидание в очереди
     cancelAnalyze();
   };
 

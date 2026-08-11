@@ -7,7 +7,7 @@ import os
 import re
 import time
 from collections import defaultdict, deque
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
@@ -16,11 +16,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
 
+import queue_manager
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_errors import ALL_CATEGORIES, ErrorCategory
-from llm_service import analyze_document, resolve_llm_credentials
-from models import BuildRequest, TranslateRequest, ValidateRequest
+from llm_service import analysis_metrics, analyze_document, resolve_llm_target
+from models import BuildRequest, FixRegistersRequest, TranslateRequest, ValidateRequest
 from notifier import (
     init_notifier,
     register_metric_hook,
@@ -28,11 +29,12 @@ from notifier import (
     shutdown_notifier,
 )
 from prompts import get_raw_prompts, get_translate_prompt
-from queue_manager import QueueItem, custom_queue, init_queues, server_queue
+from queue_manager import QueueTicket, init_queues
 from request_context import generate_request_id, get_request_id, set_request_id
-from sse import sse_error, sse_progress
+from sse import sse_progress, sse_user_error
 from template_builder import build_template
-from template_importer import detect_and_import
+from template_importer import TemplateImportError, detect_and_import
+from user_errors import UserError
 
 
 def get_version() -> str:
@@ -150,21 +152,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     # Graceful shutdown
 
-    cancelled = 0
-    if server_queue:
-        cancelled += server_queue.cancel_all()
-    if custom_queue:
-        cancelled += custom_queue.cancel_all()
-    if cancelled:
-        logger.info("Отменено %d ожидающих запросов при остановке", cancelled)
+    drained = 0
+    if queue_manager.server_queue:
+        drained += queue_manager.server_queue.drain()
+    if queue_manager.custom_queue:
+        drained += queue_manager.custom_queue.drain()
+    if drained:
+        logger.info("Снято %d ожидающих запросов при остановке", drained)
     # Ждём завершения активных запросов (до 30 сек)
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         active = 0
-        if server_queue:
-            active += server_queue.active_count
-        if custom_queue:
-            active += custom_queue.active_count
+        if queue_manager.server_queue:
+            active += queue_manager.server_queue.active_count
+        if queue_manager.custom_queue:
+            active += queue_manager.custom_queue.active_count
         if active == 0:
             break
         await asyncio.sleep(0.5)
@@ -220,10 +222,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.exception("Необработанная ошибка в %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
-        content={
-            "detail": "Внутренняя ошибка сервера",
-            "request_id": rid,
-        },
+        content=UserError("serverError.internal").payload(rid),
     )
 
 
@@ -240,8 +239,8 @@ async def health():
         "status": "ok",
         "uptime_seconds": uptime,
         "queues": {
-            "server": server_queue.get_status() if server_queue else None,
-            "custom": custom_queue.get_status() if custom_queue else None,
+            "server": queue_manager.server_queue.get_status() if queue_manager.server_queue else None,
+            "custom": queue_manager.custom_queue.get_status() if queue_manager.custom_queue else None,
         },
     }
 
@@ -266,8 +265,8 @@ async def queue_status():
     """Текущее состояние очередей."""
 
     return {
-        "server": server_queue.get_status() if server_queue else None,
-        "custom": custom_queue.get_status() if custom_queue else None,
+        "server": queue_manager.server_queue.get_status() if queue_manager.server_queue else None,
+        "custom": queue_manager.custom_queue.get_status() if queue_manager.custom_queue else None,
     }
 
 
@@ -287,6 +286,9 @@ async def metrics():
             "analyze_duration_count": len(durations),
         },
         "llm_errors_by_category": dict(_metrics["llm_errors_by_category"]),
+        # Автофикс: сколько прогонов его запускало и в скольких из них он убрал
+        # все ошибки (ручная кнопка «Исправить через AI» не понадобилась).
+        "analysis": dict(analysis_metrics),
     }
 
 
@@ -304,16 +306,16 @@ async def list_models(
     """Получение списка доступных моделей от LLM API провайдера."""
     settings = get_settings()
 
-    effective_url, effective_key = resolve_llm_credentials(settings, llm_api_url, llm_api_key)
+    target = resolve_llm_target(settings, url=llm_api_url, key=llm_api_key)
 
-    if not effective_url:
+    if not target.url:
         return JSONResponse(
             status_code=503,
-            content={"detail": "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках."},
+            content=UserError("serverError.llmNotConfigured").payload(get_request_id()),
         )
 
     # Нормализуем base_url: убираем /v1, /v1/ и т.д.
-    base_url = effective_url.rstrip("/")
+    base_url = target.url.rstrip("/")
     if base_url.endswith("/v1"):
         base_url = base_url[:-3]
 
@@ -322,11 +324,11 @@ async def list_models(
     try:
         import httpx
         http_kwargs: dict = {"timeout": 15.0}
-        if not llm_api_url and settings.LLM_PROXY:
-            http_kwargs["proxy"] = settings.LLM_PROXY
+        if target.proxy:
+            http_kwargs["proxy"] = target.proxy
         headers = {}
-        if effective_key:
-            headers["Authorization"] = f"Bearer {effective_key}"
+        if target.key:
+            headers["Authorization"] = f"Bearer {target.key}"
         async with httpx.AsyncClient(**http_kwargs) as client:
             resp = await client.get(models_url, headers=headers)
             resp.raise_for_status()
@@ -337,11 +339,11 @@ async def list_models(
         logger.exception("Ошибка получения списка моделей")
         await report_llm_api_error(
             e, endpoint="list_models", request_id=get_request_id(),
-            model="", is_custom_llm=bool(llm_api_url),
+            model="", is_custom_llm=target.is_custom,
         )
         return JSONResponse(
             status_code=502,
-            content={"detail": f"Не удалось получить список моделей: {e!s}"},
+            content=UserError("serverError.modelsFailed", reason=str(e)).payload(get_request_id()),
         )
 
 
@@ -372,13 +374,13 @@ async def analyze(
     client_ip = request.client.host if request.client else "unknown"
     if _check_rate_limit(client_ip, settings.RATE_LIMIT_REQUESTS, settings.RATE_LIMIT_WINDOW):
         _metrics["rate_limit_hits"] += 1
-        limit_msg = (
-            f"Превышен лимит запросов ({settings.RATE_LIMIT_REQUESTS} "
-            f"за {settings.RATE_LIMIT_WINDOW} сек). Попробуйте позже."
-        )
         return JSONResponse(
             status_code=429,
-            content={"detail": limit_msg, "request_id": request_id},
+            content=UserError(
+                "serverError.rateLimit",
+                requests=settings.RATE_LIMIT_REQUESTS,
+                window=settings.RATE_LIMIT_WINDOW,
+            ).payload(request_id),
         )
 
     _metrics["analyze_requests"] += 1
@@ -387,10 +389,7 @@ async def analyze(
     if not llm_api_url and not settings.LLM_API_URL:
         return JSONResponse(
             status_code=503,
-            content={
-                "detail": "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках.",
-                "request_id": request_id,
-            },
+            content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
 
     # Проверка допустимых расширений файлов
@@ -399,13 +398,9 @@ async def analyze(
         if ext not in _ALLOWED_EXTENSIONS:
             return JSONResponse(
                 status_code=400,
-                content={
-                    "detail": (
-                        f"Неподдерживаемый формат файла: \u00ab{f.filename}\u00bb. "
-                        f"Допустимые форматы: PDF, Excel (xlsx), изображения (PNG, JPG, WebP)."
-                    ),
-                    "request_id": request_id,
-                },
+                content=UserError(
+                    "serverError.unsupportedFormat", file=f.filename,
+                ).payload(request_id),
             )
 
     # Читаем содержимое файлов и проверяем размер
@@ -416,14 +411,12 @@ async def analyze(
         if len(content) > max_bytes:
             return JSONResponse(
                 status_code=413,
-                content={
-                    "detail": (
-                        f"Файл «{f.filename}» ({len(content) / 1024 / 1024:.1f} МБ) "
-                        f"превышает лимит {settings.MAX_FILE_SIZE_MB} МБ. "
-                        f"Попробуйте разделить документ на части или конвертировать в изображения."
-                    ),
-                    "request_id": request_id,
-                },
+                content=UserError(
+                    "serverError.fileTooLarge",
+                    file=f.filename,
+                    size=f"{len(content) / 1024 / 1024:.1f}",
+                    max=settings.MAX_FILE_SIZE_MB,
+                ).payload(request_id),
             )
         file_data.append((f.filename or "unknown", content))
 
@@ -432,96 +425,76 @@ async def analyze(
     if translation_languages:
         langs = [lang.strip() for lang in translation_languages.split(",") if lang.strip()]
 
-    # Выбираем очередь
-    queue = custom_queue if is_custom_llm else server_queue
+    # Выбираем очередь. None бывает, только если lifespan не выполнялся (например,
+    # в тестах) — тогда анализ идёт без ограничения параллельности.
+    queue = queue_manager.custom_queue if is_custom_llm else queue_manager.server_queue
     if not queue:
-        # Очередь не инициализирована — пропускаем
-        logger.warning("Очередь не инициализирована, пропускаем")
-        queue = None
+        logger.warning("Очередь не инициализирована, анализ без ограничения параллельности")
+
+    def queued_event(ticket: QueueTicket) -> str:
+        """SSE-событие «запрос в очереди» с текущей позицией и оценкой ожидания."""
+        pos = ticket.position or 1
+        eta = ticket.eta
+        return sse_progress(
+            "queued",
+            f"Ваш запрос в очереди. Позиция: {pos}. Примерное ожидание: ~{max(1, eta // 60)} мин.",
+            request_id=request_id,
+            extra={"queue_position": pos, "queue_eta": eta},
+        )
 
     async def queued_generator() -> AsyncGenerator[str, None]:
-        """Обёртка: ожидание в очереди → выполнение analyze_document."""
-        queue_item: QueueItem | None = None
-        start_time = time.monotonic()
+        """Обёртка: ожидание слота в очереди → выполнение analyze_document."""
+        analysis_start: float | None = None
 
         try:
-            if queue:
-                queue_item = QueueItem(request_id=request_id)
+            # Выход из ticket() освобождает слот при любом исходе, включая обрыв SSE.
+            async with AsyncExitStack() as stack:
+                if queue:
+                    ticket = await stack.enter_async_context(queue.ticket(request_id))
 
-                # Проверяем, нужно ли ожидание
-                if queue.active_count >= queue._max_concurrent:
-                    # Сначала добавляемся в очередь, потом шлём SSE с позицией
-                    # Но acquire() блокирует, поэтому сначала шлём прогресс
-                    queue._waiting.append(queue_item)
-                    pos = queue.get_position(request_id)
-                    eta = queue.get_eta(pos or 1) if pos else 0
-                    yield sse_progress(
-                        "queued",
-                        f"Ваш запрос в очереди. Позиция: {pos}. Примерное ожидание: ~{max(1, eta // 60)} мин.",
-                        request_id=request_id,
-                        extra={"queue_position": pos, "queue_eta": eta},
-                    )
-
-                    # Периодически обновляем позицию пока ждём
-                    while not queue_item.ready_event.is_set():
-                        try:
-                            await asyncio.wait_for(
-                                queue_item.ready_event.wait(),
-                                timeout=5.0,
-                            )
-                        except asyncio.TimeoutError:
-                            if queue_item.cancelled:
-                                yield sse_error("Запрос отменён.", request_id=request_id)
-                                return
-                            new_pos = queue.get_position(request_id)
-                            if new_pos:
-                                new_eta = queue.get_eta(new_pos)
-                                yield sse_progress(
-                                    "queued",
-                                    f"Ваш запрос в очереди. Позиция: {new_pos}. "
-                                    f"Примерное ожидание: ~{max(1, new_eta // 60)} мин.",
-                                    request_id=request_id,
-                                    extra={"queue_position": new_pos, "queue_eta": new_eta},
+                    # timeout=0 — есть ли свободный слот прямо сейчас. Если нет,
+                    # сообщаем позицию и ждём, обновляя её каждые 5 секунд.
+                    if not await ticket.wait(timeout=0):
+                        yield queued_event(ticket)
+                        while not await ticket.wait(timeout=5.0):
+                            if ticket.drained:
+                                yield sse_user_error(
+                                    UserError("serverError.serviceStopping"), request_id=request_id,
                                 )
+                                return
+                            yield queued_event(ticket)
 
-                    if queue_item.cancelled:
-                        yield sse_error("Запрос отменён.", request_id=request_id)
-                        return
+                # Выполняем анализ
+                analysis_start = time.monotonic()
+                async for event in analyze_document(
+                    files=file_data,
+                    template_type=template_type,
+                    settings=settings,
+                    api_url=llm_api_url,
+                    api_key=llm_api_key,
+                    model=llm_model,
+                    max_tokens=llm_max_tokens,
+                    timeout=llm_timeout,
+                    custom_system_prompt=system_prompt,
+                    translation_languages=langs,
+                    legacy_max_tokens=llm_legacy_max_tokens,
+                    temperature=llm_temperature,
+                    request_id=request_id,
+                    is_custom_llm=is_custom_llm,
+                ):
+                    yield event
 
-                    queue._active += 1
-                else:
-                    # Слот свободен — занимаем сразу
-                    queue._active += 1
-
-            # Выполняем анализ
-            async for event in analyze_document(
-                files=file_data,
-                template_type=template_type,
-                settings=settings,
-                api_url=llm_api_url,
-                api_key=llm_api_key,
-                model=llm_model,
-                max_tokens=llm_max_tokens,
-                timeout=llm_timeout,
-                custom_system_prompt=system_prompt,
-                translation_languages=langs,
-                legacy_max_tokens=llm_legacy_max_tokens,
-                temperature=llm_temperature if llm_temperature is not None else -1,
-                request_id=request_id,
-                is_custom_llm=is_custom_llm,
-            ):
-                yield event
-
-        except Exception as e:
+        except Exception:
             logger.exception("Ошибка в очереди/анализе")
             _metrics["analyze_errors"] += 1
-            yield sse_error(f"Ошибка: {e!s}", request_id=request_id)
+            yield sse_user_error(UserError("serverError.internalAnalyze"), request_id=request_id)
 
         finally:
-            duration = time.monotonic() - start_time
-            _metrics["durations"].append(duration)
-            if queue:
-                queue.release(duration)
+            # Ожидание в очереди в длительность анализа не входит: ETA считается из
+            # среднего, а среднее росло бы от самого ожидания. Запрос, не дошедший до
+            # анализа (отменён в очереди, оборван клиентом), замера не даёт вовсе.
+            if analysis_start is not None:
+                _metrics["durations"].append(time.monotonic() - analysis_start)
 
     return StreamingResponse(
         queued_generator(),
@@ -533,23 +506,6 @@ async def analyze(
             "X-Request-Id": request_id,
         },
     )
-
-
-@app.post("/api/cancel-analyze")
-async def cancel_analyze(request: Request):
-    """Отмена ожидающего запроса в очереди по request_id."""
-    body = await request.json()
-    rid = body.get("request_id")
-    if not rid:
-        return JSONResponse(status_code=400, content={"detail": "request_id обязателен"})
-
-    cancelled = False
-    if server_queue:
-        cancelled = server_queue.cancel(rid)
-    if not cancelled and custom_queue:
-        cancelled = custom_queue.cancel(rid)
-
-    return JSONResponse(content={"cancelled": cancelled, "request_id": rid})
 
 
 @app.post("/api/build")
@@ -602,42 +558,32 @@ async def validate(request: ValidateRequest):
 
 
 @app.post("/api/fix-registers")
-async def fix_registers_endpoint(
-    request: Request,
-    body: ValidateRequest,
-    llm_api_url: Optional[str] = None,
-    llm_api_key: Optional[str] = None,
-    llm_model: Optional[str] = None,
-    llm_timeout: Optional[int] = None,
-    llm_legacy_max_tokens: Optional[bool] = None,
-    llm_temperature: Optional[float] = None,
-):
+async def fix_registers_endpoint(request: Request, body: FixRegistersRequest):
     """Исправление регистров через AI — SSE-поток."""
     from llm_service import fix_registers
-    from register_validator import Severity, format_validation_errors, validate_registers
+    from register_validator import (
+        collect_error_registers,
+        format_validation_errors,
+        validate_registers,
+    )
 
     settings = get_settings()
     request_id = get_request_id()
-    is_custom_llm = bool(llm_api_url)
-
-    effective_url, effective_key = resolve_llm_credentials(
+    target = resolve_llm_target(
         settings,
-        llm_api_url if is_custom_llm else None,
-        llm_api_key if is_custom_llm else None,
+        url=body.llm_api_url,
+        key=body.llm_api_key,
+        model=body.llm_model,
+        timeout=body.llm_timeout,
+        legacy_max_tokens=body.llm_legacy_max_tokens,
+        temperature=body.llm_temperature,
     )
 
-    if not effective_url:
+    if not target.url:
         return JSONResponse(
             status_code=503,
-            content={"detail": "LLM не настроен."},
+            content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
-
-    effective_model = (llm_model if is_custom_llm else None) or settings.LLM_MODEL
-    effective_timeout = (llm_timeout if is_custom_llm else None) or settings.LLM_TIMEOUT
-    effective_legacy = (
-        llm_legacy_max_tokens if llm_legacy_max_tokens is not None else settings.LLM_LEGACY_MAX_TOKENS
-    )
-    effective_temperature = llm_temperature if is_custom_llm else settings.LLM_TEMPERATURE
 
     # Валидируем текущие регистры для получения описания ошибок
     validation = validate_registers(body.registers)
@@ -645,29 +591,23 @@ async def fix_registers_endpoint(
 
     # В LLM отправляем ТОЛЬКО регистры с ошибками (не весь шаблон): иначе на
     # крупных устройствах запрос виснет и вывод обрезается по лимиту токенов.
-    # Позиции, а не id: id в шаблонах не уникальны (condition-gated пары),
-    # merge-back в fix_registers идёт по позициям + временному тегу __fix_<i>.
-    error_positions = [
-        i for i, rv in enumerate(validation.registers)
-        if any(e.severity == Severity.ERROR for e in rv.errors)
-    ]
-    error_registers = [body.registers[i] for i in error_positions]
+    error_positions, error_registers = collect_error_registers(validation, body.registers)
 
     generator = fix_registers(
         error_registers,
         error_desc,
         all_registers=body.registers,
         error_positions=error_positions,
-        effective_url=effective_url,
-        effective_key=effective_key,
-        effective_model=effective_model,
-        effective_timeout=effective_timeout,
-        max_tokens=settings.LLM_MAX_TOKENS or 16384,
-        legacy_max_tokens=effective_legacy,
-        temperature=effective_temperature,
-        proxy=settings.LLM_PROXY if not is_custom_llm else "",
+        effective_url=target.url,
+        effective_key=target.key,
+        effective_model=target.model,
+        effective_timeout=target.timeout,
+        max_tokens=target.max_tokens or 16384,
+        legacy_max_tokens=target.legacy_max_tokens,
+        temperature=target.temperature,
+        proxy=target.proxy or "",
         request_id=request_id,
-        is_custom_llm=is_custom_llm,
+        is_custom_llm=target.is_custom,
     )
 
     return StreamingResponse(
@@ -691,34 +631,25 @@ async def translate(request: TranslateRequest):
     settings = get_settings()
     request_id = get_request_id()
 
-    is_custom_llm = bool(request.llm_api_url)
-
-    # Изоляция ключей через единую функцию
-    effective_url, effective_key = resolve_llm_credentials(
-        settings, request.llm_api_url if is_custom_llm else None,
-        request.llm_api_key if is_custom_llm else None,
+    target = resolve_llm_target(
+        settings,
+        url=request.llm_api_url,
+        key=request.llm_api_key,
+        model=request.llm_model,
+        timeout=request.llm_timeout,
+        legacy_max_tokens=request.llm_legacy_max_tokens,
+        temperature=request.llm_temperature,
     )
-    if is_custom_llm:
-        effective_model = request.llm_model or settings.LLM_MODEL
-        effective_legacy = (
-            request.llm_legacy_max_tokens if request.llm_legacy_max_tokens is not None
-            else settings.LLM_LEGACY_MAX_TOKENS
-        )
-        effective_temperature = request.llm_temperature  # None = дефолт модели
-        effective_timeout = request.llm_timeout or settings.LLM_TIMEOUT
-    else:
-        effective_model = settings.LLM_MODEL
-        effective_legacy = settings.LLM_LEGACY_MAX_TOKENS
-        effective_temperature = settings.LLM_TEMPERATURE
-        effective_timeout = settings.LLM_TIMEOUT
+    is_custom_llm = target.is_custom
+    effective_model = target.model
+    effective_legacy = target.legacy_max_tokens
+    effective_temperature = target.temperature
+    effective_timeout = target.timeout
 
-    if not effective_url:
+    if not target.url:
         return JSONResponse(
             status_code=503,
-            content={
-                "detail": "LLM не настроен. Задайте LLM_API_URL или укажите URL в настройках.",
-                "request_id": request_id,
-            },
+            content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
 
     if not request.strings:
@@ -728,13 +659,13 @@ async def translate(request: TranslateRequest):
     strings_json = json.dumps(request.strings, ensure_ascii=False)
 
     http_client = None
-    if not is_custom_llm and settings.LLM_PROXY:
+    if target.proxy:
         import httpx
-        http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
+        http_client = httpx.AsyncClient(proxy=target.proxy)
     # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
     client = AsyncOpenAI(
-        base_url=effective_url,
-        api_key=effective_key or "no-key-provided",
+        base_url=target.url,
+        api_key=target.key or "no-key-provided",
         http_client=http_client,
     )
 
@@ -796,10 +727,7 @@ async def translate(request: TranslateRequest):
         )
         return JSONResponse(
             status_code=500,
-            content={
-                "detail": f"Ошибка перевода: {e!s}",
-                "request_id": request_id,
-            },
+            content=UserError("serverError.translateFailed", reason=str(e)).payload(request_id),
         )
 
 
@@ -818,13 +746,17 @@ async def import_template_endpoint(file: UploadFile = File(...)):
     except json.JSONDecodeError as e:
         return JSONResponse(
             status_code=400,
-            content={"detail": f"Невалидный JSON: {e!s}", "request_id": request_id},
+            content=UserError("serverError.importInvalidJson", error=str(e)).payload(request_id),
         )
-    except Exception as e:
+    except TemplateImportError as e:
+        # В __cause__ у отказа песочницы лежит атрибут, к которому лез шаблон
+        logger.warning("Импорт отклонён (%s): %s", e.key, e.__cause__ or e)
+        return JSONResponse(status_code=400, content=e.payload(request_id))
+    except Exception:
         logger.exception("Ошибка импорта шаблона")
         return JSONResponse(
             status_code=422,
-            content={"detail": f"Ошибка импорта: {e!s}", "request_id": request_id},
+            content=UserError("serverError.importFailed").payload(request_id),
         )
 
     return JSONResponse(content=result)

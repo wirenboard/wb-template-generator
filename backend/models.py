@@ -174,18 +174,32 @@ class ValidateRequest(BaseModel):
     registers: list[Register]
 
 
-class TranslateRequest(BaseModel):
+class LlmOverrides(BaseModel):
+    """Настройки LLM, которые клиент присылает в теле запроса.
+
+    Именно в теле, а не аргументами эндпоинта — FastAPI разбирал бы их как
+    query-параметры, и ключ попадал бы в access-логи nginx и uvicorn. Что с чем
+    сравнивается дальше, решает `resolve_llm_target` в llm_service.
+    """
+
+    llm_api_url: str | None = None
+    llm_api_key: str | None = None
+    llm_model: str | None = None
+    llm_timeout: int | None = None
+    llm_legacy_max_tokens: bool | None = None
+    llm_temperature: float | None = None
+
+
+class FixRegistersRequest(ValidateRequest, LlmOverrides):
+    """Запрос на исправление регистров через LLM."""
+
+
+class TranslateRequest(LlmOverrides):
     """Запрос на перевод строк через LLM."""
 
     strings: dict[str, str]  # key → English text
     target_lang: str  # "ru", "de" и т.д.
     target_lang_name: str  # "Russian", "Deutsch" — для промпта
-    llm_api_url: str | None = None
-    llm_api_key: str | None = None
-    llm_model: str | None = None
-    llm_temperature: float | None = None
-    llm_timeout: int | None = None
-    llm_legacy_max_tokens: bool | None = None
 
 
 class TranslateResponse(BaseModel):

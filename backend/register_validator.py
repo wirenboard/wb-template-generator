@@ -132,6 +132,15 @@ STRING_FORMATS = frozenset({"string", "string8"})
 # Регулярка адреса из JSON-схемы драйвера
 ADDRESS_REGEX = re.compile(r"^(?:0x[A-Fa-f0-9]+|\d+)(?::\d+:\d+)?$")
 
+# Modbus-адрес 16-битный, больше этого значения физически не бывает.
+MODBUS_MAX_ADDRESS = 65535
+
+# Legacy-нотация 4xxxxx/3xxxxx в шестизначной записи: 461457 = holding offset 61456.
+# Даташиты (напр. Eastron SDM630MCT) мешают её с пятизначной, и модель конвертирует
+# только пятизначную, оставляя шестизначную как есть. Такой адрес всегда > 65535,
+# поэтому опознаётся однозначно и правится детерминированно, без LLM.
+LEGACY_6DIGIT_BASES = ((400001, 465536), (300001, 365536))
+
 # ---------------------------------------------------------------------------
 # Маппинг синонимов для авто-исправления
 # ---------------------------------------------------------------------------
@@ -225,6 +234,21 @@ def _try_fix(value: str | None, synonyms: dict[str, str],
     return value, None
 
 
+def _as_plain_address(value) -> int | None:
+    """Возвращает адрес как int, если это обычный числовой адрес.
+
+    Побитовый ("109:0:1") и hex ("0xF010") адреса не трогаем — их приводит к числу
+    драйвер, и legacy-нотации в них не бывает.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
 def auto_fix_register(raw_reg: dict) -> tuple[dict, list[FieldError]]:
     """Авто-исправление полей регистра перед Pydantic-парсингом.
 
@@ -283,6 +307,24 @@ def auto_fix_register(raw_reg: dict) -> tuple[dict, list[FieldError]]:
                 message_params={"field": "access", "from": original, "to": fixed},
                 suggestion=fixed,
             ))
+
+    # address: шестизначная legacy-нотация, не сконвертированная моделью в offset
+    addr_int = _as_plain_address(raw_reg.get("address"))
+    if addr_int is not None and addr_int > MODBUS_MAX_ADDRESS:
+        for base, upper in LEGACY_6DIGIT_BASES:
+            if base <= addr_int <= upper:
+                raw_reg["address"] = addr_int - base
+                fixes.append(FieldError(
+                    field="address", severity=Severity.WARNING,
+                    message_key="validation.autoFixed",
+                    message_params={
+                        "field": "address",
+                        "from": str(addr_int),
+                        "to": str(addr_int - base),
+                    },
+                    suggestion=str(addr_int - base),
+                ))
+                break
 
     # word_order
     if "word_order" in raw_reg and raw_reg["word_order"] is not None:
@@ -376,15 +418,24 @@ def validate_register(reg: Register) -> RegisterValidation:
         ))
 
     # Невалидный адрес
-    if isinstance(reg.address, str):
-        if not ADDRESS_REGEX.match(reg.address):
-            errors.append(FieldError(
-                field="address", severity=Severity.ERROR,
-                message_key="validation.invalidAddress",
-                message_params={"value": reg.address},
-            ))
-    elif isinstance(reg.address, int):
-        if reg.address < 0:
+    if isinstance(reg.address, str) and not ADDRESS_REGEX.match(reg.address):
+        errors.append(FieldError(
+            field="address", severity=Severity.ERROR,
+            message_key="validation.invalidAddress",
+            message_params={"value": reg.address},
+        ))
+    else:
+        # Адрес вне 16-битного диапазона на железе не опросится. Чаще всего это
+        # несконвертированная legacy-нотация — её правит auto_fix_register, сюда
+        # доходит только то, что починить детерминированно не удалось. Проверяем и
+        # строку «999999»: модель нередко отдаёт адрес строкой, и раньше такой
+        # адрес проезжал молча.
+        #
+        # Hex-запись и побитовые адреса под это правило НЕ попадают: у не-Modbus
+        # протоколов (neva, energomera_iec, energomera_ce) адрес — код параметра, и в
+        # официальных шаблонах wb-mqtt-serial таких значений 125, например 0x012F0000.
+        addr_value = _as_plain_address(reg.address)
+        if addr_value is not None and (addr_value < 0 or addr_value > MODBUS_MAX_ADDRESS):
             errors.append(FieldError(
                 field="address", severity=Severity.ERROR,
                 message_key="validation.invalidAddress",
@@ -566,6 +617,24 @@ def auto_fix_and_validate(
 # ---------------------------------------------------------------------------
 # Форматирование ошибок для LLM retry промпта
 # ---------------------------------------------------------------------------
+
+def collect_error_registers(
+    result: ValidationResult, registers: list[Register],
+) -> tuple[list[int], list[Register]]:
+    """Отбирает регистры с ошибками для отправки в LLM на исправление.
+
+    Возвращает (позиции, регистры). Позиции, а не id: id в шаблонах не уникальны
+    (condition-gated пары), поэтому вмёрдживание исправлений идёт по позициям.
+
+    Returns:
+        Кортеж из списка позиций в исходном списке и самих регистров с ERROR.
+    """
+    positions = [
+        i for i, rv in enumerate(result.registers)
+        if any(e.severity == Severity.ERROR for e in rv.errors)
+    ]
+    return positions, [registers[i] for i in positions]
+
 
 def format_validation_errors(
     result: ValidationResult, registers: list[Register],

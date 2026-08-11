@@ -73,7 +73,7 @@ backend/
   main.py              # FastAPI: эндпоинты, middleware, очереди, rate limiting
   config.py            # Настройки из .env (pydantic-settings)
   models.py            # Pydantic-модели (Register, BuildRequest и т.д.)
-  llm_service.py       # LLM-интеграция: анализ документов, батчинг PDF
+  llm_service.py       # LLM-интеграция: анализ документов, автофикс регистров
   template_builder.py  # Детерминированная сборка JSON-шаблона
   template_importer.py # Импорт существующих .json/.json.jinja шаблонов
   jinja_exporter.py    # Экспорт в .json.jinja с детекцией for-паттернов
@@ -81,8 +81,7 @@ backend/
   prompts.py           # Системные промпты для LLM
   sse.py               # SSE-события (progress, result, done, error)
   request_context.py   # ContextVar для request_id (трейсинг)
-  queue_manager.py     # In-memory очередь на asyncio.Event
-  mock_data.py         # Mock-данные для разработки без LLM
+  queue_manager.py     # In-memory очередь на asyncio.Semaphore
   pyproject.toml       # Конфиг ruff, mypy, pytest
   tests/               # pytest-тесты + фикстуры
 
@@ -115,7 +114,6 @@ docker-compose.deploy.yml  # прод: образы по git-SHA из реест
 | Метод | Путь | Описание |
 |-------|------|----------|
 | POST | `/api/analyze` | SSE — анализ документа через LLM |
-| POST | `/api/cancel-analyze` | Отмена запроса в очереди |
 | POST | `/api/build` | Сборка JSON-шаблона из регистров |
 | POST | `/api/build-jinja` | Сборка Jinja-шаблона (.json.jinja) |
 | POST | `/api/import-template` | Импорт .json / .json.jinja |
@@ -135,9 +133,9 @@ event: done      ->  {message, request_id}
 event: error     ->  {message, request_id}
 ```
 
-Стадии прогресса: `queued` -> `uploading` -> `converting` -> `analyzing` -> `slow` -> `merging` -> done/error.
+Стадии прогресса: `queued` -> `uploading` -> `converting` -> `analyzing` -> `merging` -> `validating` -> `autofix?` -> done/error.
 
-Стадия `slow` — мягкий таймаут (по умолчанию 3 мин), анализ продолжается, но пользователю предлагается подождать или отменить.
+Стадия `slow` не звено цепочки, а замена `analyzing` после мягкого таймаута (`LLM_SOFT_TIMEOUT`, по умолчанию 3 мин): анализ продолжается, но пользователю предлагается подождать или отменить. Стадия `autofix` появляется только если валидация нашла ошибки.
 
 ## Настройки
 
@@ -147,7 +145,7 @@ event: error     ->  {message, request_id}
 
 | Переменная | По умолчанию | Описание |
 |------------|-------------|----------|
-| `LLM_API_URL` | _(пусто)_ | URL OpenAI-совместимого API. Пусто = mock-режим |
+| `LLM_API_URL` | _(пусто)_ | URL OpenAI-совместимого API. Пусто = анализ недоступен, пока пользователь не укажет свой LLM в настройках |
 | `LLM_API_KEY` | _(пусто)_ | API-ключ |
 | `LLM_MODEL` | `gpt-5.6-luna` | Модель (`gpt-5.4-mini` — ещё дешевле, `gpt-5.5` — дороже, качество то же) |
 | `LLM_MAX_TOKENS` | `0` | 0 = без ограничения, >0 = лимит токенов |
@@ -156,8 +154,7 @@ event: error     ->  {message, request_id}
 | `LLM_SOFT_TIMEOUT` | `180` | Мягкий таймаут — предложить продлить (сек) |
 | `LLM_TEMPERATURE` | _(пусто)_ | Пусто = дефолт модели (нужно для gpt-5.x); 0 = детерминизм для gpt-4o/локальных |
 | `LLM_PROXY` | _(пусто)_ | HTTP/SOCKS5 прокси для запросов к LLM API |
-| `PDF_BATCH_SIZE` | `0` | Страниц на батч (0 = все одним запросом) |
-| `MAX_FILE_SIZE_MB` | `1` | Максимальный размер загружаемого файла (МБ) |
+| `MAX_FILE_SIZE_MB` | `2` | Максимальный размер загружаемого файла (МБ) |
 
 ### Очереди и лимиты
 
@@ -165,7 +162,7 @@ event: error     ->  {message, request_id}
 |------------|-------------|----------|
 | `QUEUE_SERVER_MAX_CONCURRENT` | `15` | Параллельных запросов к серверному LLM |
 | `QUEUE_CUSTOM_MAX_CONCURRENT` | `15` | Параллельных запросов с пользовательским LLM |
-| `QUEUE_ACTIVATION_DELAY` | `1.0` | Задержка между запусками из очереди (сек) |
+| `QUEUE_ACTIVATION_DELAY` | `1.0` | Задержка перед стартом того, кто ждал в очереди (сек) |
 | `RATE_LIMIT_REQUESTS` | `10` | Запросов за окно |
 | `RATE_LIMIT_WINDOW` | `60` | Окно rate limit (сек) |
 
@@ -179,7 +176,7 @@ event: error     ->  {message, request_id}
 ## Продакшен-инфраструктура
 
 - **Request ID**: каждый запрос получает 8-символьный hex ID, который пробрасывается через SSE, логи и заголовок `X-Request-Id`
-- **Очереди**: in-memory на `asyncio.Event`, раздельные для серверного и пользовательского LLM, с задержкой между активациями
+- **Очереди**: in-memory на `asyncio.Semaphore`, раздельные для серверного и пользовательского LLM, с задержкой перед стартом того, кто ждал
 - **Rate limiter**: sliding window по IP
 - **Изоляция LLM**: при серверном LLM пользовательский system_prompt игнорируется
 - **Мягкий таймаут**: через 3 мин анализа пользователю предлагается продолжить или отменить
@@ -240,10 +237,6 @@ docker compose build --no-cache && docker compose up -d
 # Логи
 docker compose logs -f backend
 ```
-
-### Mock-режим
-
-Если `LLM_API_URL` не задан — backend работает в mock-режиме с тестовыми данными SDM-230. Удобно для разработки фронтенда без реального LLM.
 
 ### CI/CD
 

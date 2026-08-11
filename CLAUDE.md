@@ -28,10 +28,14 @@
 ```bash
 docker compose up --build -d          # Сборка и запуск
 docker compose build --no-cache && docker compose up -d  # Без кеша
-docker compose exec backend pytest tests/ -v             # Бэкенд-тесты в контейнере
+docker compose exec --user root backend pytest tests/ -v  # Бэкенд-тесты
+docker compose exec --user root backend ruff check .      # Линтер
+docker compose exec --user root backend mypy --config-file pyproject.toml models.py template_builder.py jinja_exporter.py  # Типы
 docker run --rm -v $(pwd)/frontend:/app -w /app node:20-alpine sh -c "npm ci --ignore-scripts && npx vitest run"  # Фронтенд-тесты
 docker compose down                   # Остановка
 ```
+
+**Почему `--user root`.** Образ работает под непривилегированным пользователем `app`, и `/app` для него только на чтение — приложению запись не нужна, а инструментам разработки нужна. `mypy` без права создать `.mypy_cache` падает с `INTERNAL ERROR`, `ruff` не может создать `.ruff_cache`. `pytest` работает и без флага, но флаг оставлен для единообразия. В CI флаг не нужен, там гейты идут в отдельном `python:3.12-slim` от root.
 
 Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
 
@@ -69,7 +73,7 @@ backend/
   main.py              # FastAPI: эндпоинты, middleware, lifespan
   config.py            # Настройки из .env (pydantic-settings)
   models.py            # Pydantic-модели (Register, BuildRequest и т.д.)
-  llm_service.py       # LLM-интеграция: analyze_document, batch-обработка PDF
+  llm_service.py       # LLM-интеграция: analyze_document, автофикс регистров
   template_builder.py  # Детерминированная сборка JSON-шаблона
   template_importer.py # Импорт существующих .json/.json.jinja шаблонов
   jinja_exporter.py    # Экспорт в .json.jinja с детекцией паттернов
@@ -78,7 +82,6 @@ backend/
   queue_manager.py     # Управление очередями анализа (server + custom)
   sse.py               # Формирование SSE-событий
   request_context.py   # Request ID через ContextVar (middleware)
-  mock_data.py         # Тестовые данные для разработки
   tests/               # pytest: builder, importer, jinja_exporter, key_isolation
 
 frontend/src/

@@ -42,7 +42,6 @@ def _make_settings() -> Settings:
         LLM_LEGACY_MAX_TOKENS=False,
         LLM_TEMPERATURE=0,
         LLM_PROXY="",
-        PDF_BATCH_SIZE=0,
     )
 
 

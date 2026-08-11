@@ -1,38 +1,110 @@
-"""In-memory очередь запросов на анализ. Без Redis/RabbitMQ — на asyncio.Event."""
+"""Ограничение числа параллельных анализов.
+
+Лимит держит `asyncio.Semaphore`, поверх него — позиция в очереди и ETA для UI.
+Слот занимает только `QueueTicket.wait()`, а освобождает только выход из
+`AnalyzeQueue.ticket()`, поэтому освободить незанятый слот невозможно.
+Отдельного пути отмены нет: клиент рвёт SSE, генератор закрывается, выход из
+`ticket()` снимает ожидание сам.
+"""
 
 import asyncio
 import logging
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class QueueItem:
-    """Элемент очереди."""
-    request_id: str
-    created_at: float = field(default_factory=time.monotonic)
-    ready_event: asyncio.Event = field(default_factory=asyncio.Event)
-    cancelled: bool = False
+class QueueTicket:
+    """Место в очереди на анализ. Создаётся только через `AnalyzeQueue.ticket()`."""
+
+    def __init__(self, queue: "AnalyzeQueue", request_id: str):
+        self.request_id = request_id
+        self.drained = False  # сервис останавливается, слота не будет
+        self._queue = queue
+        self._acquire: asyncio.Task[bool] | None = None
+        self._acquired = False
+        self._started_at: float | None = None
+        self._was_queued = False
+
+    @property
+    def acquired(self) -> bool:
+        """Слот занят и анализ можно начинать."""
+        return self._acquired
+
+    @property
+    def position(self) -> int | None:
+        """Позиция в очереди ожидания (1-based). None если слот уже занят."""
+        return self._queue.position_of(self)
+
+    @property
+    def eta(self) -> int:
+        """Оценка ожидания в секундах для текущей позиции."""
+        return self._queue.get_eta(self.position or 1)
+
+    async def wait(self, timeout: float | None = None) -> bool:
+        """Дождаться слота, но не дольше `timeout` секунд.
+
+        `timeout=0` отвечает на вопрос «есть ли свободный слот прямо сейчас»,
+        поэтому вызывающий код может сначала попробовать без ожидания, а затем
+        ждать в цикле, обновляя позицию по SSE.
+
+        Returns:
+            True если слот занят, False если время вышло или сервис останавливается.
+        """
+        if self._acquired:
+            return True
+        if self.drained:
+            return False
+
+        if self._acquire is None:
+            self._acquire = asyncio.create_task(self._queue._semaphore.acquire())
+            # Один прогон цикла: на свободном слоте задача завершается сразу.
+            await asyncio.sleep(0)
+
+        if not self._acquire.done():
+            self._was_queued = True
+            # asyncio.wait по таймауту НЕ отменяет задачу, ожидание слота живёт дальше.
+            await asyncio.wait({self._acquire}, timeout=timeout)
+
+        if not self._acquire.done():
+            return False
+
+        if self._acquire.cancelled():
+            self.drained = True
+            logger.info("[%s] %s: ожидание снято, сервис останавливается",
+                        self._queue.name, self.request_id)
+            return False
+
+        self._acquired = True
+        self._started_at = time.monotonic()
+        self._queue._on_acquired(self)
+
+        # Антиспам: тем, кто стоял в очереди, даём стартовать не залпом.
+        if self._was_queued and self._queue._activation_delay > 0:
+            await asyncio.sleep(self._queue._activation_delay)
+
+        return True
 
 
 class AnalyzeQueue:
-    """Очередь с ограничением параллельных запросов.
+    """Очередь с ограничением числа одновременных анализов.
 
     Args:
-        max_concurrent: максимальное количество одновременно обрабатываемых запросов.
-        name: имя очереди (для логов).
-        activation_delay: задержка (сек) между активациями из очереди (антиспам).
+        max_concurrent: сколько анализов выполняется одновременно.
+        name: имя очереди (для логов и /api/queue-status).
+        activation_delay: задержка (сек) перед стартом того, кто ждал в очереди.
     """
 
     def __init__(self, max_concurrent: int = 1, name: str = "queue", activation_delay: float = 0):
-        self._max_concurrent = max_concurrent
-        self._name = name
+        self.name = name
         self._activation_delay = activation_delay
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._max_concurrent = max_concurrent
         self._active = 0
-        self._waiting: deque[QueueItem] = deque()
+        self._waiting: list[QueueTicket] = []
         self._durations: deque[float] = deque(maxlen=20)  # скользящее среднее
 
     @property
@@ -43,84 +115,67 @@ class AnalyzeQueue:
     def waiting_count(self) -> int:
         return len(self._waiting)
 
-    async def acquire(self, item: QueueItem) -> bool:
-        """Встать в очередь и дождаться своей очереди.
-
-        Returns:
-            True если запрос готов к обработке, False если отменён.
-        """
-        if self._active < self._max_concurrent:
-            self._active += 1
-            logger.info("[%s] %s: слот свободен, запускаем сразу (%d/%d)",
-                        self._name, item.request_id, self._active, self._max_concurrent)
-            return True
-
-        # Добавляем в очередь ожидания
+    @asynccontextmanager
+    async def ticket(self, request_id: str) -> AsyncIterator[QueueTicket]:
+        """Взять место в очереди. Выход из контекста освобождает слот при любом исходе."""
+        item = QueueTicket(self, request_id)
         self._waiting.append(item)
-        pos = len(self._waiting)
-        logger.info("[%s] %s: в очереди, позиция %d", self._name, item.request_id, pos)
+        try:
+            yield item
+        finally:
+            self._finish(item)
 
-        # Ждём сигнала
-        await item.ready_event.wait()
-
-        if item.cancelled:
-            logger.info("[%s] %s: отменён в очереди", self._name, item.request_id)
-            return False
-
+    def _on_acquired(self, item: QueueTicket) -> None:
+        """Слот занят — тикет уходит из очереди ожидания в активные."""
+        if item in self._waiting:
+            self._waiting.remove(item)
         self._active += 1
-        logger.info("[%s] %s: дождался слота (%d/%d)",
-                    self._name, item.request_id, self._active, self._max_concurrent)
-        return True
+        logger.info("[%s] %s: слот занят (%d/%d)",
+                    self.name, item.request_id, self._active, self._max_concurrent)
 
-    def release(self, duration: float | None = None) -> None:
-        """Освободить слот после завершения обработки."""
-        self._active = max(0, self._active - 1)
+    def position_of(self, item: QueueTicket) -> int | None:
+        """Позиция тикета в очереди ожидания (1-based). None если он не ждёт."""
+        try:
+            return self._waiting.index(item) + 1
+        except ValueError:
+            return None
 
-        if duration is not None and duration > 0:
-            self._durations.append(duration)
+    def _finish(self, item: QueueTicket) -> None:
+        """Освободить всё, что тикет успел занять."""
+        if item in self._waiting:
+            self._waiting.remove(item)
 
-        # Активируем следующего из очереди (с задержкой для антиспама)
-        while self._waiting:
-            next_item = self._waiting.popleft()
-            if next_item.cancelled:
-                continue
-            if self._activation_delay > 0:
-                loop = asyncio.get_running_loop()
-                loop.call_later(self._activation_delay, next_item.ready_event.set)
-                logger.info("[%s] %s: активация через %.1fс",
-                            self._name, next_item.request_id, self._activation_delay)
-            else:
-                next_item.ready_event.set()
-                logger.info("[%s] %s: активирован из очереди", self._name, next_item.request_id)
+        if item.acquired:
+            self._active -= 1
+            if item._started_at is not None:
+                self._durations.append(time.monotonic() - item._started_at)
+            self._semaphore.release()
+            logger.info("[%s] %s: слот освобождён (%d/%d)",
+                        self.name, item.request_id, self._active, self._max_concurrent)
             return
 
-        logger.debug("[%s] Слот освобождён, очередь пуста (%d/%d)",
-                     self._name, self._active, self._max_concurrent)
+        task = item._acquire
+        if task is None:
+            return
 
-    def cancel(self, request_id: str) -> bool:
-        """Отменить ожидание запроса в очереди.
+        if task.done() and not task.cancelled() and not task.exception():
+            # Слот пришёл в момент, когда ждать его уже некому.
+            self._semaphore.release()
+            logger.info("[%s] %s: слот пришёл после ухода, возвращён в пул",
+                        self.name, item.request_id)
+        else:
+            task.cancel()
+            logger.info("[%s] %s: ожидание в очереди прервано", self.name, item.request_id)
 
-        Returns:
-            True если запрос был в очереди и отменён.
-        """
-        for item in self._waiting:
-            if item.request_id == request_id and not item.cancelled:
-                item.cancelled = True
-                item.ready_event.set()  # разблокируем await
-                logger.info("[%s] %s: отменён пользователем", self._name, request_id)
-                return True
-        return False
-
-    def get_position(self, request_id: str) -> int | None:
-        """Возвращает позицию запроса в очереди (1-based). None если не найден."""
-        pos = 1
-        for item in self._waiting:
-            if item.cancelled:
-                continue
-            if item.request_id == request_id:
-                return pos
-            pos += 1
-        return None
+    def drain(self) -> int:
+        """Снять всех ожидающих при остановке сервиса. Возвращает число снятых."""
+        count = 0
+        for item in list(self._waiting):
+            item.drained = True
+            if item._acquire is not None:
+                item._acquire.cancel()
+            count += 1
+        return count
 
     def get_eta(self, position: int) -> int:
         """Оценка времени ожидания в секундах на основе скользящего среднего."""
@@ -132,26 +187,17 @@ class AnalyzeQueue:
     def get_status(self) -> dict:
         """Текущее состояние очереди."""
         return {
-            "name": self._name,
+            "name": self.name,
             "max_concurrent": self._max_concurrent,
             "active": self._active,
             "waiting": self.waiting_count,
             "avg_duration": round(sum(self._durations) / len(self._durations), 1) if self._durations else None,
         }
 
-    def cancel_all(self) -> int:
-        """Отменить всех ожидающих. Возвращает количество отменённых."""
-        count = 0
-        for item in self._waiting:
-            if not item.cancelled:
-                item.cancelled = True
-                item.ready_event.set()
-                count += 1
-        return count
 
-
-# Глобальные экземпляры — инициализируются при первом импорте,
-# переконфигурируются в lifespan при старте приложения
+# Глобальные экземпляры. Создаются в init_queues() при старте приложения, поэтому
+# обращаться к ним нужно через модуль (`queue_manager.server_queue`) — импорт по
+# имени скопирует None и очередь не подключится.
 server_queue: AnalyzeQueue | None = None
 custom_queue: AnalyzeQueue | None = None
 

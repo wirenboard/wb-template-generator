@@ -10,11 +10,10 @@ LLM_TEMPERATURE=       # пусто = дефолт модели (нужно дл
 LLM_PROXY=             # HTTP/SOCKS5 прокси для запросов к LLM API
 LLM_TIMEOUT=600        # Жёсткий таймаут HTTP-запроса к LLM (сек)
 LLM_SOFT_TIMEOUT=180   # Мягкий таймаут — предложить продолжить/отменить (сек)
-PDF_BATCH_SIZE=0       # 0 = все страницы одним запросом
-MAX_FILE_SIZE_MB=1
+MAX_FILE_SIZE_MB=2
 QUEUE_SERVER_MAX_CONCURRENT=15   # Параллельных запросов к серверному LLM
 QUEUE_CUSTOM_MAX_CONCURRENT=15   # Параллельных запросов с пользовательским LLM
-QUEUE_ACTIVATION_DELAY=1.0       # Задержка между запусками из очереди (сек)
+QUEUE_ACTIVATION_DELAY=1.0       # Задержка перед стартом того, кто ждал в очереди (сек)
 RATE_LIMIT_REQUESTS=10
 RATE_LIMIT_WINDOW=60
 LOG_FORMAT=text              # Формат логов: text или json

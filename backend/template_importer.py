@@ -4,6 +4,23 @@ import json
 import re
 
 import jinja2
+from jinja2.sandbox import SandboxedEnvironment, SecurityError
+
+from user_errors import UserError
+
+# Шаблон приходит от пользователя, а обычный Environment исполняет из него любой код
+# (`cycler.__init__.__globals__.os.popen`). Immutable-вариант не подходит — запрещает
+# list.append, на котором держится config-wb-mcm8.json.jinja.
+_JINJA_ENV = SandboxedEnvironment(undefined=jinja2.Undefined)
+
+# Самый крупный боевой .json.jinja — 124 КБ. На обычный JSON лимита нет: там бывает
+# до 1.8 МБ, а разбор JSON код не исполняет.
+MAX_JINJA_SOURCE_CHARS = 1024 * 1024
+
+
+class TemplateImportError(UserError):
+    """Шаблон нельзя импортировать: ключ локализации плюс русский текст в `detail`."""
+
 
 # Опциональные поля, которые копируются из канала/параметра в регистр as-is
 _OPTIONAL_FIELDS = (
@@ -206,10 +223,7 @@ def import_template(raw: dict) -> dict:
     has_parameters = bool(device.get("parameters"))
     has_device_type = bool(raw.get("device_type") or device.get("id"))
     if not has_channels and not has_parameters and not has_device_type:
-        raise ValueError(
-            "Not a wb-mqtt-serial template: "
-            "no channels, parameters or device_type found"
-        )
+        raise TemplateImportError("serverError.importNotTemplate")
 
     translations = device.get("translations", {})
 
@@ -328,13 +342,25 @@ def import_jinja_template(text: str) -> dict:
     Если шаблон использует {% include %}, извлекает device_info из {% with %}
     и возвращает пустой набор регистров с пометкой об include.
     """
+    if len(text) > MAX_JINJA_SOURCE_CHARS:
+        raise TemplateImportError(
+            "serverError.importJinjaTooLarge", max=MAX_JINJA_SOURCE_CHARS // (1024 * 1024),
+        )
+
     try:
-        env = jinja2.Environment(undefined=jinja2.Undefined)
-        rendered = env.from_string(text).render()
+        rendered = _JINJA_ENV.from_string(text).render()
         raw = json.loads(rendered)
         return import_template(raw)
+    except SecurityError as e:
+        raise TemplateImportError("serverError.importJinjaUnsafe") from e
+    except OverflowError as e:
+        # Ресурсные лимиты песочницы (range больше MAX_RANGE) не наследуют
+        # TemplateError, поэтому им нужна своя ветка
+        raise TemplateImportError("serverError.importJinjaLimit", error=str(e)) from e
     except (jinja2.TemplateNotFound, TypeError):
-        # Шаблон использует {% include %} — извлекаем что можно из {% with %}
+        # Шаблон использует {% include %} — извлекаем что можно из {% with %}.
+        # Эта ветка и SecurityError выше — подклассы TemplateError, поэтому обе
+        # обязаны стоять до общей ниже.
         variables = _extract_with_variables(text)
         include_file = _extract_include_filename(text)
 
@@ -351,6 +377,15 @@ def import_jinja_template(text: str) -> dict:
             "groups": [],
             "include": include_file,
         }
+    except jinja2.TemplateError as e:
+        # Ошибка в файле пользователя, а не наши внутренности — текст показываем,
+        # иначе автор шаблона не поймёт, что чинить
+        lineno = getattr(e, "lineno", None)
+        if lineno:
+            raise TemplateImportError(
+                "serverError.importJinjaErrorLine", line=lineno, error=str(e),
+            ) from e
+        raise TemplateImportError("serverError.importJinjaError", error=str(e)) from e
 
 
 def _strip_json_comments(text: str) -> str:
@@ -358,11 +393,13 @@ def _strip_json_comments(text: str) -> str:
 
     Удаляет как строки, начинающиеся с //, так и inline-комментарии после значений.
     """
+    # [ \t]*, а не \s*: \s матчит перевод строки, и на пустых строках разбор
+    # становился квадратичным, а сюда файл приходит без потолка размера
     # Удаляем строки, начинающиеся с комментария
-    text = re.sub(r'^\s*//.*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^[ \t]*//.*$', '', text, flags=re.MULTILINE)
     # Удаляем inline-комментарии: значение // комментарий
     # Ищем // которые НЕ внутри строк (упрощённо: после числа/true/false/null)
-    text = re.sub(r'(\b\d+|true|false|null)\s*//.*$', r'\1', text, flags=re.MULTILINE)
+    text = re.sub(r'(\b\d+|true|false|null)[ \t]*//.*$', r'\1', text, flags=re.MULTILINE)
     return text
 
 

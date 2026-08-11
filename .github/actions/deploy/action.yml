@@ -13,11 +13,19 @@ inputs:
 runs:
   using: composite
   steps:
-    # compose из выкатываемого коммита — иначе откат поедет со свежим compose
+    # compose из выкатываемого коммита — иначе откат поедет со свежим compose.
+    # tag приезжает через env, а не интерполяцией в скрипт (script injection).
     - shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
       run: |
+        set -euo pipefail
+        # Только полный 40-символьный hex-SHA: имя ветки или HEAD~1 сделали бы выкат
+        # не воспроизводимым — «та же версия» перестала бы означать тот же артефакт.
+        [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] \
+          || { echo "::error::tag «$TAG» — не полный 40-символьный git-SHA"; exit 1; }
         mkdir -p .deploy
-        git show "${{ inputs.tag }}:docker-compose.deploy.yml" > .deploy/docker-compose.deploy.yml
+        git show "${TAG}:docker-compose.deploy.yml" > .deploy/docker-compose.deploy.yml
 
     - uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345  # v1.0.0
       with:

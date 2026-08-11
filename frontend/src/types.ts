@@ -156,3 +156,18 @@ export interface WBTemplate {
     translations: Record<string, Record<string, string>>;
   };
 }
+
+/** Настройки LLM, которые принимают все маршруты. Зеркало `LlmOverrides` на бэкенде */
+export interface LlmConfig {
+  apiUrl?: string;
+  apiKey?: string;
+  model?: string;
+  timeout?: number;
+  legacyMaxTokens?: boolean;
+  temperature?: number;
+}
+
+/** Анализ дополнительно принимает лимит токенов ответа, остальные маршруты этого поля не имеют */
+export interface AnalyzeLlmConfig extends LlmConfig {
+  maxTokens?: number;
+}
