@@ -17,7 +17,9 @@ jobs:
   rollback:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: production
+    # TODO(CLOUD-622): вернуть `environment: production` вместе с push_master.yml.
+    # Тогда же проверить, что на среде НЕ включены required reviewers: защита среды
+    # действует на все job'ы и загейтила бы откат, который обязан быть безусловным.
     concurrency:
       group: deploy-prod
       cancel-in-progress: false

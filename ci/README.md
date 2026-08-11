@@ -17,7 +17,11 @@
 в проде, на него же опирается откат. Файл `last-good-sha` (+ `.prev`) на сервере —
 break-glass-зеркало на случай недоступного GitHub, пишется после успешного smoke.
 
-## Секреты и переменные (среда `production`)
+## Секреты и переменные
+
+Сейчас лежат **на уровне репозитория**: у владельца сервиса пока нет прав создавать среды.
+Когда права появятся — переносим в среду `production` и возвращаем `environment: production`
+в оба workflow (имена те же, код не меняется). См. TODO в `push_master.yml`.
 
 **Секреты:** `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`.
 **Переменные:** `DEPLOY_DIR`, `PROD_URL`, `DEPLOY_HOST_FINGERPRINT`.
