@@ -22,4 +22,8 @@ break-glass-зеркало на случай недоступного GitHub, п
 `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_DIR`, `PROD_URL` — секреты;
 `DEPLOY_HOST_FINGERPRINT` — variable (SHA256-отпечаток хоста).
 
+На сервере в `DEPLOY_DIR` рядом с compose лежит `.env` с ключами LLM и портом:
+`WEB_PORT=8080` (его ждёт nginx хоста), при необходимости `WEB_BIND` — по умолчанию
+`127.0.0.1`, менять на `0.0.0.0` нельзя, иначе приложение окажется в интернете мимо TLS.
+
 Скрипты проверяются `make lint-shell` (shellcheck + `bash -n`) в составе `make lint`.

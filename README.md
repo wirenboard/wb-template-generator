@@ -200,7 +200,8 @@ git-SHA, сервер только скачивает готовый образ.
 
 Прод-конфигурация — [`docker-compose.deploy.yml`](docker-compose.deploy.yml): образы по
 git-SHA из `ghcr.io`, bridge-сеть, `restart: always`, healthcheck-зависимость frontend от
-backend. Секреты (`DEPLOY_HOST`, `DEPLOY_DIR`, `PROD_URL`, `DEPLOY_SSH_KEY`) живут в среде
+backend. Порт публикуется **только на `127.0.0.1:8080`** — снаружи сервис отдаёт nginx на
+хосте (он держит TLS и домен), напрямую в контейнер извне не ходят. Секреты (`DEPLOY_HOST`, `DEPLOY_DIR`, `PROD_URL`, `DEPLOY_SSH_KEY`) живут в среде
 `production`, `.env` с ключами — на сервере, в репозиторий не попадает.
 
 **Два compose-файла — разные задачи:**

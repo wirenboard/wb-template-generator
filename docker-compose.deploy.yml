@@ -20,8 +20,12 @@ services:
 
   frontend:
     image: ${REGISTRY:-ghcr.io/wirenboard}/wb-template-generator-frontend:${DEPLOY_TAG:?set DEPLOY_TAG=<git-sha>}
+    # Привязка к 127.0.0.1 обязательна: TLS и внешний вход дают nginx на хосте
+    # (роль wb_http_proxy в infra проксирует домен на 127.0.0.1:8080). Без адреса
+    # docker публикует порт на всех интерфейсах и открывает приложение наружу
+    # в обход TLS — заодно мимо firewall, потому что правила ставит docker сам.
     ports:
-      - "${WEB_PORT:-80}:80"
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:80"
     restart: always
     depends_on:
       backend:
