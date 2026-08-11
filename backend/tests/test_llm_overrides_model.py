@@ -94,6 +94,11 @@ class TestFixRegistersReadsBodyOnly:
             yield "event: done\ndata: {}\n\n"
 
         monkeypatch.setattr(llm_service, "fix_registers", fake_fix_registers)
+
+        async def _skip_url_check(url, allow_private=False):
+            return None
+
+        monkeypatch.setattr(main, "ensure_public_llm_url", _skip_url_check)
         # Без явного серверного LLM в CI маршрут ответит «LLM не настроен»
         settings = main.get_settings()
         monkeypatch.setattr(settings, "LLM_API_URL", "https://server.example/v1")

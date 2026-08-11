@@ -32,6 +32,13 @@ _TEXTS: dict[str, str] = {
     ),
     "serverError.modelsFailed": "Не удалось получить список моделей — {reason}.",
     "serverError.translateFailed": "Ошибка перевода — {reason}.",
+    "serverError.llmUrlScheme": "Адрес LLM должен начинаться с http:// или https://.",
+    "serverError.llmUrlNoHost": "В адресе LLM не указан хост.",
+    "serverError.llmUrlUnresolvable": "Не удалось разрешить имя хоста «{host}».",
+    "serverError.llmUrlBadAddress": "Не удалось разобрать адрес хоста «{host}».",
+    "serverError.llmUrlPrivate": (
+        "Адрес LLM ведёт во внутреннюю сеть. Укажите публичный адрес провайдера."
+    ),
     # --- Приём файлов ---
     "serverError.unsupportedFormat": (
         "Неподдерживаемый формат файла: «{file}». "

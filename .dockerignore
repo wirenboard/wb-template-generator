@@ -13,6 +13,9 @@ frontend/node_modules
 .vscode
 .idea
 
+# Secrets
+.env
+
 # Misc
 *.md
 !CHANGELOG.md

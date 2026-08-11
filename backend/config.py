@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # для gpt-4o/локальных LLM детерминированность возвращается значением 0.
     LLM_TEMPERATURE: float | None = None
     LLM_PROXY: str = ""  # HTTP/SOCKS5 прокси для запросов к LLM API
+    LLM_ALLOW_PRIVATE_URLS: bool = False  # True = адрес LLM из запроса может вести во внутреннюю сеть
     LLM_TIMEOUT: int = 600  # Жёсткий таймаут HTTP-запроса к LLM API (сек)
     LLM_SOFT_TIMEOUT: int = 180  # Мягкий таймаут — предложить продолжить/отменить (сек)
     MAX_FILE_SIZE_MB: int = 2  # Максимальный размер одного файла в МБ

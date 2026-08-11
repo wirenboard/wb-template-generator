@@ -19,7 +19,16 @@ import queue_manager
 from config import get_settings
 from jinja_exporter import build_jinja_template
 from llm_errors import ALL_CATEGORIES, ErrorCategory
-from llm_service import analysis_metrics, analyze_document, resolve_llm_target
+from llm_service import (
+    UnsafeLLMUrlError,
+    analysis_metrics,
+    analyze_document,
+    close_llm_http_clients,
+    ensure_public_llm_url,
+    get_llm_http_client,
+    is_custom_llm_url,
+    resolve_llm_target,
+)
 from models import BuildRequest, FixRegistersRequest, TranslateRequest, ValidateRequest
 from notifier import (
     init_notifier,
@@ -161,6 +170,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             break
         await asyncio.sleep(0.5)
     await shutdown_notifier()
+    await close_llm_http_clients()
     logger.info("Приложение остановлено")
 
 
@@ -204,6 +214,16 @@ async def request_id_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 # Глобальный обработчик необработанных ошибок
 # ---------------------------------------------------------------------------
+
+@app.exception_handler(UnsafeLLMUrlError)
+async def unsafe_llm_url_handler(request: Request, exc: UnsafeLLMUrlError):
+    """Адрес пользовательского LLM отклонён — один ответ на все четыре маршрута.
+
+    У SSE-маршрутов ответ тоже обычный 400, адрес проверяется до того, как отдан
+    StreamingResponse.
+    """
+    return JSONResponse(status_code=400, content=exc.payload(get_request_id()))
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -303,6 +323,9 @@ async def list_models(
             content=UserError("serverError.llmNotConfigured").payload(get_request_id()),
         )
 
+    if llm_api_url:
+        await ensure_public_llm_url(llm_api_url, settings.LLM_ALLOW_PRIVATE_URLS)
+
     # Нормализуем base_url: убираем /v1, /v1/ и т.д.
     base_url = target.url.rstrip("/")
     if base_url.endswith("/v1"):
@@ -311,19 +334,15 @@ async def list_models(
     models_url = f"{base_url}/v1/models"
 
     try:
-        import httpx
-        http_kwargs: dict = {"timeout": 15.0}
-        if target.proxy:
-            http_kwargs["proxy"] = target.proxy
         headers = {}
         if target.key:
             headers["Authorization"] = f"Bearer {target.key}"
-        async with httpx.AsyncClient(**http_kwargs) as client:
-            resp = await client.get(models_url, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            models = sorted(m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m)
-            return JSONResponse(content={"models": models})
+        client = get_llm_http_client(target.proxy, is_custom=target.is_custom)
+        resp = await client.get(models_url, headers=headers, timeout=15.0)
+        resp.raise_for_status()
+        data = resp.json()
+        models = sorted(m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m)
+        return JSONResponse(content={"models": models})
     except Exception as e:
         logger.exception("Ошибка получения списка моделей")
         await report_llm_api_error(
@@ -357,7 +376,7 @@ async def analyze(
     """
     settings = get_settings()
     request_id = get_request_id()
-    is_custom_llm = bool(llm_api_url)
+    is_custom_llm = is_custom_llm_url(llm_api_url)
 
     # Rate limiting по IP
     client_ip = request.client.host if request.client else "unknown"
@@ -380,6 +399,9 @@ async def analyze(
             status_code=503,
             content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
+
+    if llm_api_url:
+        await ensure_public_llm_url(llm_api_url, settings.LLM_ALLOW_PRIVATE_URLS)
 
     # Проверка допустимых расширений файлов
     for f in files:
@@ -574,6 +596,9 @@ async def fix_registers_endpoint(request: Request, body: FixRegistersRequest):
             content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
 
+    if body.llm_api_url:
+        await ensure_public_llm_url(body.llm_api_url, settings.LLM_ALLOW_PRIVATE_URLS)
+
     # Валидируем текущие регистры для получения описания ошибок
     validation = validate_registers(body.registers)
     error_desc = format_validation_errors(validation, body.registers)
@@ -641,16 +666,16 @@ async def translate(request: TranslateRequest):
             content=UserError("serverError.llmNotConfigured").payload(request_id),
         )
 
+    if request.llm_api_url:
+        await ensure_public_llm_url(request.llm_api_url, settings.LLM_ALLOW_PRIVATE_URLS)
+
     if not request.strings:
         return JSONResponse(content={"translations": {}})
 
     prompt = get_translate_prompt(request.target_lang_name)
     strings_json = json.dumps(request.strings, ensure_ascii=False)
 
-    http_client = None
-    if target.proxy:
-        import httpx
-        http_client = httpx.AsyncClient(proxy=target.proxy)
+    http_client = get_llm_http_client(target.proxy, is_custom=target.is_custom)
     # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
     client = AsyncOpenAI(
         base_url=target.url,
