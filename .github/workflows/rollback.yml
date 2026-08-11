@@ -101,12 +101,12 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           fingerprint: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
-          dir: ${{ secrets.DEPLOY_DIR }}
+          dir: ${{ vars.DEPLOY_DIR }}
 
       - name: smoke
         env:
           EXPECT_SHA: ${{ steps.target.outputs.sha }}
-        run: make smoke URL=${{ secrets.PROD_URL }}
+        run: make smoke URL=${{ vars.PROD_URL }}
 
       - uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8  # v1.5.0
         if: always()

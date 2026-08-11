@@ -85,13 +85,13 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           fingerprint: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
-          dir: ${{ secrets.DEPLOY_DIR }}
+          dir: ${{ vars.DEPLOY_DIR }}
           registry: ${{ env.REGISTRY }}
 
       - name: smoke
         env:
           EXPECT_SHA: ${{ github.sha }}
-        run: make smoke URL=${{ secrets.PROD_URL }}
+        run: make smoke URL=${{ vars.PROD_URL }}
 
       - uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8  # v1.5.0
         if: always()
@@ -127,7 +127,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           fingerprint: ${{ vars.DEPLOY_HOST_FINGERPRINT }}
-          dir: ${{ secrets.DEPLOY_DIR }}
+          dir: ${{ vars.DEPLOY_DIR }}
           registry: ${{ env.REGISTRY }}
 
       # откат тоже событие выката — иначе журнал разойдётся с реальностью
@@ -145,7 +145,7 @@ jobs:
       - uses: appleboy/ssh-action@2ead5e36573f08b82fbfce1504f1a4b05a647c6f  # v1.2.2
         if: success()
         env:
-          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
           SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}

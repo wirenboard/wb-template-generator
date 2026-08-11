@@ -3,8 +3,9 @@
 > Операторская карточка: минимум, который нужен в момент выката или аварии.
 > Почему всё устроено именно так — в стандарте деплоя.
 
-Адреса не хранятся в репозитории — они в секретах среды `production`
-(**Settings → Environments → production**).
+Адреса не хранятся в репозитории — они в среде `production`
+(**Settings → Environments → production**): `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`
+секретами, `DEPLOY_DIR`, `PROD_URL`, `DEPLOY_HOST_FINGERPRINT` переменными.
 
 ## 🚀 Выкатить
 
@@ -33,7 +34,7 @@
 ## 🧯 GitHub недоступен (break-glass)
 
 0. **Озвучь и получи добро руководителя** (в остром инциденте — озвучь постфактум). Записывать ничего не надо — след оставит механизм.
-1. `ssh <DEPLOY_HOST>`, каталог `<DEPLOY_DIR>` (по умолчанию `/srv/wb-template-generator`).
+1. `ssh <DEPLOY_USER>@<DEPLOY_HOST>`, каталог `<DEPLOY_DIR>` — значения смотреть в среде `production`.
 2. Цель отката: `cat last-good-sha.prev` — если беда проявилась после успешного выката; `cat last-good-sha` — если текущий выкат не дошёл до конца.
 3. Выкат руками на сервере (compose-файл там остался от прошлого выката):
    ```bash
