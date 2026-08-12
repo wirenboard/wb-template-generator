@@ -27,12 +27,7 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # TODO(CLOUD-622): вернуть `environment: production`, когда у владельца сервиса
-    # появится право создавать среды в репозитории. Пока секреты и переменные лежат
-    # на уровне репозитория — имена те же, код менять не придётся, добавится одна строка.
-    # Что среда даёт сверх этого: deployment branch policy (катить только с main),
-    # отдельная область видимости секретов и история выкатов на вкладке Environments.
-    # ВАЖНО: при возврате НЕ включать required reviewers — они гейтят и откат.
+    # TODO(CLOUD-622): добавить `environment: production` (без required reviewers).
     # лок только на выкат: иначе новый push вытесняет из очереди нажатый откат
     concurrency:
       group: deploy-prod

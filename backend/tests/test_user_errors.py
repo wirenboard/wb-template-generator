@@ -154,7 +154,12 @@ class TestAnalyzeEndpointCarriesKeys:
     """
 
     @pytest.fixture
-    def client(self):
+    def client(self, monkeypatch):
+        # Здесь интересны отказы по самим файлам, поэтому адрес не проверяем
+        async def _skip_url_check(url, allow_private=False):
+            return None
+
+        monkeypatch.setattr(main, "ensure_public_llm_url", _skip_url_check)
         # Бакет лимитера общий на процесс — чистим с двух сторон, иначе
         # запросы соседних тестов мешают проверке 429 и наоборот.
         main._rate_limit_store.clear()
@@ -166,7 +171,7 @@ class TestAnalyzeEndpointCarriesKeys:
         return [("files", (name, data, "application/octet-stream"))]
 
     # Свой адрес LLM снимает проверку «LLM не настроен», сети при этом не будет —
-    # отказ приходит раньше, на разборе файлов.
+    # отказ приходит на разборе файлов.
     _CUSTOM_LLM = {"llm_api_url": "http://llm.invalid/v1"}
 
     def test_unsupported_format(self, client):

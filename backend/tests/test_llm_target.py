@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import Settings  # noqa: E402, I001
-from llm_service import resolve_llm_target  # noqa: E402
+from llm_service import is_custom_llm_url, resolve_llm_target  # noqa: E402
 
 
 def _settings(**overrides) -> Settings:
@@ -82,6 +82,28 @@ class TestServerTarget:
         target = resolve_llm_target(_settings(LLM_TIMEOUT=0), timeout=30)
 
         assert target.timeout == 30
+
+
+class TestCustomCriterion:
+    """Признак «свой LLM» считается по адресу и только по нему."""
+
+    @pytest.mark.parametrize("url", ["https://user.example/v1", "http://ollama.local:11434/v1"])
+    def test_url_makes_target_custom(self, url):
+        assert is_custom_llm_url(url)
+
+    @pytest.mark.parametrize("url", [None, ""])
+    def test_no_url_is_server_target(self, url):
+        assert not is_custom_llm_url(url)
+
+    def test_custom_without_key_stays_custom(self):
+        """Ключ в критерий не входит, локальные модели авторизации не требуют.
+
+        Иначе свой LLM без ключа уехал бы на серверный ключ, то есть за наш счёт.
+        """
+        target = resolve_llm_target(_settings(), url="https://user.example/v1")
+
+        assert target.is_custom
+        assert target.key is None
 
 
 class TestCustomTarget:

@@ -3,13 +3,17 @@
 import asyncio
 import base64
 import io
+import ipaddress
 import json
 import logging
 import re
+import socket
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
+import httpx
 from openai import AsyncOpenAI
 from PIL import Image
 
@@ -87,6 +91,15 @@ class LlmTarget:
     is_custom: bool
 
 
+def is_custom_llm_url(url: str | None) -> bool:
+    """Определяет по адресу, идёт ли запрос на свой LLM пользователя.
+
+    Ключ в критерий не входит — локальные модели авторизации не требуют, и с
+    таким требованием запрос уходил бы на серверный LLM, за наш счёт.
+    """
+    return bool(url)
+
+
 def resolve_llm_target(
     settings: Settings,
     *,
@@ -112,7 +125,7 @@ def resolve_llm_target(
     Returns:
         Разрешённая цель со всеми параметрами запроса.
     """
-    is_custom = bool(url)
+    is_custom = is_custom_llm_url(url)
     effective_url, effective_key = resolve_llm_credentials(settings, url, key)
 
     def pick(value, fallback):
@@ -145,6 +158,138 @@ def resolve_llm_target(
         proxy=None if is_custom else (settings.LLM_PROXY or None),
         is_custom=is_custom,
     )
+
+
+# ---------------------------------------------------------------------------
+# Проверка адреса пользовательского LLM
+# ---------------------------------------------------------------------------
+
+class UnsafeLLMUrlError(UserError):
+    """Адрес пользовательского LLM задан неверно или ведёт во внутреннюю сеть."""
+
+
+_ALLOWED_LLM_SCHEMES = frozenset({"http", "https"})
+
+# Диапазоны, которые ведут внутрь, но под is_private попадают не всегда. 100.64.0.0/10
+# это CGNAT и адреса Tailscale, fec0::/10 — site-local IPv6 (у него вдобавок
+# is_global=True), 2002::/16 — 6to4, обёртка произвольного IPv4, которую приватной
+# считает только Python 3.12.4+. Проверять через is_global нельзя, оно пропускает
+# site-local и ловит multicast.
+_EXTRA_INTERNAL_NETS = (
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("fec0::/10"),
+    ipaddress.ip_network("2002::/16"),
+)
+
+# Потолок на разрешение имени. Молчащий NS в присланном адресе иначе занимает
+# резолвер процесса, а /api/models и /api/translate не троттлятся.
+_DNS_TIMEOUT = 5.0
+
+
+async def _resolve_host(hostname: str) -> list[str]:
+    """Разрешает имя хоста в список IP. Отдельной функцией — чтобы подменять в тестах."""
+    loop = asyncio.get_running_loop()
+    infos = await asyncio.wait_for(
+        loop.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP), _DNS_TIMEOUT,
+    )
+    return [str(info[4][0]) for info in infos]
+
+
+async def ensure_public_llm_url(url: str, allow_private: bool = False) -> None:
+    """Проверяет, что адрес пользовательского LLM ведёт в публичную сеть.
+
+    Адрес приходит в запросе и становится base_url клиента, то есть сервер идёт по
+    нему сам. Адрес оператора из LLM_API_URL доверенный и сюда не попадает.
+
+    При `allow_private` остаётся только проверка схемы и наличия хоста, имя не
+    резолвится вовсе. Остаточный риск — DNS rebinding, имя проверяется до
+    соединения, а резолвится ещё раз при самом запросе.
+
+    Raises:
+        UnsafeLLMUrlError: схема не http(s), хост не указан, не резолвится или
+            разрешается во внутреннюю сеть.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in _ALLOWED_LLM_SCHEMES:
+        raise UnsafeLLMUrlError("serverError.llmUrlScheme")
+
+    hostname = parts.hostname
+    if not hostname:
+        raise UnsafeLLMUrlError("serverError.llmUrlNoHost")
+
+    if allow_private:
+        return
+
+    try:
+        addresses = await _resolve_host(hostname)
+    except TimeoutError as e:
+        # Выше OSError — TimeoutError его подкласс, иначе ветка недостижима
+        logger.warning("Имя «%s» не разрешилось за %s с, отклоняем адрес LLM", hostname, _DNS_TIMEOUT)
+        raise UnsafeLLMUrlError("serverError.llmUrlUnresolvable", host=hostname) from e
+    except (OSError, UnicodeError) as e:
+        logger.info("Имя «%s» не разрешилось (%s), отклоняем адрес LLM", hostname, e)
+        raise UnsafeLLMUrlError("serverError.llmUrlUnresolvable", host=hostname) from e
+
+    for raw in addresses:
+        try:
+            ip = ipaddress.ip_address(raw)
+        except ValueError as e:
+            raise UnsafeLLMUrlError("serverError.llmUrlBadAddress", host=hostname) from e
+
+        # ::ffff:10.0.0.1 — приватный адрес в обёртке IPv6, разворачиваем
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if mapped is not None:
+            ip = mapped
+
+        internal = any(ip.version == net.version and ip in net for net in _EXTRA_INTERNAL_NETS)
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified or internal):
+            logger.warning("Имя «%s» разрешилось во внутренний адрес %s, отклоняем", hostname, ip)
+            raise UnsafeLLMUrlError("serverError.llmUrlPrivate")
+
+
+def build_llm_http_client(proxy: str | None = None) -> httpx.AsyncClient:
+    """Создаёт httpx-клиент для обращений к LLM API.
+
+    Свой клиент нужен всегда, а не только под прокси. openai-python поднимает
+    собственный с `follow_redirects=True`, и тогда публичный адрес, отвечающий 302,
+    уводит запрос во внутреннюю сеть в обход `ensure_public_llm_url`.
+    """
+    kwargs: dict = {"follow_redirects": False}
+    if proxy:
+        kwargs["proxy"] = proxy
+    return httpx.AsyncClient(**kwargs)
+
+
+# Клиентов ровно два — серверный и пользовательский, поэтому ключ это один флаг.
+# Соединения внутри клиента переиспользуются его же пулом, за запрос ничего не
+# создаётся. Закрывает клиенты lifespan.
+_llm_http_clients: dict[bool, httpx.AsyncClient] = {}
+
+
+def get_llm_http_client(proxy: str | None = None, *, is_custom: bool = False) -> httpx.AsyncClient:
+    """Возвращает общий httpx-клиент процесса для обращений к LLM API.
+
+    У пользовательского свой пул соединений, поэтому чужой медленный хост не
+    занимает соединения серверного трафика, и прокси оператора этот клиент не
+    получает ни при каких аргументах. Закрытый клиент пересоздаём — его закрывает
+    lifespan на остановке, а ещё закроет AsyncOpenAI.close(), если кто-то его позовёт.
+    """
+    client = _llm_http_clients.get(is_custom)
+    if client is None or client.is_closed:
+        client = build_llm_http_client(None if is_custom else proxy)
+        _llm_http_clients[is_custom] = client
+    if is_custom:
+        client.cookies.clear()
+    return client
+
+
+async def close_llm_http_clients() -> None:
+    """Закрывает общие httpx-клиенты. Зовётся из lifespan при остановке."""
+    for client in _llm_http_clients.values():
+        if not client.is_closed:
+            await client.aclose()
+    _llm_http_clients.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -698,10 +843,10 @@ async def analyze_document(
             )
         else:
             system_prompt = get_analyze_prompt(template_type, translation_languages)
-        http_client = None
-        if not is_custom_llm and settings.LLM_PROXY:
-            import httpx
-            http_client = httpx.AsyncClient(proxy=settings.LLM_PROXY)
+        # Прокси только для серверного LLM: пользовательский запрос через него не гоняем
+        http_client = get_llm_http_client(
+            settings.LLM_PROXY if not is_custom_llm else None, is_custom=is_custom_llm,
+        )
         # Явно предотвращаем фолбек openai-python на env OPENAI_API_KEY при api_key=None
         client = AsyncOpenAI(
             base_url=effective_url,
@@ -1190,11 +1335,7 @@ async def fix_registers(
             yield sse_done(request_id=request_id)
             return
 
-        # Создаём LLM-клиент
-        http_client = None
-        if proxy:
-            import httpx
-            http_client = httpx.AsyncClient(proxy=proxy)
+        http_client = get_llm_http_client(proxy, is_custom=is_custom_llm)
         client = AsyncOpenAI(
             base_url=effective_url,
             api_key=effective_key or "no-key-provided",

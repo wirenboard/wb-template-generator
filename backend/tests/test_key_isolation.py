@@ -251,6 +251,7 @@ class TestAnalyzeProxyIsolation:
 
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
+            patch("llm_service.get_llm_http_client") as mock_get_client,
             patch("llm_service.Image") as mock_image,
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
@@ -268,11 +269,11 @@ class TestAnalyzeProxyIsolation:
                 is_custom_llm=True,
             ))
 
-            # http_client должен быть None (прокси не используется)
-            actual_http_client = mock_openai.call_args.kwargs.get("http_client")
-            assert actual_http_client is None, (
+            # Клиент берётся из общего пула, но прокси оператора в него не уходит
+            assert mock_get_client.call_args.args[0] is None, (
                 "Серверный прокси утёк в пользовательский LLM-клиент!"
             )
+            assert mock_get_client.call_args.kwargs["is_custom"] is True
 
 
 # ---------------------------------------------------------------------------
