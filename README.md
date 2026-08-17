@@ -101,7 +101,6 @@ Jenkinsfile.rollback   # кнопка отката
 
 Makefile               # локальные команды: make lint / test / build / up / down / smoke
 DEPLOYING.md           # операторская карточка: как выкатить, откатить, что делать при аварии
-docker-compose.deploy.yml  # прод: образы по git-SHA из реестра (без сборки на сервере)
 ```
 
 ## API
@@ -194,7 +193,8 @@ git-SHA, сервер только скачивает готовый образ.
 - Пошагово, включая аварийные сценарии и break-glass, — в [`DEPLOYING.md`](DEPLOYING.md).
 - Что сейчас в проде: имя последнего зелёного прогона джобы выката или `/api/status` (поле `revision`).
 
-Прод-конфигурация — [`docker-compose.deploy.yml`](docker-compose.deploy.yml): образы по
+Прод-конфигурация — `docker-compose.deploy.yml` в репозитории `wirenboard/infra`
+(роль `wb_template_generator`): образы по
 git-SHA из `ghcr.io`, bridge-сеть, `restart: always`, healthcheck-зависимость frontend от
 backend. Порт публикуется **только на `127.0.0.1:8080`** — снаружи сервис отдаёт nginx на
 хосте (он держит TLS и домен), напрямую в контейнер извне не ходят. Креды (ключ на хост, push в реестр) живут в Jenkins, в папке сервиса; `Jenkinsfile`
@@ -205,7 +205,7 @@ backend. Порт публикуется **только на `127.0.0.1:8080`** 
 | Файл | Где используется | Как получает код |
 |---|---|---|
 | `docker-compose.yml` | локальная разработка (`make up`) | собирает образы из исходников тут же, host networking, порты 9080/9000 |
-| `docker-compose.deploy.yml` | боевой сервер (использует CI) | скачивает готовый образ по метке из `ghcr.io`, bridge-сеть, публикует `${WEB_PORT:-80}`. **Временно живёт здесь**: по стандарту дом файла выката — инфраструктурный репозиторий |
+| `docker-compose.deploy.yml` | боевой сервер | **живёт в `wirenboard/infra`**, роль `wb_template_generator`: скачивает готовый образ по метке из `ghcr.io`, публикует только на `127.0.0.1:8080` |
 
 ## Разработка
 

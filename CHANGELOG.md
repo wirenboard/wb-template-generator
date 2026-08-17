@@ -22,6 +22,7 @@
 
 ### Удалено
 - **`docker-compose.prod.yml`** — он собирал образ на сервере, такой выкат нечем откатить. Прод-конфигурация одна: `docker-compose.deploy.yml`.
+- Файл выката переехал в `wirenboard/infra` (роль `wb_template_generator`) — у него один дом, копий в репозитории сервиса нет.
 - Конвейер выката переехал в Jenkins: `Jenkinsfile.checks` / `Jenkinsfile` / `Jenkinsfile.rollback`. `ci.yml` в GitHub Actions пока сохранён — проверки продолжают работать, пока джобы Jenkins не подняты.
 ## [0.7.5] - 2026-08-10
 
