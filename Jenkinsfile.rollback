@@ -1,0 +1,12 @@
+// Кнопка отката — привязана к main. Зовёт тот же код выката; цель по умолчанию —
+// предыдущая выкаченная версия из истории джобы выката. Согласования нет.
+@Library('wb-pipeline-lib') _
+
+rollbackDockerService(
+    deployHost: 'tgen.wirenboard.com',
+    imageRepo:  'ghcr.io/wirenboard/wb-template-generator-backend',
+    deployJob:  'wb-template-generator/deploy',   // ← уточнить у инфраструктуры точное имя джобы
+    composeRolling: false,
+    stackFileInRepo: true,
+    revisionUrl: 'https://tgen.wirenboard.com/api/status',
+)

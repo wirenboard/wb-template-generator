@@ -1,0 +1,14 @@
+// Джоба проверок — multibranch: каждая ветка и PR. Кред от хостов у неё нет,
+// только push в реестр: ветка с подкрученным Jenkinsfile до серверов не дотянется.
+// Собирает образ каждой ветки — чтобы ветку можно было выкатить на тестовую среду
+// до слияния (у этого сервиса тестовой среды пока нет, образы всё равно нужны:
+// джоба выката переиспользует уже собранный образ и не пересобирает тот же SHA).
+@Library('wb-pipeline-lib') _
+
+checksDockerService(
+    imageRepo: 'ghcr.io/wirenboard/wb-template-generator-backend',
+    images: [
+        [imageRepo: 'ghcr.io/wirenboard/wb-template-generator-backend',  dockerfile: 'backend/Dockerfile',  context: '.'],
+        [imageRepo: 'ghcr.io/wirenboard/wb-template-generator-frontend', dockerfile: 'frontend/Dockerfile', context: 'frontend'],
+    ],
+)
