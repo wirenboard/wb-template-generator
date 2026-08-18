@@ -1,5 +1,4 @@
-# Локальная разработка: собирает образы из исходников, host networking (9080/9000).
-# Прод-файл выката живёт в wirenboard/infra, роль wb_template_generator.
+# Локальная разработка. Прод-файл выката — в wirenboard/infra, роль wb_template_generator.
 services:
   backend:
     build:
