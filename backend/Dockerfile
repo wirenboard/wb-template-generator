@@ -13,7 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY CHANGELOG.md /app/CHANGELOG.md
 COPY backend/ .
 
-# единый порт: раньше CMD/HEALTHCHECK смотрели в :8000, а сервис слушает :9000
 ENV APP_PORT=9000 \
     GIT_SHA=${GIT_SHA}
 

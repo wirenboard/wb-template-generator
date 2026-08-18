@@ -10,6 +10,4 @@ tmp/
 .venv/
 backend/data/
 
-# артефакт composite-действия выката (compose, извлечённый из git)
-.deploy/
 .coverage
