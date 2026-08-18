@@ -96,8 +96,6 @@ frontend/src/
 Jenkinsfile.checks     # проверки: сторож свежести → lint → test → сборка образов ветки
 Jenkinsfile            # выкат: по метке <ветка>-<git-SHA> → проверка живости → авто-возврат
 Jenkinsfile.rollback   # кнопка отката
-.github/workflows/
-  ci.yml               # lint + test (остаётся, пока не подняты джобы Jenkins)
 
 Makefile               # локальные команды: make lint / test / build / up / down / smoke
 DEPLOYING.md           # операторская карточка: как выкатить, откатить, что делать при аварии
