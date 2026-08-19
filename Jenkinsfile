@@ -7,6 +7,16 @@ checksDockerService(
     // Обкатка: push образов выключен — кред реестра для продуктовых сервисов пока нет.
     runChecks: true,
     pushBranchImages: false,
+    // Проверки идут в контейнерах, как раньше в GitHub Actions: агент Jenkins общий
+    // и инструментов сервиса не несёт.
+    checkEnvironments: [
+        [image:   'python:3.12-slim',
+         prepare: 'apt-get update && apt-get install -y --no-install-recommends poppler-utils curl && pip install --no-cache-dir -r backend/requirements.txt',
+         targets: ['lint-backend', 'test-backend']],
+        [image:   'node:20-alpine',
+         prepare: 'cd frontend && npm ci',
+         targets: ['lint-frontend', 'test-frontend']],
+    ],
     imageRepo: 'ghcr.io/wirenboard/wb-template-generator-backend',
     images: [
         [imageRepo: 'ghcr.io/wirenboard/wb-template-generator-backend',  dockerfile: 'backend/Dockerfile',  context: '.'],
