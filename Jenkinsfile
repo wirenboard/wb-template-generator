@@ -4,8 +4,8 @@
 @Library('wbci@feature/docker-service-deploy') _
 
 checksDockerService(
-    // Первый прогон: без кред реестра и без внешних инструментов — проверяем сам пайплайн.
-    runChecks: false,
+    // Обкатка: push образов выключен — кред реестра для продуктовых сервисов пока нет.
+    runChecks: true,
     pushBranchImages: false,
     imageRepo: 'ghcr.io/wirenboard/wb-template-generator-backend',
     images: [
