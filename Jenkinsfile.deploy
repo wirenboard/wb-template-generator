@@ -1,5 +1,5 @@
 // Выкат. Логика — в общей библиотеке, справочник vars/deployDockerService.md.
-@Library('wb-pipeline-lib') _
+@Library('wbci') _
 
 deployDockerService(
     deployHost: 'tgen.wirenboard.com',

@@ -1,5 +1,5 @@
 // Откат. Цель по умолчанию — предыдущая выкаченная версия из истории джобы выката.
-@Library('wb-pipeline-lib') _
+@Library('wbci') _
 
 rollbackDockerService(
     deployHost: 'tgen.wirenboard.com',
