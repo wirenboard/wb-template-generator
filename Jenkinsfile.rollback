@@ -4,7 +4,8 @@
 rollbackDockerService(
     deployHost: 'tgen.wirenboard.com',
     imageRepo:  'ghcr.io/wirenboard/wb-template-generator-backend',
-    deployJob:  'wb-template-generator/deploy',   // ← уточнить у инфраструктуры точное имя джобы
+    deployJob:  'wb-template-generator/deploy',   // папка/джоба в Jenkins; из её истории берётся цель отката
     composeRolling: false,
+    composeServices: ['backend', 'frontend'],
     revisionUrl: 'https://tgen.wirenboard.com/api/status',
 )

@@ -10,5 +10,7 @@ deployDockerService(
     ],
     // Сервис держит хостовый порт — два контейнера его не поделят, значит пересоздание.
     composeRolling: false,
+    // Сервисы compose (в проекте их два); config.service = имя репозитория и compose-сервисом не является.
+    composeServices: ['backend', 'frontend'],
     revisionUrl: 'https://tgen.wirenboard.com/api/status',
 )
