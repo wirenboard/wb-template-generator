@@ -1,10 +1,9 @@
-// Откат. Цель по умолчанию — предыдущая выкаченная версия из истории джобы выката.
 @Library('wbci') _
 
 rollbackDockerService(
     deployHost: 'tgen.wirenboard.com',
     imageRepo:  'ghcr.io/wirenboard/wb-template-generator-backend',
-    deployJob:  'wb-template-generator/deploy',   // папка/джоба в Jenkins; из её истории берётся цель отката
+    deployJob:  'wb-template-generator/deploy',
     composeRolling: false,
     composeServices: ['backend', 'frontend'],
     revisionUrl: 'https://tgen.wirenboard.com/api/status',

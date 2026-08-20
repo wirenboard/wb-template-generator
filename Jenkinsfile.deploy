@@ -1,4 +1,3 @@
-// Выкат. Логика — в общей библиотеке, справочник vars/deployDockerService.md.
 @Library('wbci') _
 
 deployDockerService(
@@ -8,9 +7,7 @@ deployDockerService(
         [imageRepo: 'ghcr.io/wirenboard/wb-template-generator-backend',  dockerfile: 'backend/Dockerfile',  context: '.'],
         [imageRepo: 'ghcr.io/wirenboard/wb-template-generator-frontend', dockerfile: 'frontend/Dockerfile', context: 'frontend'],
     ],
-    // Сервис держит хостовый порт — два контейнера его не поделят, значит пересоздание.
     composeRolling: false,
-    // Сервисы compose (в проекте их два); config.service = имя репозитория и compose-сервисом не является.
     composeServices: ['backend', 'frontend'],
     revisionUrl: 'https://tgen.wirenboard.com/api/status',
 )
