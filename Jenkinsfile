@@ -6,7 +6,7 @@
 checksDockerService(
     // Обкатка: push образов выключен — кред реестра для продуктовых сервисов пока нет.
     runChecks: true,
-    pushBranchImages: false,
+    pushBranchImages: true,
     // Проверки идут в контейнерах, как раньше в GitHub Actions: агент Jenkins общий
     // и инструментов сервиса не несёт.
     checkEnvironments: [
