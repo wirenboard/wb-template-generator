@@ -9,6 +9,14 @@ deployDockerService(
         [imageRepo: 'ghcr.io/wirenboard/wb-template-generator-frontend', dockerfile: 'frontend/Dockerfile', context: 'frontend'],
     ],
     composeRolling: false,
+    checkEnvironments: [
+        [image:   'python:3.12-slim',
+         prepare: 'apt-get update && apt-get install -y --no-install-recommends make poppler-utils curl && pip install --no-cache-dir -r backend/requirements.txt',
+         targets: ['lint-backend', 'test-backend']],
+        [image:   'node:20-alpine',
+         prepare: 'apk add --no-cache make && cd frontend && npm ci',
+         targets: ['lint-frontend', 'test-frontend']],
+    ],
     composeServices: ['backend', 'frontend'],
     revisionUrl: 'https://tgen.wirenboard.com/api/status',
 )
