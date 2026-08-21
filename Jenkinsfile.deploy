@@ -1,4 +1,5 @@
-@Library('wbci') _
+// ВРЕМЕННО, снять при слиянии jenkins-pipeline-lib#183
+@Library('wbci@feature/docker-service-deploy') _
 
 deployDockerService(
     deployHost: 'tgen.wirenboard.com',
