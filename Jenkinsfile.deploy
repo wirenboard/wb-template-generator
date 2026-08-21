@@ -17,6 +17,7 @@ deployDockerService(
          prepare: 'apk add --no-cache make && cd frontend && npm ci',
          targets: ['lint-frontend', 'test-frontend']],
     ],
+    knownHostsEntry: 'tgen.wirenboard.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICG9KJjbI1Cd78VY+m2rmmkIKQQy8uQW1sOSrMm6E+U+',
     composeServices: ['backend', 'frontend'],
     revisionUrl: 'https://tgen.wirenboard.com/api/status',
 )
