@@ -1,7 +1,7 @@
-"""Классификатор ошибок OpenAI API.
+"""Классификатор ошибок LLM API.
 
-Определяет категорию и серьёзность исключения, полученного от openai SDK,
-для последующей маршрутизации в систему уведомлений (Telegram) и метрики.
+Определяет категорию и серьёзность исключения от openai SDK или от httpx для
+маршрутизации в уведомления (Telegram), метрики и текст отказа пользователю.
 
 Используется в llm_service и main для детектирования проблем с серверным
 LLM (истёк ключ, кончилась квота, недоступен сервис провайдера и т. п.).
@@ -12,20 +12,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+import httpx
 import openai
 
 
 class ErrorCategory(str, Enum):
-    """Категория ошибки OpenAI API."""
+    """Категория сбоя обращения к LLM API."""
 
     QUOTA_EXCEEDED = "quota_exceeded"   # закончились средства / превышена квота биллинга
     AUTH = "auth"                       # 401 — невалидный API-ключ
     PERMISSION = "permission"           # 403 — отозван доступ (без quota-маркеров)
     NOT_FOUND = "not_found"             # 404 — модель не найдена
-    BAD_REQUEST = "bad_request"         # 400/422 — некорректный запрос с нашей стороны
+    BAD_REQUEST = "bad_request"         # 400/422 — провайдер не принял файл или запрос
     RATE_LIMIT = "rate_limit"           # 429 без quota-маркеров — стандартный лимит RPM/TPM
-    TIMEOUT = "timeout"                 # APITimeoutError
-    CONNECTION = "connection"           # APIConnectionError (сеть, прокси)
+    TIMEOUT = "timeout"                 # APITimeoutError или httpx.TimeoutException
+    CONNECTION = "connection"           # APIConnectionError или httpx.TransportError (сеть, прокси)
     SERVER_ERROR = "server_error"       # 5xx
     UNKNOWN = "unknown"                 # всё остальное
 
@@ -43,7 +44,7 @@ _SEVERITY: dict[ErrorCategory, Severity] = {
     ErrorCategory.AUTH: Severity.CRITICAL,
     ErrorCategory.PERMISSION: Severity.CRITICAL,
     ErrorCategory.NOT_FOUND: Severity.CRITICAL,
-    ErrorCategory.BAD_REQUEST: Severity.CRITICAL,
+    ErrorCategory.BAD_REQUEST: Severity.WARNING,
     ErrorCategory.RATE_LIMIT: Severity.WARNING,
     ErrorCategory.TIMEOUT: Severity.WARNING,
     ErrorCategory.CONNECTION: Severity.WARNING,
@@ -103,8 +104,13 @@ def _extract_code(exc: Exception) -> str | None:
 
 
 def _extract_status(exc: Exception) -> int | None:
-    """Извлекает HTTP-статус (для APIStatusError-подобных исключений)."""
+    """Извлекает HTTP-статус — у SDK он в `status_code`, у httpx в `response`."""
     status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
     if isinstance(status, int):
         return status
     return None
@@ -126,10 +132,35 @@ def _is_quota(exc: Exception, code: str | None, message: str) -> bool:
     return any(phrase in lowered for phrase in _QUOTA_PHRASES)
 
 
-def classify(exc: Exception) -> ClassifiedError:
-    """Классифицирует исключение OpenAI SDK.
+def _category_by_status(exc: Exception, status: int, code: str | None, message: str) -> ErrorCategory:
+    """Категория по HTTP-статусу ответа провайдера."""
+    if status >= 500:
+        return ErrorCategory.SERVER_ERROR
+    if status == 429:
+        return (
+            ErrorCategory.QUOTA_EXCEEDED
+            if _is_quota(exc, code, message)
+            else ErrorCategory.RATE_LIMIT
+        )
+    if status == 401:
+        return ErrorCategory.AUTH
+    if status == 403:
+        return (
+            ErrorCategory.QUOTA_EXCEEDED
+            if _is_quota(exc, code, message)
+            else ErrorCategory.PERMISSION
+        )
+    if status == 404:
+        return ErrorCategory.NOT_FOUND
+    if status in (400, 422):
+        return ErrorCategory.BAD_REQUEST
+    return ErrorCategory.UNKNOWN
 
-    Порядок проверок важен: более специфичные классы идут до общих.
+
+def classify(exc: Exception) -> ClassifiedError:
+    """Классифицирует исключение обращения к LLM — от openai SDK или от httpx.
+
+    Порядок проверок важен, более специфичные классы идут до общих.
     """
     code = _extract_code(exc)
     status = _extract_status(exc)
@@ -200,31 +231,20 @@ def classify(exc: Exception) -> ClassifiedError:
             status, code, message,
         )
 
-    # 12. APIStatusError fallback — определяем по статусу
-    if isinstance(exc, openai.APIStatusError) and status is not None:
-        if status >= 500:
-            category = ErrorCategory.SERVER_ERROR
-        elif status == 429:
-            category = (
-                ErrorCategory.QUOTA_EXCEEDED
-                if _is_quota(exc, code, message)
-                else ErrorCategory.RATE_LIMIT
-            )
-        elif status == 401:
-            category = ErrorCategory.AUTH
-        elif status == 403:
-            category = (
-                ErrorCategory.QUOTA_EXCEEDED
-                if _is_quota(exc, code, message)
-                else ErrorCategory.PERMISSION
-            )
-        elif status == 404:
-            category = ErrorCategory.NOT_FOUND
-        elif status in (400, 422):
-            category = ErrorCategory.BAD_REQUEST
-        else:
-            category = ErrorCategory.UNKNOWN
+    # 12. Всё со статусом — APIStatusError от SDK и сбои httpx. Ниже проверок по классу, те точнее статуса
+    if isinstance(exc, httpx.TimeoutException):
+        return ClassifiedError(
+            ErrorCategory.TIMEOUT, _SEVERITY[ErrorCategory.TIMEOUT],
+            status, code, message,
+        )
+    if status is not None:
+        category = _category_by_status(exc, status, code, message)
         return ClassifiedError(category, _SEVERITY[category], status, code, message)
+    if isinstance(exc, httpx.TransportError):
+        return ClassifiedError(
+            ErrorCategory.CONNECTION, _SEVERITY[ErrorCategory.CONNECTION],
+            status, code, message,
+        )
 
     # 13. Любое другое исключение → UNKNOWN/warning
     return ClassifiedError(
@@ -235,3 +255,10 @@ def classify(exc: Exception) -> ClassifiedError:
 
 # Все категории — для инициализации метрик и тестов.
 ALL_CATEGORIES: tuple[ErrorCategory, ...] = tuple(ErrorCategory)
+
+
+# Наружу уходит только ключ категории — текст исключения различает отказ соединения, DNS, TLS
+# и статус, то есть отвечает, что стоит по присланному клиентом адресу.
+def public_key(exc: Exception) -> str:
+    """Ключ локализации категории сбоя — подставляется как {reason}."""
+    return f"llmError.{classify(exc).category.value}"

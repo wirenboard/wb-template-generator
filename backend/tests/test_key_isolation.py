@@ -74,13 +74,12 @@ class TestAnalyzeKeyIsolation:
 
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
-            patch("llm_service.Image") as mock_image,
+            patch("llm_service.open_image", return_value=MagicMock()),
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
-            mock_image.open.return_value = MagicMock()
 
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
@@ -109,13 +108,12 @@ class TestAnalyzeKeyIsolation:
 
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
-            patch("llm_service.Image") as mock_image,
+            patch("llm_service.open_image", return_value=MagicMock()),
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
-            mock_image.open.return_value = MagicMock()
 
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
@@ -142,13 +140,12 @@ class TestAnalyzeKeyIsolation:
 
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
-            patch("llm_service.Image") as mock_image,
+            patch("llm_service.open_image", return_value=MagicMock()),
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
-            mock_image.open.return_value = MagicMock()
 
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
@@ -180,13 +177,12 @@ class TestAnalyzePromptIsolation:
 
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
-            patch("llm_service.Image") as mock_image,
+            patch("llm_service.open_image", return_value=MagicMock()),
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
-            mock_image.open.return_value = MagicMock()
 
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
@@ -212,13 +208,12 @@ class TestAnalyzePromptIsolation:
 
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
-            patch("llm_service.Image") as mock_image,
+            patch("llm_service.open_image", return_value=MagicMock()),
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
-            mock_image.open.return_value = MagicMock()
 
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],
@@ -252,13 +247,12 @@ class TestAnalyzeProxyIsolation:
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
             patch("llm_service.get_llm_http_client") as mock_get_client,
-            patch("llm_service.Image") as mock_image,
+            patch("llm_service.open_image", return_value=MagicMock()),
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(return_value=_mock_llm_response())
-            mock_image.open.return_value = MagicMock()
 
             await _collect_events(analyze_document(
                 files=[("test.png", b"fake-png-data")],

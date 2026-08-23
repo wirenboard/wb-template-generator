@@ -14,7 +14,7 @@ import pytest
 # Добавляем backend/ в sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from llm_errors import ClassifiedError, ErrorCategory, Severity  # noqa: E402, I001
+from llm_errors import _SEVERITY, ClassifiedError, ErrorCategory, Severity  # noqa: E402, I001
 from notifier import (  # noqa: E402
     TelegramNotifier,
     clear_metric_hooks,
@@ -48,20 +48,8 @@ def _make_classified(
 ) -> ClassifiedError:
     """Создаёт ClassifiedError для тестов."""
     if severity is None:
-        # Дефолтная серьёзность из карты
-        sev_map = {
-            ErrorCategory.QUOTA_EXCEEDED: Severity.CRITICAL,
-            ErrorCategory.AUTH: Severity.CRITICAL,
-            ErrorCategory.PERMISSION: Severity.CRITICAL,
-            ErrorCategory.NOT_FOUND: Severity.CRITICAL,
-            ErrorCategory.BAD_REQUEST: Severity.CRITICAL,
-            ErrorCategory.RATE_LIMIT: Severity.WARNING,
-            ErrorCategory.TIMEOUT: Severity.WARNING,
-            ErrorCategory.CONNECTION: Severity.WARNING,
-            ErrorCategory.SERVER_ERROR: Severity.WARNING,
-            ErrorCategory.UNKNOWN: Severity.WARNING,
-        }
-        severity = sev_map[category]
+        # Из настоящей карты, иначе своя копия разойдётся с продакшн-значениями
+        severity = _SEVERITY[category]
     return ClassifiedError(
         category=category,
         severity=severity,

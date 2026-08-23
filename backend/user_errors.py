@@ -40,6 +40,10 @@ _TEXTS: dict[str, str] = {
         "Адрес LLM ведёт во внутреннюю сеть. Укажите публичный адрес провайдера."
     ),
     # --- Приём файлов ---
+    "serverError.tooManyFiles": (
+        "За один раз можно загрузить не больше {max} файлов. "
+        "Если страниц больше, соберите их в один PDF."
+    ),
     "serverError.unsupportedFormat": (
         "Неподдерживаемый формат файла: «{file}». "
         "Допустимые форматы: PDF, Excel (xlsx), изображения (PNG, JPG, WebP)."
@@ -48,8 +52,26 @@ _TEXTS: dict[str, str] = {
         "Файл «{file}» ({size} МБ) превышает лимит {max} МБ. "
         "Попробуйте разделить документ на части или конвертировать в изображения."
     ),
+    # --- Разбор файлов ---
+    "serverError.excelUnreadable": (
+        "Файл «{file}» не удалось прочитать как таблицу Excel. Возможно, это старый "
+        "формат .xls или другой тип файла — сохраните таблицу как .xlsx и загрузите снова."
+    ),
+    "serverError.excelTooBig": (
+        "Файл «{file}» объёмнее, чем сервис обрабатывает. Оставьте только лист "
+        "с таблицей регистров или разделите документ на части."
+    ),
+    "serverError.imageTooLarge": (
+        "Файл «{file}» имеет разрешение {width}×{height} — это больше, чем сервис "
+        "обрабатывает. Уменьшите изображение или разделите его на части."
+    ),
     # --- Анализ документа ---
     "serverError.noData": "Нет данных для анализа. Загрузите PDF, Excel или изображение.",
+    # --- Пользовательский промпт ---
+    "serverError.promptTooLarge": (
+        "Системный промпт после подстановки плейсхолдеров занимает {size} символов "
+        "при потолке {max} — сократите шаблон промпта в настройках LLM."
+    ),
     "serverError.noRegisters": (
         "Не удалось извлечь регистры из документа. "
         "Проверьте, что документ содержит таблицу Modbus-регистров."
@@ -74,6 +96,12 @@ _TEXTS: dict[str, str] = {
         "LLM не вернула пригодных результатов. Проверьте формат документа."
         "\n\nОтвет LLM (фрагмент):\n{fragment}"
     ),
+    # Подставляется как {reason}, но описывает наш сбой разбора, а не отказ обращения —
+    # отсюда строчная буква и отсутствие точки
+    "serverError.llmUnparsableResponse": "ответ модели не удалось разобрать",
+    "serverError.llmEmptyResponse": "LLM вернул пустой ответ",
+    "serverError.llmNoRegisters": "LLM не вернул регистров",
+    "serverError.fixFailed": "Не удалось исправить регистры — {reason}.",
     # --- Импорт шаблона ---
     "serverError.importInvalidJson": "Невалидный JSON: {error}",
     "serverError.importFailed": (
@@ -92,6 +120,17 @@ _TEXTS: dict[str, str] = {
     "serverError.importJinjaError": "Ошибка в Jinja-шаблоне: {error}",
     "serverError.importJinjaErrorLine": "Ошибка в Jinja-шаблоне (строка {line}): {error}",
     "serverError.importJinjaLimit": "Шаблон упирается в ограничение песочницы: {error}",
+    # --- Категории сбоев провайдера LLM (подставляются как {reason}) ---
+    "llmError.quota_exceeded": "у провайдера LLM закончилась квота",
+    "llmError.auth": "провайдер LLM не принял ключ",
+    "llmError.permission": "провайдер LLM отказал в доступе",
+    "llmError.not_found": "провайдер LLM не нашёл модель или адрес",
+    "llmError.bad_request": "провайдер LLM отклонил запрос",
+    "llmError.rate_limit": "провайдер LLM ограничил частоту запросов",
+    "llmError.timeout": "провайдер LLM не ответил за отведённое время",
+    "llmError.connection": "не удалось соединиться с провайдером LLM",
+    "llmError.server_error": "провайдер LLM вернул внутреннюю ошибку",
+    "llmError.unknown": "обращение к провайдеру LLM не удалось",
 }
 
 
@@ -109,6 +148,11 @@ def render(key: str, params: dict) -> str:
             resolved[name] = value
     # Шаблоны наши, от пользователя приходят только значения — подстановка безопасна
     return _TEXTS[key].format(**resolved)
+
+
+def render_key(key: str) -> str:
+    """Русский текст по ключу без параметров (категории сбоев LLM)."""
+    return _TEXTS[key]
 
 
 class UserError(Exception):

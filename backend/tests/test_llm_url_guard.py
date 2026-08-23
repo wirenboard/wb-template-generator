@@ -47,6 +47,16 @@ class TestUrlShape:
         with pytest.raises(UnsafeLLMUrlError):
             await ensure_public_llm_url("http:///v1")
 
+    @pytest.mark.parametrize("url", [
+        "http://[evil/v1",       # незакрытая скобка читается как IPv6-литерал
+        "http://[::1/v1",
+        "http://\x1b[31mevil/v1",
+    ])
+    async def test_unparsable_url_rejected(self, url):
+        """Адрес, который не разбирается вовсе, тоже отказ, а не пятисотка."""
+        with pytest.raises(UnsafeLLMUrlError):
+            await ensure_public_llm_url(url)
+
     async def test_unresolvable_host_rejected(self):
         """Имя не резолвится — считаем адрес непригодным, а не пропускаем дальше."""
         with patch("llm_service._resolve_host", AsyncMock(side_effect=OSError("no such host"))):

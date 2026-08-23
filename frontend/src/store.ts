@@ -4,7 +4,7 @@ import type {
   AnalyzeLlmConfig,
 } from './types';
 import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi, validateRegisters as validateRegistersApi, fixRegisters as fixRegistersApi } from './api';
-import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN, DEFAULT_MAX_FILE_SIZE_MB } from './constants';
+import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN } from './constants';
 import { generateId } from './utils';
 import type { Locale } from './i18n';
 import { getT, getHasTranslations } from './i18n';
@@ -102,7 +102,10 @@ interface TemplateStore {
   llmConfig: AnalyzeLlmConfig;
   llmAvailable: boolean | null;
   serverModel: string | null;
-  maxFileSizeMb: number;
+  // Потолки приёма файлов, приходят из /api/status. null = ответа ещё нет
+  maxFileSizeMb: number | null;
+  maxFiles: number | null;
+  allowedExtensions: string[] | null;
   appVersion: string | null;
   previewLang: string;
 
@@ -231,7 +234,9 @@ export const useStore = create<TemplateStore>((set, get) => ({
   llmConfig: _saved.llmConfig ?? {},
   llmAvailable: null,
   serverModel: null,
-  maxFileSizeMb: DEFAULT_MAX_FILE_SIZE_MB,
+  maxFileSizeMb: null,
+  maxFiles: null,
+  allowedExtensions: null,
   appVersion: null,
   previewLang: 'en',
   languages: loadLanguages(),
@@ -909,7 +914,9 @@ export const useStore = create<TemplateStore>((set, get) => ({
     fetchStatus()
       .then((s) => {
         const patch: Record<string, unknown> = {
-          maxFileSizeMb: s.max_file_size_mb ?? DEFAULT_MAX_FILE_SIZE_MB,
+          maxFileSizeMb: s.max_file_size_mb ?? null,
+          maxFiles: s.max_files ?? null,
+          allowedExtensions: s.allowed_extensions ?? null,
           serverModel: s.server_model ?? null,
           appVersion: s.version ?? null,
         };

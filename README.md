@@ -62,8 +62,8 @@ docker compose up --build -d
 - **Frontend**: React 18 + TypeScript + Vite + Zustand + Tailwind CSS v4
 - **Backend**: Python 3.12 + FastAPI + uvicorn
 - **LLM**: Любой OpenAI-совместимый API (OpenAI, Anthropic, локальный)
-- **PDF**: pdfplumber + pdf2image + Pillow
-- **Excel**: openpyxl
+- **PDF**: уходит в модель файлом как есть
+- **Excel**: openpyxl, изображения — Pillow
 - **Контейнеризация**: Docker Compose (nginx + uvicorn)
 
 ## Структура проекта
@@ -144,6 +144,7 @@ event: error     ->  {message, request_id}
 | `LLM_PROXY` | _(пусто)_ | HTTP/SOCKS5 прокси для запросов к LLM API |
 | `LLM_ALLOW_PRIVATE_URLS` | `false` | Разрешить пользовательский адрес LLM во внутренней сети |
 | `MAX_FILE_SIZE_MB` | `2` | Максимальный размер загружаемого файла (МБ) |
+| `MAX_FILES` | `10` | Максимум файлов в одном запросе на анализ |
 
 ### Очереди и лимиты
 
@@ -159,7 +160,7 @@ event: error     ->  {message, request_id}
 
 | Переменная | По умолчанию | Описание |
 |------------|-------------|----------|
-| `CORS_ORIGINS` | `*` | Разрешённые origins через запятую |
+| `CORS_ORIGINS` | _(пусто)_ | Разрешённые origins через запятую. Пусто = кросс-доменные запросы запрещены; интерфейсу CORS не нужен, он ходит через тот же origin |
 | `LOG_FORMAT` | `text` | Формат логов: `text` (dev) или `json` (prod) |
 
 ## Продакшен-инфраструктура
@@ -173,8 +174,10 @@ event: error     ->  {message, request_id}
 - **Метрики**: in-memory счётчики и гистограммы в `/api/metrics`
 - **Security headers**: `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`, `Referrer-Policy` (в prod nginx)
 - **JSON-логи**: `LOG_FORMAT=json` включает структурированные логи с таймингами операций
-- **CORS**: параметризован через `CORS_ORIGINS` — `*` для dev, конкретные origins для prod
+- **Лог запросов**: пишет своё middleware — метод, путь и request_id, без строки запроса. Access-log uvicorn отключён флагом `--no-access-log`
+- **CORS**: параметризован через `CORS_ORIGINS`, по умолчанию пусто — кросс-доменные запросы не разрешены никому, куки и сессии не используются (`allow_credentials=False`)
 - **Валидация файлов**: проверка MIME-типа и расширения загружаемых файлов (pdf, xlsx, png, jpg, jpeg, webp)
+- **Потолки на входе**: число файлов (`MAX_FILES`), размер каждого (`MAX_FILE_SIZE_MB`, он же у импорта шаблона), тело запроса целиком у nginx тем же числом, распакованный объём и текст xlsx, число пикселей изображения, длина строк и размер списков в теле запроса
 
 ### Продакшен-деплой
 

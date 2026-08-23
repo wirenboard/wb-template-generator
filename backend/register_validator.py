@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
 
+from log_utils import sanitize_for_log
 from models import Register
 
 logger = logging.getLogger("wb-template-gen")
@@ -598,7 +599,10 @@ def auto_fix_and_validate(
             reg = Register(**fixed_reg)
             registers.append(reg)
         except Exception as e:
-            logger.warning("Ошибка парсинга регистра после авто-фикса %s: %s", raw_reg, e)
+            logger.warning(
+                "Ошибка парсинга регистра после авто-фикса %s: %s",
+                sanitize_for_log(str(raw_reg)), e,
+            )
             try:
                 reg = Register(
                     address=int(raw_reg.get("address", 0)),
@@ -606,7 +610,9 @@ def auto_fix_and_validate(
                 )
                 registers.append(reg)
             except Exception:
-                logger.error("Не удалось распарсить регистр, пропускаем: %s", raw_reg)
+                logger.error(
+                    "Не удалось распарсить регистр, пропускаем: %s", sanitize_for_log(str(raw_reg)),
+                )
 
     # Валидация
     result = validate_registers(registers)
