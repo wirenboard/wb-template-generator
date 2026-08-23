@@ -601,7 +601,7 @@ def auto_fix_and_validate(
         except Exception as e:
             logger.warning(
                 "Ошибка парсинга регистра после авто-фикса %s: %s",
-                sanitize_for_log(str(raw_reg)), e,
+                sanitize_for_log(raw_reg), e,
             )
             try:
                 reg = Register(
@@ -611,7 +611,7 @@ def auto_fix_and_validate(
                 registers.append(reg)
             except Exception:
                 logger.error(
-                    "Не удалось распарсить регистр, пропускаем: %s", sanitize_for_log(str(raw_reg)),
+                    "Не удалось распарсить регистр, пропускаем: %s", sanitize_for_log(raw_reg),
                 )
 
     # Валидация

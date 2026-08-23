@@ -196,7 +196,7 @@ def classify(exc: Exception) -> ClassifiedError:
             status, code, message,
         )
 
-    # 7. BadRequestError | UnprocessableEntityError → critical
+    # 7. BadRequestError | UnprocessableEntityError → warning
     if isinstance(exc, (openai.BadRequestError, openai.UnprocessableEntityError)):
         return ClassifiedError(
             ErrorCategory.BAD_REQUEST, _SEVERITY[ErrorCategory.BAD_REQUEST],

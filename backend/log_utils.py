@@ -12,15 +12,18 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 MAX_LOGGED_VALUE_CHARS = 1000
 
 
-def sanitize_for_log(value: str, max_len: int = MAX_LOGGED_VALUE_CHARS) -> str:
+def sanitize_for_log(value: object, max_len: int = MAX_LOGGED_VALUE_CHARS) -> str:
     """Обрезает значение до max_len и заменяет управляющие символы на \\xNN.
 
-    Под замену идут только управляющие символы, поэтому кириллица в путях и именах файлов
-    остаётся читаемой. Обрезка идёт до экранирования, иначе она рубила бы `\\xNN` посередине.
+    Принимает что угодно и приводит к строке само — зовут функцию из обработчиков ошибок,
+    где забытая обёртка `str()` дала бы TypeError поверх исходного отказа. Под замену идут
+    только управляющие символы, поэтому кириллица в путях и именах файлов остаётся читаемой.
+    Обрезка идёт до экранирования, иначе она рубила бы `\\xNN` посередине.
     """
-    if len(value) > max_len:
-        value = f"{value[:max_len]}… (обрезано, всего {len(value)} симв.)"
-    return _CONTROL_CHARS.sub(lambda m: f"\\x{ord(m.group()):02x}", value)
+    text = str(value)
+    if len(text) > max_len:
+        text = f"{text[:max_len]}… (обрезано, всего {len(text)} симв.)"
+    return _CONTROL_CHARS.sub(lambda m: f"\\x{ord(m.group()):02x}", text)
 
 
 # Токен бота в пути запроса к Bot API — логгер httpx на INFO печатает полный URL. Хвост берётся

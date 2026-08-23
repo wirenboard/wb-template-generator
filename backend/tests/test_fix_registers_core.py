@@ -20,7 +20,7 @@ from models import Register  # noqa: E402
 
 
 def _llm_returning(payload: dict) -> AsyncMock:
-    """Мок _call_llm: возвращает (json_текст, usage=None)."""
+    """Мок call_llm: возвращает (json_текст, usage=None)."""
     return AsyncMock(return_value=(json.dumps(payload, ensure_ascii=False), None))
 
 
@@ -37,7 +37,7 @@ async def test_core_merges_fix_back_by_position():
         "registers": [{"id": "__fix_0", "address": 2, "name": "Fixed", "reg_type": "holding"}],
     }
 
-    with patch("llm_service._call_llm", _llm_returning(llm_payload)):
+    with patch("llm_service.call_llm", _llm_returning(llm_payload)):
         result = await _fix_registers_core(
             MagicMock(), "gpt-test", [bad], "Register: name is empty",
             all_registers=all_regs, error_positions=[1],
@@ -51,7 +51,7 @@ async def test_core_merges_fix_back_by_position():
 
 @pytest.mark.asyncio
 async def test_core_raises_on_empty_response():
-    with patch("llm_service._call_llm", AsyncMock(return_value=("", None))):
+    with patch("llm_service.call_llm", AsyncMock(return_value=("", None))):
         with pytest.raises(LLMApiError):
             await _fix_registers_core(
                 MagicMock(), "gpt-test",
@@ -63,7 +63,7 @@ async def test_core_raises_on_empty_response():
 @pytest.mark.asyncio
 async def test_core_raises_when_no_registers_returned():
     payload = {"device_info": {"name": "device", "id": "device"}, "registers": []}
-    with patch("llm_service._call_llm", _llm_returning(payload)):
+    with patch("llm_service.call_llm", _llm_returning(payload)):
         with pytest.raises(LLMApiError):
             await _fix_registers_core(
                 MagicMock(), "gpt-test",

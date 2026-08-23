@@ -454,11 +454,13 @@ def get_analyze_prompt(template_type: str, languages: list[str] | None = None) -
 
     instruction = _TEMPLATE_TYPE_INSTRUCTIONS[tt]
     translation_languages = _build_translation_languages_text(languages)
-    return _SYSTEM_PROMPT.format(
+    prompt = _SYSTEM_PROMPT.format(
         template_type=tt.upper(),
         template_type_instruction=instruction,
         translation_languages=translation_languages,
     )
+    _ensure_prompt_size(prompt)
+    return prompt
 
 
 def get_retry_prompt() -> str:
@@ -554,6 +556,17 @@ def get_raw_prompts() -> dict:
 # клиента, а замена разворачивает каждое вхождение плейсхолдера, поэтому тысяча повторов
 # в небольшом шаблоне даёт сотни мегабайт.
 MAX_RENDERED_PROMPT_CHARS = 100_000
+
+
+def _ensure_prompt_size(prompt: str) -> None:
+    """Общий потолок на системный промпт — и дефолтный, и пользовательский.
+
+    Список языков приходит от клиента и на серверном ключе уезжает в промпт как есть.
+    """
+    if len(prompt) > MAX_RENDERED_PROMPT_CHARS:
+        raise UserError(
+            "serverError.promptTooLarge", size=len(prompt), max=MAX_RENDERED_PROMPT_CHARS,
+        )
 
 
 def render_custom_prompt(

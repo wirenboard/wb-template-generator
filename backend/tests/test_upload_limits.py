@@ -155,6 +155,27 @@ class TestExcelLimits:
 
         assert exc.value.key == "serverError.excelTooBig"
 
+    @pytest.mark.parametrize("part,payload", [
+        ("readme.txt", b"hello"),
+        ("word/document.xml", b"<w/>"),
+    ])
+    def test_archive_without_workbook_explained(self, part, payload):
+        """Zip не той формы объясняется текстом, а не падает внутренней ошибкой.
+
+        openpyxl отвечает по-разному — KeyError на отсутствующий «[Content_Types].xml»
+        и OSError на docx, поэтому обе ветки закрыты одним ключом.
+        """
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            if part.startswith("word/"):
+                zf.writestr("[Content_Types].xml", b'<?xml version="1.0"?><Types/>')
+            zf.writestr(part, payload)
+
+        with pytest.raises(FileParseError) as exc:
+            excel_to_text(buf.getvalue())
+
+        assert exc.value.key == "serverError.excelUnreadable"
+
     def test_old_xls_format_explained(self):
         """Старый формат объясняется текстом, а не общей ошибкой сервера."""
         ole_magic = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 512

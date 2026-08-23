@@ -121,7 +121,7 @@ class TestServerLLMErrorReporting:
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
-            # Каждый _call_llm бросает quota-ошибку (включая retry)
+            # Каждый call_llm бросает quota-ошибку (включая retry)
             mock_client.chat.completions.create = AsyncMock(side_effect=_make_quota_error())
 
             events = await _collect(analyze_document(

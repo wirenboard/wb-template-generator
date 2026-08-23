@@ -156,6 +156,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'upload.sizeError': 'Лимит {size} МБ на весь запрос превышен, не добавлено: {names}. Удалите лишние файлы или оставьте только страницы с картой регистров.',
     'upload.formatError': 'Формат не подходит, не добавлено: {names}. Принимаются {formats}.',
     'upload.countError': 'В один запрос помещается не больше {max} файлов, не добавлено: {names}.',
+    'upload.dismissError': 'Скрыть сообщение',
 
     // --- Group Manager ---
     'groups.title': 'Управление группами',
@@ -611,6 +612,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'upload.sizeError': 'Request limit of {size} MB exceeded, not added: {names}. Remove extra files or keep only the pages with the register map.',
     'upload.formatError': 'Unsupported format, not added: {names}. Accepted formats are {formats}.',
     'upload.countError': 'A single request takes at most {max} files, not added: {names}.',
+    'upload.dismissError': 'Dismiss message',
 
     'groups.title': 'Group management',
     'groups.hint': 'Groups are pulled from registers automatically. Here you can set title, description, translations and order.',
@@ -850,8 +852,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'serverError.llmUnusableResults': 'The LLM returned no usable results. Check the document format.',
     'serverError.llmUnusableResultsWithFragment': 'The LLM returned no usable results. Check the document format.\n\nLLM response (fragment):\n{fragment}',
     'serverError.llmUnparsableResponse': 'the model response could not be parsed',
-    'serverError.llmEmptyResponse': 'The LLM returned an empty response',
-    'serverError.llmNoRegisters': 'The LLM returned no registers',
+    'serverError.llmEmptyResponse': 'the LLM returned an empty response',
+    'serverError.llmNoRegisters': 'the LLM returned no registers',
     'serverError.fixFailed': 'Could not fix the registers — {reason}.',
     'serverError.importInvalidJson': 'Invalid JSON: {error}',
     'serverError.importFailed': 'Failed to import the template. Make sure the file is valid JSON or a wb-mqtt-serial .json.jinja template.',
@@ -1046,6 +1048,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'upload.sizeError': 'Сұраныстың {size} МБ шегінен асып кетті, қосылмады: {names}. Артық файлдарды жойыңыз немесе тек регистр картасы бар беттерді қалдырыңыз.',
     'upload.formatError': 'Формат жарамсыз, қосылмады: {names}. Қабылданатын пішімдер: {formats}.',
     'upload.countError': 'Бір сұранысқа {max} файлдан артық сыймайды, қосылмады: {names}.',
+    'upload.dismissError': 'Хабарламаны жасыру',
 
     'groups.title': 'Топтарды басқару',
     'groups.hint': 'Топтар регистрлерден автоматты түрде алынады.',
@@ -1480,6 +1483,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'upload.sizeError': 'Limite di {size} MB per richiesta superato: {names}. Rimuovi i file in eccesso o tieni solo le pagine con la mappa dei registri.',
     'upload.formatError': 'Formato non supportato, non aggiunti: {names}. Formati ammessi: {formats}.',
     'upload.countError': 'Una richiesta accetta al massimo {max} file, non aggiunti: {names}.',
+    'upload.dismissError': 'Nascondi messaggio',
 
     'groups.title': 'Gestione gruppi',
     'groups.hint': 'I gruppi vengono estratti automaticamente dai registri.',
@@ -1718,8 +1722,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'serverError.llmUnusableResults': "L'LLM non ha restituito risultati utilizzabili. Controlla il formato del documento.",
     'serverError.llmUnusableResultsWithFragment': "L'LLM non ha restituito risultati utilizzabili. Controlla il formato del documento.\n\nRisposta LLM (frammento):\n{fragment}",
     'serverError.llmUnparsableResponse': 'non è stato possibile analizzare la risposta del modello',
-    'serverError.llmEmptyResponse': "L'LLM ha restituito una risposta vuota",
-    'serverError.llmNoRegisters': "L'LLM non ha restituito registri",
+    'serverError.llmEmptyResponse': "l'LLM ha restituito una risposta vuota",
+    'serverError.llmNoRegisters': "l'LLM non ha restituito registri",
     'serverError.fixFailed': 'Impossibile correggere i registri — {reason}.',
     'serverError.importInvalidJson': 'JSON non valido: {error}',
     'serverError.importFailed': 'Impossibile importare il template. Assicurati che il file sia JSON valido o un template .json.jinja di wb-mqtt-serial.',

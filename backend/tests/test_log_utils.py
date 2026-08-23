@@ -94,5 +94,20 @@ class TestSecretRedactingFilter:
         assert record.getMessage() == message
 
 
+def test_filter_installed_on_root_handler():
+    """Фильтр навешен в настройке логирования, а не только существует как класс.
+
+    Регулярка покрыта тестами выше, но снятая строка `addFilter` не роняла ничего,
+    и токен возвращался в лог.
+    """
+    import main  # noqa: F401 — импорт настраивает логирование
+
+    handlers = logging.root.handlers
+    assert handlers, "корневой логгер без хендлеров"
+    assert any(
+        isinstance(f, SecretRedactingFilter) for h in handlers for f in h.filters
+    ), "SecretRedactingFilter не навешен на корневой хендлер"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

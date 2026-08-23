@@ -36,10 +36,16 @@ class TestDefaults:
         assert resp.status_code == 200
         assert "access-control-allow-origin" not in resp.headers
 
-    def test_credentials_never_allowed(self):
-        """Куки и сессии не используются, а с креденшелами звёздочка небезопасна."""
+    def test_foreign_origin_cannot_read_the_answer(self):
+        """Чужой странице ответ не прочитать — нет ни allow-origin, ни allow-credentials.
+
+        `access-control-expose-headers` middleware ставит и на чужой origin, но без
+        allow-origin браузер ответ не отдаёт. Сам запрет креденшелов на разрешённом
+        origin пиннит `TestConfiguredOrigin`, здесь заголовка нет по другой причине.
+        """
         resp = TestClient(main.app).get("/api/health", headers={"Origin": FOREIGN})
 
+        assert "access-control-allow-origin" not in resp.headers
         assert "access-control-allow-credentials" not in resp.headers
 
     def test_preflight_from_foreign_origin_not_allowed(self):

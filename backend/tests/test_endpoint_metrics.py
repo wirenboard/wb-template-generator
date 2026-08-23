@@ -37,6 +37,7 @@ def test_unknown_path_not_counted(client):
         client.get(f"/api/no-such-route-{i}")
 
     assert main._endpoint_hits == {}
+    assert main._endpoint_errors == {}, "404 наполнили бы словарь ошибок так же, как счётчик обращений"
 
 
 def test_known_route_counted_on_first_request(client):

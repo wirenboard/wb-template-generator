@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
-import { splitByCount, splitByExtension, splitByRequestBudget } from '../utils/uploadLimits';
 
-// Типы, которые вынимаем из буфера обмена. Расширения и потолки приходят с бэкенда
+// Типы, которые вынимаем из буфера обмена. Отбор по потолкам сервера живёт в сторе
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 /** Компонент загрузки файлов с drag-n-drop и вставкой из буфера */
@@ -13,66 +12,20 @@ export default function FileUpload() {
   const addFiles = useStore((s) => s.addFiles);
   const removeFile = useStore((s) => s.removeFile);
   const maxFileSizeMb = useStore((s) => s.maxFileSizeMb);
-  const maxFiles = useStore((s) => s.maxFiles);
   const allowedExtensions = useStore((s) => s.allowedExtensions);
+  const uploadErrors = useStore((s) => s.uploadErrors);
+  const clearUploadErrors = useStore((s) => s.clearUploadErrors);
   const [dragging, setDragging] = useState(false);
   const [pasteFlash, setPasteFlash] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Те же потолки, что у сервера, только до отправки — иначе набор уезжает целиком и
-  // отклоняется уже после загрузки. Потолка ещё нет — пропускаем, отберёт сервер
-  const acceptFiles = useCallback(
-    (incoming: File[]) => {
-      const errors: string[] = [];
-      const names = (list: File[]) => list.map((f) => f.name).join(', ');
-      let candidates = incoming;
-
-      if (allowedExtensions) {
-        const { accepted, rejected } = splitByExtension(candidates, allowedExtensions);
-        if (rejected.length > 0) {
-          errors.push(t('upload.formatError', {
-            names: names(rejected), formats: allowedExtensions.join(', '),
-          }));
-        }
-        candidates = accepted;
-      }
-
-      if (maxFiles !== null) {
-        const { accepted, rejected } = splitByCount(files, candidates, maxFiles);
-        if (rejected.length > 0) {
-          errors.push(t('upload.countError', { max: maxFiles, names: names(rejected) }));
-        }
-        candidates = accepted;
-      }
-
-      if (maxFileSizeMb !== null) {
-        const { accepted, rejected } = splitByRequestBudget(
-          files, candidates, maxFileSizeMb * 1024 * 1024,
-        );
-        if (rejected.length > 0) {
-          errors.push(t('upload.sizeError', {
-            size: maxFileSizeMb,
-            names: rejected
-              .map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`)
-              .join(', '),
-          }));
-        }
-        candidates = accepted;
-      }
-
-      setUploadError(errors.length > 0 ? errors.join(' ') : null);
-      if (candidates.length > 0) addFiles(candidates);
-      return candidates.length;
-    },
-    [addFiles, allowedExtensions, files, maxFileSizeMb, maxFiles, t],
-  );
+  const uploadError = uploadErrors.map((e) => t(e.key, e.params)).join(' ');
 
   const handleFiles = useCallback(
     (fileList: FileList | null) => {
       if (!fileList) return;
-      acceptFiles(Array.from(fileList));
+      addFiles(Array.from(fileList));
     },
-    [acceptFiles],
+    [addFiles],
   );
 
   const handleDrop = useCallback(
@@ -120,7 +73,7 @@ export default function FileUpload() {
       if (imageFiles.length > 0) {
         e.preventDefault();
         // Ранний выход, иначе вспышка «принято» показывается на отклонённой картинке
-        if (acceptFiles(imageFiles) === 0) return;
+        if (addFiles(imageFiles) === 0) return;
         // Визуальная обратная связь
         setPasteFlash(true);
         setTimeout(() => setPasteFlash(false), 600);
@@ -128,7 +81,7 @@ export default function FileUpload() {
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [acceptFiles]);
+  }, [addFiles]);
 
   return (
     <div>
@@ -171,9 +124,14 @@ export default function FileUpload() {
 
       {/* Файлы, которые не приняли */}
       {uploadError && (
-        <div className="mt-2 bg-amber-50 text-amber-700 border border-amber-200 rounded p-2 text-xs flex items-start justify-between gap-2">
+        <div role="alert" className="mt-2 bg-amber-50 text-amber-700 border border-amber-200 rounded p-2 text-xs flex items-start justify-between gap-2">
           <span>{uploadError}</span>
-          <button onClick={() => setUploadError(null)} className="text-amber-500 hover:text-amber-700 flex-shrink-0 font-bold">&times;</button>
+          <button
+            onClick={clearUploadErrors}
+            title={t('upload.dismissError')}
+            aria-label={t('upload.dismissError')}
+            className="text-amber-500 hover:text-amber-700 flex-shrink-0 font-bold"
+          >&times;</button>
         </div>
       )}
 

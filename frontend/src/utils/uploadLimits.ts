@@ -46,3 +46,72 @@ export function splitByRequestBudget(chosen: File[], incoming: File[], maxBytes:
   }
   return { accepted, rejected };
 }
+
+export interface Limits {
+  allowedExtensions: string[] | null;
+  maxFiles: number | null;
+  maxFileSizeMb: number | null;
+}
+
+/** Отказ по потолку: ключ локализации и параметры, текст собирает интерфейс. */
+export interface IntakeError {
+  key: string;
+  params: Record<string, string | number>;
+}
+
+export interface Intake {
+  accepted: File[];
+  errors: IntakeError[];
+}
+
+/**
+ * Отбирает файлы по потолкам сервера — формат, число, суммарный размер.
+ * Потолок ещё не приехал из /api/status — проверка пропускается, отберёт сервер.
+ */
+export function intakeFiles(chosen: File[], incoming: File[], limits: Limits): Intake {
+  const errors: IntakeError[] = [];
+  const names = (list: File[]) => list.map((f) => f.name).join(', ');
+  let candidates = incoming;
+
+  if (limits.allowedExtensions) {
+    const { accepted, rejected } = splitByExtension(candidates, limits.allowedExtensions);
+    if (rejected.length > 0) {
+      errors.push({
+        key: 'upload.formatError',
+        params: { names: names(rejected), formats: limits.allowedExtensions.join(', ') },
+      });
+    }
+    candidates = accepted;
+  }
+
+  if (limits.maxFiles !== null) {
+    const { accepted, rejected } = splitByCount(chosen, candidates, limits.maxFiles);
+    if (rejected.length > 0) {
+      errors.push({
+        key: 'upload.countError',
+        params: { max: limits.maxFiles, names: names(rejected) },
+      });
+    }
+    candidates = accepted;
+  }
+
+  if (limits.maxFileSizeMb !== null) {
+    const { accepted, rejected } = splitByRequestBudget(
+      chosen, candidates, limits.maxFileSizeMb * 1024 * 1024,
+    );
+    if (rejected.length > 0) {
+      errors.push({
+        key: 'upload.sizeError',
+        params: {
+          size: limits.maxFileSizeMb,
+          names: rejected
+            .map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`)
+            .join(', '),
+        },
+      });
+    }
+    candidates = accepted;
+  }
+
+  return { accepted: candidates, errors };
+}

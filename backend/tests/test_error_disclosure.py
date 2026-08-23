@@ -137,6 +137,36 @@ class TestAnalyzeDisclosure:
         assert "провайдеру LLM" in events or "провайдера LLM" in events
 
     @pytest.mark.asyncio
+    async def test_unsupported_file_detected_by_raw_text(self):
+        """Эвристика формата читает `raw`, наружу уходит категория.
+
+        Подмена `raw` на публичную фразу оставила бы суиту зелёной и навсегда выключила
+        откат на конвертацию — маркеры в `_is_file_unsupported` английские, а фраза русская.
+        """
+        settings = _make_settings()
+
+        with (
+            patch("llm_service.AsyncOpenAI") as mock_openai,
+            patch("llm_service.open_image", return_value=MagicMock()),
+            patch("llm_service.image_to_base64", return_value="dGVzdA=="),
+        ):
+            mock_client = AsyncMock()
+            mock_openai.return_value = mock_client
+            mock_client.chat.completions.create = AsyncMock(
+                side_effect=Exception("Invalid content type 'file' is not supported by this model"),
+            )
+
+            events = await _collect_events(analyze_document(
+                files=[("test.png", b"fake-png-data")],
+                template_type="full",
+                settings=settings,
+                is_custom_llm=False,
+            ))
+
+        assert "serverError.modelUnsupportedFile" in events
+        assert "not supported by this model" not in events
+
+    @pytest.mark.asyncio
     async def test_unexpected_error_reported_generically(self):
         """Непредвиденный сбой отдаёт общий текст, детали только в лог."""
         settings = _make_settings()
@@ -272,6 +302,39 @@ class TestJsonResponseDisclosure:
         assert body["message_key"] == "serverError.translateFailed"
         assert body["message_params"] == {"reasonKey": "llmError.connection"}
 
+    def test_translate_parameter_retries_end_with_provider_failure(self, client, monkeypatch):
+        """Три холостые попытки правки параметров — это отказ провайдера, а не наш разбор.
+
+        Раньше цикл выходил без `break`, `response` оставался несвязанным, и `NameError`
+        уезжал в ветку «ответ не разобрали» — без категории и без алерта дежурному.
+        """
+        import main
+
+        alerts = []
+
+        async def _record_alert(exc, **kwargs):
+            alerts.append(exc)
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=Exception("Unsupported parameter: max_tokens"),
+        )
+        monkeypatch.setattr(main, "AsyncOpenAI", lambda **kwargs: mock_client)
+        monkeypatch.setattr(main, "report_and_log_llm_failure", _record_alert)
+
+        resp = client.post("/api/translate", json={
+            "strings": {"a": "Voltage"},
+            "target_lang": "de",
+            "target_lang_name": "Deutsch",
+            "llm_api_url": "https://api.provider.example/v1",
+            "llm_api_key": "sk-user",
+        })
+        body = resp.json()
+
+        assert resp.status_code == 500
+        assert body["message_params"]["reasonKey"].startswith("llmError.")
+        assert alerts, "отказ провайдера обязан поднять дежурного"
+
     def test_translate_unparsable_answer_is_not_provider_failure(self, client, monkeypatch):
         """Проза вместо JSON — наш сбой разбора, категорией провайдера не называется.
 
@@ -290,7 +353,7 @@ class TestJsonResponseDisclosure:
             return_value=_mock_llm_response("Sure! Here are your translations."),
         )
         monkeypatch.setattr(main, "AsyncOpenAI", lambda **kwargs: mock_client)
-        monkeypatch.setattr(main, "report_llm_api_error", _record_alert)
+        monkeypatch.setattr(main, "report_and_log_llm_failure", _record_alert)
 
         resp = client.post("/api/translate", json={
             "strings": {"a": "Voltage"},

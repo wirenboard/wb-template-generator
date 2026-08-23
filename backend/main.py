@@ -24,20 +24,18 @@ from llm_service import (
     UnsafeLLMUrlError,
     analysis_metrics,
     analyze_document,
+    call_llm,
     close_llm_http_clients,
     ensure_public_llm_url,
+    extract_json_from_response,
     get_llm_http_client,
     is_custom_llm_url,
+    report_and_log_llm_failure,
     resolve_llm_target,
 )
 from log_utils import SecretRedactingFilter, sanitize_for_log
 from models import BuildRequest, FixRegistersRequest, TranslateRequest, ValidateRequest
-from notifier import (
-    init_notifier,
-    register_metric_hook,
-    report_llm_api_error,
-    shutdown_notifier,
-)
+from notifier import init_notifier, register_metric_hook, shutdown_notifier
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueTicket, init_queues
 from request_context import generate_request_id, get_request_id, set_request_id
@@ -439,10 +437,10 @@ async def list_models(
             ).payload(get_request_id()),
         )
     except Exception as e:
-        logger.exception("Ошибка получения списка моделей")
-        await report_llm_api_error(
+        await report_and_log_llm_failure(
             e, endpoint="list_models", request_id=get_request_id(),
             model="", is_custom_llm=target.is_custom,
+            action="Сбой получения списка моделей",
         )
         return JSONResponse(
             status_code=502,
@@ -782,59 +780,19 @@ async def translate(request: TranslateRequest):
     )
 
     try:
-        # Выбираем параметр токенов в зависимости от настройки
-        token_key = "max_tokens" if effective_legacy else "max_completion_tokens"
-        fallback_key = "max_completion_tokens" if effective_legacy else "max_tokens"
-        translate_kwargs: dict = {
-            "model": effective_model,
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": strings_json},
-            ],
-            token_key: 4096,
-            "timeout": effective_timeout,
-        }
-        if effective_temperature is not None:
-            translate_kwargs["temperature"] = effective_temperature
-        # До 3 попыток с автоудалением неподдерживаемых параметров
-        for _attempt in range(3):
-            try:
-                response = await client.chat.completions.create(**translate_kwargs)
-                break
-            except Exception as e:
-                err_str = str(e)
-                fixed = False
-                if token_key in translate_kwargs and (fallback_key in err_str or token_key in err_str):
-                    logger.warning("Translate: %s → %s", token_key, fallback_key)
-                    del translate_kwargs[token_key]
-                    translate_kwargs[fallback_key] = 4096
-                    token_key = fallback_key
-                    fixed = True
-                if "temperature" in err_str and "temperature" in translate_kwargs:
-                    logger.warning(
-                        "Translate: модель %s отвергла temperature=%s, повторяем запрос без неё.",
-                        sanitize_for_log(effective_model), translate_kwargs["temperature"],
-                    )
-                    del translate_kwargs["temperature"]
-                    fixed = True
-                if not fixed:
-                    raise
-        raw = response.choices[0].message.content or "{}"
-        # Извлекаем JSON из ответа
-        raw = raw.strip()
-        json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", raw, re.DOTALL)
-        if json_match:
-            raw = json_match.group(1)
-        brace_start = raw.find("{")
-        if brace_start > 0:
-            raw = raw[brace_start:]
-        brace_end = raw.rfind("}")
-        if brace_end >= 0:
-            raw = raw[: brace_end + 1]
-
-        translations = json.loads(raw)
+        raw_response, _usage = await call_llm(
+            client,
+            effective_model,
+            prompt,
+            strings_json,
+            timeout=effective_timeout,
+            max_tokens=4096,
+            legacy_max_tokens=effective_legacy,
+            temperature=effective_temperature,
+        )
+        translations = extract_json_from_response(raw_response)
         return JSONResponse(content={"translations": translations})
-    except (json.JSONDecodeError, IndexError, AttributeError, NameError):
+    except (json.JSONDecodeError, IndexError, AttributeError):
         # Провайдер ответил, а разобрать ответ не удалось — модель вернула прозу или обрезанный
         # JSON. Сбой наш, поэтому без категории llmError.* и без алерта нотификатора.
         logger.exception("Ответ модели на перевод не разобран")
@@ -846,10 +804,10 @@ async def translate(request: TranslateRequest):
             ).payload(request_id),
         )
     except Exception as e:
-        logger.exception("Ошибка перевода через LLM")
-        await report_llm_api_error(
+        await report_and_log_llm_failure(
             e, endpoint="translate", request_id=request_id,
             model=effective_model, is_custom_llm=is_custom_llm,
+            action="Сбой перевода через LLM",
         )
         return JSONResponse(
             status_code=500,
@@ -883,7 +841,7 @@ async def import_template_endpoint(file: UploadFile = File(...)):
         )
     except TemplateImportError as e:
         # В __cause__ у отказа песочницы лежит атрибут, к которому лез шаблон
-        logger.warning("Импорт отклонён (%s): %s", e.key, sanitize_for_log(str(e.__cause__ or e)))
+        logger.warning("Импорт отклонён (%s): %s", e.key, sanitize_for_log(e.__cause__ or e))
         return JSONResponse(status_code=400, content=e.payload(request_id))
     except Exception:
         logger.exception("Ошибка импорта шаблона")

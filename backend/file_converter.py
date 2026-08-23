@@ -14,6 +14,11 @@ from log_utils import sanitize_for_log
 
 logger = logging.getLogger(__name__)
 
+# Встроенная проверка Pillow выше 2× своего потолка бросает DecompressionBombError прямо
+# в Image.open, то есть раньше нашей и с чужим текстом. Наш потолок строже и стоит до
+# декодирования, поэтому её выключаем
+Image.MAX_IMAGE_PIXELS = None
+
 # xlsx это zip с XML внутри, поэтому пара сотен килобайт разворачиваются в десятки мегабайт.
 # Потолок текста стоит не ради памяти, а ради промпта — 500 тыс. символов это ~125 тыс. токенов.
 MAX_EXCEL_UNPACKED_MB = 5
@@ -42,7 +47,9 @@ class ImageTooLargeError(FileParseError):
     """Изображение превышает потолок по числу пикселей."""
 
 
-# Сюда попадает и переименованный в .xlsx файл другого формата — openpyxl читает только zip
+# Сюда попадает и переименованный в .xlsx файл другого формата. openpyxl отвечает на такое
+# по-разному: не zip — BadZipFile, zip без книги — KeyError на «[Content_Types].xml», docx или
+# pptx — OSError «no valid workbook part»
 _UNREADABLE_EXCEL = "serverError.excelUnreadable"
 
 # Один ключ на оба потолка таблицы — действие пользователя одно, числа в логе сервера.
@@ -118,7 +125,7 @@ def excel_to_text(excel_bytes: bytes) -> str:
 
     try:
         wb = load_workbook(io.BytesIO(excel_bytes), read_only=True, data_only=True)
-    except (BadZipFile, InvalidFileException) as e:
+    except (BadZipFile, InvalidFileException, KeyError, OSError) as e:
         raise FileParseError(_UNREADABLE_EXCEL) from e
 
     parts: list[str] = []
@@ -144,7 +151,7 @@ def excel_to_text(excel_bytes: bytes) -> str:
                 if chars_seen + row_chars > MAX_EXCEL_TEXT_CHARS:
                     logger.warning(
                         "Excel отклонён: текст перевалил за %d символов на листе «%s»",
-                        MAX_EXCEL_TEXT_CHARS, sanitize_for_log(str(sheet_name)),
+                        MAX_EXCEL_TEXT_CHARS, sanitize_for_log(sheet_name),
                     )
                     raise FileParseError(_EXCEL_TOO_BIG)
 
@@ -153,6 +160,9 @@ def excel_to_text(excel_bytes: bytes) -> str:
 
             if header_written:
                 parts.append("")  # пустая строка между листами
+    except (KeyError, OSError) as e:
+        # Книга разбирается лениво, поэтому битые части всплывают уже на чтении строк
+        raise FileParseError(_UNREADABLE_EXCEL) from e
     finally:
         wb.close()
 

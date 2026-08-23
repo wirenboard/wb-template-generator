@@ -133,6 +133,14 @@ class TestRenderedSizeCap:
         assert str(MAX_RENDERED_PROMPT_CHARS) in str(exc.value)
         assert "символов" in str(exc.value)
 
+    def test_accepted_result_fits_the_cap(self):
+        """Отказа не было — значит предсказание сошлось и результат влез в потолок."""
+        langs = [f"l{i}" for i in range(500)]
+
+        result = render_custom_prompt("{translation_languages}" * 5, "full", langs)
+
+        assert len(result) <= MAX_RENDERED_PROMPT_CHARS
+
     def test_huge_prompt_without_placeholders_rejected(self):
         """Просто гигантский промпт тоже упирается в потолок."""
         with pytest.raises(UserError, match="сократите"):
@@ -145,3 +153,21 @@ class TestRenderedSizeCap:
         result = render_custom_prompt(raw, "full", ["ru", "de", "it"])
 
         assert len(result) < MAX_RENDERED_PROMPT_CHARS // 4
+
+
+class TestServerPromptCap:
+    """Дефолтный промпт ограничен тем же потолком.
+
+    Список языков приходит от клиента формой и на серверном ключе уезжает в промпт как есть.
+    """
+
+    def test_languages_cannot_blow_up_server_prompt(self):
+        with pytest.raises(UserError) as exc:
+            get_analyze_prompt("full", [f"lang{i}" for i in range(50_000)])
+
+        assert exc.value.key == "serverError.promptTooLarge"
+
+    def test_normal_languages_pass(self):
+        prompt = get_analyze_prompt("full", ["ru", "de", "it"])
+
+        assert len(prompt) < MAX_RENDERED_PROMPT_CHARS

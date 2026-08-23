@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  splitByCount, splitByExtension, splitByRequestBudget, REQUEST_OVERHEAD_BYTES,
+  intakeFiles, splitByCount, splitByExtension, splitByRequestBudget, REQUEST_OVERHEAD_BYTES,
 } from '../utils/uploadLimits';
 
 const MB = 1024 * 1024;
@@ -82,5 +82,42 @@ describe('splitByCount', () => {
     const { accepted, rejected } = splitByCount(chosen, [fileOf('c.pdf', 10)], 2);
     expect(accepted).toHaveLength(0);
     expect(rejected).toHaveLength(1);
+  });
+});
+
+describe('intakeFiles', () => {
+  const limits = { allowedExtensions: ALLOWED, maxFiles: 3, maxFileSizeMb: 2 };
+
+  it('пропускает подходящий набор без ошибок', () => {
+    const { accepted, errors } = intakeFiles([], [fileOf('map.pdf', 10)], limits);
+    expect(accepted.map((f) => f.name)).toEqual(['map.pdf']);
+    expect(errors).toEqual([]);
+  });
+
+  it('собирает отказы всех трёх потолков сразу', () => {
+    const incoming = [
+      fileOf('notes.txt', 10), fileOf('huge.pdf', 3 * MB),
+      fileOf('a.pdf', 10), fileOf('b.pdf', 10), fileOf('c.pdf', 10), fileOf('d.pdf', 10),
+    ];
+    const { accepted, errors } = intakeFiles([], incoming, limits);
+    expect(errors.map((e) => e.key)).toEqual([
+      'upload.formatError', 'upload.countError', 'upload.sizeError',
+    ]);
+    expect(accepted.map((f) => f.name)).toEqual(['a.pdf', 'b.pdf']);
+  });
+
+  it('без потолков сервера ничего не отсекает', () => {
+    const incoming = [fileOf('notes.txt', 10 * MB), fileOf('x.docx', 10)];
+    const { accepted, errors } = intakeFiles(
+      [], incoming, { allowedExtensions: null, maxFiles: null, maxFileSizeMb: null },
+    );
+    expect(accepted).toHaveLength(2);
+    expect(errors).toEqual([]);
+  });
+
+  it('отказ несёт имена и параметры для подстановки', () => {
+    const { errors } = intakeFiles([], [fileOf('notes.txt', 10)], limits);
+    expect(errors[0].params.names).toBe('notes.txt');
+    expect(errors[0].params.formats).toBe(ALLOWED.join(', '));
   });
 });

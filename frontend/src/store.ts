@@ -5,6 +5,7 @@ import type {
 } from './types';
 import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi, validateRegisters as validateRegistersApi, fixRegisters as fixRegistersApi } from './api';
 import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN } from './constants';
+import { intakeFiles, type IntakeError } from './utils/uploadLimits';
 import { generateId } from './utils';
 import type { Locale } from './i18n';
 import { getT, getHasTranslations } from './i18n';
@@ -102,6 +103,7 @@ interface TemplateStore {
   llmConfig: AnalyzeLlmConfig;
   llmAvailable: boolean | null;
   serverModel: string | null;
+  uploadErrors: IntakeError[];
   // Потолки приёма файлов, приходят из /api/status. null = ответа ещё нет
   maxFileSizeMb: number | null;
   maxFiles: number | null;
@@ -111,7 +113,9 @@ interface TemplateStore {
 
   // Действия
   setFiles: (files: File[]) => void;
-  addFiles: (files: File[]) => void;
+  /** Отбирает файлы по потолкам сервера и возвращает число принятых. */
+  addFiles: (files: File[]) => number;
+  clearUploadErrors: () => void;
   removeFile: (index: number) => void;
   setRegisters: (registers: Register[]) => void;
   updateRegister: (id: string, patch: Partial<Register>) => void;
@@ -234,6 +238,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
   llmConfig: _saved.llmConfig ?? {},
   llmAvailable: null,
   serverModel: null,
+  uploadErrors: [],
   maxFileSizeMb: null,
   maxFiles: null,
   allowedExtensions: null,
@@ -260,7 +265,19 @@ export const useStore = create<TemplateStore>((set, get) => ({
   fixWithAiError: null,
 
   setFiles: (files) => set({ files }),
-  addFiles: (newFiles) => set((s) => ({ files: [...s.files, ...newFiles] })),
+  // Отбор живёт в сторе, а не в компоненте загрузки: файлы кладёт ещё и hero-блок
+  addFiles: (newFiles) => {
+    const s = get();
+    const { accepted, errors } = intakeFiles(s.files, newFiles, {
+      allowedExtensions: s.allowedExtensions,
+      maxFiles: s.maxFiles,
+      maxFileSizeMb: s.maxFileSizeMb,
+    });
+    set({ files: [...s.files, ...accepted], uploadErrors: errors });
+    return accepted.length;
+  },
+
+  clearUploadErrors: () => set({ uploadErrors: [] }),
   removeFile: (index) => set((s) => ({ files: s.files.filter((_, i) => i !== index) })),
 
   setRegisters: (registers) => {
