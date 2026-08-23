@@ -3,6 +3,7 @@
 import base64
 import io
 import logging
+import xml.etree.ElementTree as ET
 import zipfile
 from zipfile import BadZipFile
 
@@ -49,7 +50,7 @@ class ImageTooLargeError(FileParseError):
 
 # Сюда попадает и переименованный в .xlsx файл другого формата. openpyxl отвечает на такое
 # по-разному: не zip — BadZipFile, zip без книги — KeyError на «[Content_Types].xml», docx или
-# pptx — OSError «no valid workbook part»
+# pptx — OSError «no valid workbook part», недопустимый символ в XML — ParseError
 _UNREADABLE_EXCEL = "serverError.excelUnreadable"
 
 # Один ключ на оба потолка таблицы — действие пользователя одно, числа в логе сервера.
@@ -125,7 +126,7 @@ def excel_to_text(excel_bytes: bytes) -> str:
 
     try:
         wb = load_workbook(io.BytesIO(excel_bytes), read_only=True, data_only=True)
-    except (BadZipFile, InvalidFileException, KeyError, OSError) as e:
+    except (BadZipFile, InvalidFileException, KeyError, OSError, ET.ParseError) as e:
         raise FileParseError(_UNREADABLE_EXCEL) from e
 
     parts: list[str] = []
@@ -160,7 +161,7 @@ def excel_to_text(excel_bytes: bytes) -> str:
 
             if header_written:
                 parts.append("")  # пустая строка между листами
-    except (KeyError, OSError) as e:
+    except (KeyError, OSError, ET.ParseError) as e:
         # Книга разбирается лениво, поэтому битые части всплывают уже на чтении строк
         raise FileParseError(_UNREADABLE_EXCEL) from e
     finally:

@@ -155,6 +155,23 @@ class TestExcelLimits:
 
         assert exc.value.key == "serverError.excelTooBig"
 
+    def test_invalid_xml_character_explained(self):
+        """Управляющий символ в имени листа ломает XML — это тоже отказ разбора.
+
+        Excel такое имя принимает, а `load_workbook` падает на `ParseError` уже после
+        проверки формата, и без своей ветки отказ приезжал «внутренней ошибкой».
+        """
+        wb = Workbook()
+        wb.active.title = "She" + chr(27) + "et"
+        wb.active.append(["addr", "name"])
+        buf = io.BytesIO()
+        wb.save(buf)
+
+        with pytest.raises(FileParseError) as exc:
+            excel_to_text(buf.getvalue())
+
+        assert exc.value.key == "serverError.excelUnreadable"
+
     @pytest.mark.parametrize("part,payload", [
         ("readme.txt", b"hello"),
         ("word/document.xml", b"<w/>"),
