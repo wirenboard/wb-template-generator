@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from openai import AsyncOpenAI
+from openai.types import CompletionUsage
 from PIL import Image
 
 from config import Settings
@@ -551,10 +552,11 @@ async def call_llm(
     max_tokens: int = 16384,
     legacy_max_tokens: bool = False,
     temperature: float | None = None,
-) -> str:
+) -> tuple[str, CompletionUsage | None]:
     """Асинхронный вызов OpenAI-compatible API с vision-контентом.
 
-    Возвращает текстовый ответ LLM.
+    Возвращает текстовый ответ LLM и расход токенов. Расход приходит пустым, когда
+    провайдер его не отдаёт.
 
     При ошибке «Unsupported parameter» автоматически:
     - переключает max_tokens ↔ max_completion_tokens;
