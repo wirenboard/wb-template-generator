@@ -28,8 +28,8 @@ export function splitByCount(chosen: File[], incoming: File[], maxFiles: number)
 }
 
 /**
- * Отбирает файлы по остатку бюджета: nginx режет тело целиком, поэтому лимит
- * относится к сумме выбранных файлов, а не к размеру каждого.
+ * Отбирает файлы по остатку бюджета. Потолок стоит на запрос целиком — и у сервера,
+ * и у nginx перед ним, — поэтому размеры складываются.
  */
 export function splitByRequestBudget(chosen: File[], incoming: File[], maxBytes: number): Split {
   const budget = maxBytes - REQUEST_OVERHEAD_BYTES;
@@ -50,7 +50,7 @@ export function splitByRequestBudget(chosen: File[], incoming: File[], maxBytes:
 export interface Limits {
   allowedExtensions: string[] | null;
   maxFiles: number | null;
-  maxFileSizeMb: number | null;
+  maxRequestSizeMb: number | null;
 }
 
 /** Отказ по потолку: ключ локализации и параметры, текст собирает интерфейс. */
@@ -95,15 +95,15 @@ export function intakeFiles(chosen: File[], incoming: File[], limits: Limits): I
     candidates = accepted;
   }
 
-  if (limits.maxFileSizeMb !== null) {
+  if (limits.maxRequestSizeMb !== null) {
     const { accepted, rejected } = splitByRequestBudget(
-      chosen, candidates, limits.maxFileSizeMb * 1024 * 1024,
+      chosen, candidates, limits.maxRequestSizeMb * 1024 * 1024,
     );
     if (rejected.length > 0) {
       errors.push({
         key: 'upload.sizeError',
         params: {
-          size: limits.maxFileSizeMb,
+          size: limits.maxRequestSizeMb,
           names: rejected
             .map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`)
             .join(', '),

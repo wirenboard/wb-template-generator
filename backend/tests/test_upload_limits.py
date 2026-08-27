@@ -290,6 +290,40 @@ class TestAnalyzeUploadLimits:
         assert str(settings.MAX_FILES) in resp.json()["detail"]
         assert "PDF" in resp.json()["detail"]
 
+    def test_sum_of_files_over_limit_rejected(self, client):
+        """Каждый файл меньше потолка, а запрос целиком больше — потолок на запрос."""
+        settings = main.get_settings()
+        half = b"0" * (settings.MAX_REQUEST_SIZE_MB * 1024 * 1024 // 2)
+        files = [("files", (f"page{i}.png", half, "image/png")) for i in range(3)]
+
+        resp = client.post(
+            "/api/analyze", files=files,
+            data={"llm_api_url": "https://api.provider.example/v1"},
+        )
+
+        assert resp.status_code == 413
+        assert resp.json()["message_key"] == "serverError.requestTooLarge"
+
+    def test_form_fields_count_toward_limit(self, client):
+        """Поля формы входят в потолок наравне с файлами — меряем тело, как nginx.
+
+        Файл сам по себе меньше потолка, перевес даёт промпт. Поле держим меньше мегабайта:
+        часть крупнее Starlette не отдаёт обработчику вовсе (`max_part_size`).
+        """
+        settings = main.get_settings()
+        limit = settings.MAX_REQUEST_SIZE_MB * 1024 * 1024
+        prompt = "x" * (limit // 4)
+        file_body = b"0" * (limit - limit // 4 + 1024)
+
+        resp = client.post(
+            "/api/analyze",
+            files=[("files", ("page.png", file_body, "image/png"))],
+            data={"llm_api_url": "https://api.provider.example/v1", "system_prompt": prompt},
+        )
+
+        assert resp.status_code == 413
+        assert resp.json()["message_key"] == "serverError.requestTooLarge"
+
 
 class TestStatusExposesLimits:
     """Потолки входа отдаёт сервер — интерфейс отсекает по ним набор до отправки."""
@@ -300,7 +334,7 @@ class TestStatusExposesLimits:
         payload = TestClient(main.app).get("/api/status").json()
 
         assert payload["max_files"] == settings.MAX_FILES
-        assert payload["max_file_size_mb"] == settings.MAX_FILE_SIZE_MB
+        assert payload["max_request_size_mb"] == settings.MAX_REQUEST_SIZE_MB
         assert sorted(payload["allowed_extensions"]) == sorted(main._ALLOWED_EXTENSIONS)
 
 
@@ -314,7 +348,7 @@ class TestImportUploadLimits:
     def test_large_template_rejected(self, client):
         """Файл больше потолка отклоняется до разбора."""
         settings = main.get_settings()
-        payload = b"{}" + b" " * (settings.MAX_FILE_SIZE_MB * 1024 * 1024)
+        payload = b"{}" + b" " * (settings.MAX_REQUEST_SIZE_MB * 1024 * 1024)
 
         resp = client.post(
             "/api/import-template",
@@ -322,7 +356,7 @@ class TestImportUploadLimits:
         )
 
         assert resp.status_code == 413
-        assert resp.json()["message_key"] == "serverError.fileTooLarge"
+        assert resp.json()["message_key"] == "serverError.requestTooLarge"
 
     def test_normal_template_still_imported(self, client):
         """Обычный шаблон проходит — потолок не мешает штатному импорту."""

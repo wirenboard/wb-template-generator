@@ -86,7 +86,7 @@ describe('splitByCount', () => {
 });
 
 describe('intakeFiles', () => {
-  const limits = { allowedExtensions: ALLOWED, maxFiles: 3, maxFileSizeMb: 2 };
+  const limits = { allowedExtensions: ALLOWED, maxFiles: 3, maxRequestSizeMb: 2 };
 
   it('пропускает подходящий набор без ошибок', () => {
     const { accepted, errors } = intakeFiles([], [fileOf('map.pdf', 10)], limits);
@@ -109,7 +109,7 @@ describe('intakeFiles', () => {
   it('без потолков сервера ничего не отсекает', () => {
     const incoming = [fileOf('notes.txt', 10 * MB), fileOf('x.docx', 10)];
     const { accepted, errors } = intakeFiles(
-      [], incoming, { allowedExtensions: null, maxFiles: null, maxFileSizeMb: null },
+      [], incoming, { allowedExtensions: null, maxFiles: null, maxRequestSizeMb: null },
     );
     expect(accepted).toHaveLength(2);
     expect(errors).toEqual([]);

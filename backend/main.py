@@ -63,20 +63,29 @@ def get_version() -> str:
 _ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".png", ".jpg", ".jpeg", ".webp"}
 
 
-def _file_too_large(filename: str | None, content: bytes, request_id: str | None) -> JSONResponse | None:
-    """Готовый отказ 413, если файл больше потолка. None — размер в порядке.
+def _request_size(request: Request, files_total: int) -> int:
+    """Размер запроса в байтах.
+
+    Content-Length меряет тело целиком, вместе с полями формы, — то же число, что и
+    nginx. При chunked-передаче заголовка нет, тогда остаётся сумма файлов.
+    """
+    raw = request.headers.get("content-length")
+    return int(raw) if raw and raw.isdigit() else files_total
+
+
+def _request_too_large(size: int, request_id: str | None) -> JSONResponse | None:
+    """Готовый отказ 413, если запрос больше потолка. None — размер в порядке.
 
     Потолок общий у анализа и импорта шаблона, статус и параметры текста обязаны совпадать.
     """
-    max_mb = get_settings().MAX_FILE_SIZE_MB
-    if len(content) <= max_mb * 1024 * 1024:
+    max_mb = get_settings().MAX_REQUEST_SIZE_MB
+    if size <= max_mb * 1024 * 1024:
         return None
     return JSONResponse(
         status_code=413,
         content=UserError(
-            "serverError.fileTooLarge",
-            file=filename,
-            size=f"{len(content) / 1024 / 1024:.1f}",
+            "serverError.requestTooLarge",
+            size=f"{size / 1024 / 1024:.1f}",
             max=max_mb,
         ).payload(request_id),
     )
@@ -340,7 +349,7 @@ async def status():
     settings = get_settings()
     result: dict = {
         "llm_available": bool(settings.LLM_API_URL),
-        "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+        "max_request_size_mb": settings.MAX_REQUEST_SIZE_MB,
         "max_files": settings.MAX_FILES,
         "allowed_extensions": sorted(_ALLOWED_EXTENSIONS),
         "version": app.version,
@@ -517,14 +526,16 @@ async def analyze(
                 ).payload(request_id),
             )
 
-    # Читаем содержимое файлов и проверяем размер
+    # Тело FastAPI разобрал до входа в обработчик, поэтому размер проверяем после чтения
     file_data: list[tuple[str, bytes]] = []
     for f in files:
-        content = await f.read()
-        too_large = _file_too_large(f.filename, content, request_id)
-        if too_large is not None:
-            return too_large
-        file_data.append((f.filename or "unknown", content))
+        file_data.append((f.filename or "unknown", await f.read()))
+
+    too_large = _request_too_large(
+        _request_size(request, sum(len(content) for _, content in file_data)), request_id,
+    )
+    if too_large is not None:
+        return too_large
 
     # Парсим языки переводов из comma-separated строки
     langs: list[str] | None = None
@@ -818,7 +829,7 @@ async def translate(request: TranslateRequest):
 
 
 @app.post("/api/import-template")
-async def import_template_endpoint(file: UploadFile = File(...)):
+async def import_template_endpoint(request: Request, file: UploadFile = File(...)):
     """Импорт существующего JSON/Jinja шаблона wb-mqtt-serial в формат редактора.
 
     Возвращает {device_info, registers, groups} — тот же формат что /api/analyze.
@@ -827,8 +838,8 @@ async def import_template_endpoint(file: UploadFile = File(...)):
     filename = file.filename or "template.json"
     request_id = get_request_id()
 
-    # Шаблон читается целиком в память, потолок тот же, что у файлов анализа
-    too_large = _file_too_large(filename, content, request_id)
+    # Шаблон читается целиком в память, потолок тот же, что у анализа
+    too_large = _request_too_large(_request_size(request, len(content)), request_id)
     if too_large is not None:
         return too_large
 

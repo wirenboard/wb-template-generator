@@ -105,7 +105,7 @@ interface TemplateStore {
   serverModel: string | null;
   uploadErrors: IntakeError[];
   // Потолки приёма файлов, приходят из /api/status. null = ответа ещё нет
-  maxFileSizeMb: number | null;
+  maxRequestSizeMb: number | null;
   maxFiles: number | null;
   allowedExtensions: string[] | null;
   appVersion: string | null;
@@ -239,7 +239,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
   llmAvailable: null,
   serverModel: null,
   uploadErrors: [],
-  maxFileSizeMb: null,
+  maxRequestSizeMb: null,
   maxFiles: null,
   allowedExtensions: null,
   appVersion: null,
@@ -271,7 +271,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
     const { accepted, errors } = intakeFiles(s.files, newFiles, {
       allowedExtensions: s.allowedExtensions,
       maxFiles: s.maxFiles,
-      maxFileSizeMb: s.maxFileSizeMb,
+      maxRequestSizeMb: s.maxRequestSizeMb,
     });
     set({ files: [...s.files, ...accepted], uploadErrors: errors });
     return accepted.length;
@@ -931,7 +931,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
     fetchStatus()
       .then((s) => {
         const patch: Record<string, unknown> = {
-          maxFileSizeMb: s.max_file_size_mb ?? null,
+          maxRequestSizeMb: s.max_request_size_mb ?? null,
           maxFiles: s.max_files ?? null,
           allowedExtensions: s.allowed_extensions ?? null,
           serverModel: s.server_model ?? null,

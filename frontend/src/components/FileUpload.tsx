@@ -11,7 +11,7 @@ export default function FileUpload() {
   const files = useStore((s) => s.files);
   const addFiles = useStore((s) => s.addFiles);
   const removeFile = useStore((s) => s.removeFile);
-  const maxFileSizeMb = useStore((s) => s.maxFileSizeMb);
+  const maxRequestSizeMb = useStore((s) => s.maxRequestSizeMb);
   const allowedExtensions = useStore((s) => s.allowedExtensions);
   const uploadErrors = useStore((s) => s.uploadErrors);
   const clearUploadErrors = useStore((s) => s.clearUploadErrors);
@@ -102,9 +102,9 @@ export default function FileUpload() {
         <p className="text-gray-600 font-medium">
           {t('upload.dropzone')}
         </p>
-        {maxFileSizeMb !== null && (
+        {maxRequestSizeMb !== null && (
           <p className="text-gray-400 text-sm mt-1">
-            {t('upload.formats', { size: maxFileSizeMb })}
+            {t('upload.formats', { size: maxRequestSizeMb })}
           </p>
         )}
         <p className="text-gray-400 text-xs mt-0.5">
