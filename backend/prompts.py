@@ -1,5 +1,7 @@
 """Промпты для LLM — извлечение регистров из документации Modbus-устройств."""
 
+from user_errors import UserError
+
 # Системный промпт на английском (LLM работает лучше на английском).
 # Переводы — через поле translations с произвольным количеством языков.
 
@@ -452,11 +454,13 @@ def get_analyze_prompt(template_type: str, languages: list[str] | None = None) -
 
     instruction = _TEMPLATE_TYPE_INSTRUCTIONS[tt]
     translation_languages = _build_translation_languages_text(languages)
-    return _SYSTEM_PROMPT.format(
+    prompt = _SYSTEM_PROMPT.format(
         template_type=tt.upper(),
         template_type_instruction=instruction,
         translation_languages=translation_languages,
     )
+    _ensure_prompt_size(prompt)
+    return prompt
 
 
 def get_retry_prompt() -> str:
@@ -548,6 +552,23 @@ def get_raw_prompts() -> dict:
     }
 
 
+# Потолок на результат рендера пользовательского промпта, в символах. Шаблон приходит от
+# клиента, а замена разворачивает каждое вхождение плейсхолдера, поэтому тысяча повторов
+# в небольшом шаблоне даёт сотни мегабайт.
+MAX_RENDERED_PROMPT_CHARS = 100_000
+
+
+def _ensure_prompt_size(prompt: str) -> None:
+    """Общий потолок на системный промпт — и дефолтный, и пользовательский.
+
+    Список языков приходит от клиента и на серверном ключе уезжает в промпт как есть.
+    """
+    if len(prompt) > MAX_RENDERED_PROMPT_CHARS:
+        raise UserError(
+            "serverError.promptTooLarge", size=len(prompt), max=MAX_RENDERED_PROMPT_CHARS,
+        )
+
+
 def render_custom_prompt(
     custom_prompt: str,
     template_type: str,
@@ -562,6 +583,9 @@ def render_custom_prompt(
 
     Returns:
         Готовый системный промпт для отправки в LLM.
+
+    Raises:
+        UserError: результат подстановки больше MAX_RENDERED_PROMPT_CHARS.
     """
     tt = template_type.lower()
     if tt not in _TEMPLATE_TYPE_INSTRUCTIONS:
@@ -569,11 +593,25 @@ def render_custom_prompt(
 
     instruction = _TEMPLATE_TYPE_INSTRUCTIONS[tt]
     translation_languages = _build_translation_languages_text(languages)
-    return custom_prompt.format(
-        template_type=tt.upper(),
-        template_type_instruction=instruction,
-        translation_languages=translation_languages,
-    )
+
+    # Замена вместо str.format — format даёт клиенту спецификаторы и доступ к атрибутам,
+    # «{template_type:>2000000000}» кладёт процесс по памяти
+    replacements = {
+        "{template_type}": tt.upper(),
+        "{template_type_instruction}": instruction,
+        "{translation_languages}": translation_languages,
+    }
+    for placeholder, value in replacements.items():
+        # Прирост считаем арифметикой, чтобы гигантская строка не создалась даже на мгновение
+        grown = len(custom_prompt) + custom_prompt.count(placeholder) * (len(value) - len(placeholder))
+        if grown > MAX_RENDERED_PROMPT_CHARS:
+            raise UserError(
+                "serverError.promptTooLarge", size=grown, max=MAX_RENDERED_PROMPT_CHARS,
+            )
+        custom_prompt = custom_prompt.replace(placeholder, value)
+    # Дефолтный шаблон написан под str.format, примеры JSON в нём заэкранированы двойными
+    # скобками — без снятия экранирования они уйдут в модель битыми
+    return custom_prompt.replace("{{", "{").replace("}}", "}")
 
 
 _TRANSLATE_PROMPT = """\

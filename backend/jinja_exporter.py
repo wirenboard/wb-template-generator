@@ -17,12 +17,16 @@
 Минимум 2 элемента для паттерна.
 """
 
+import itertools
 import json
 import re
 from collections import defaultdict
 from typing import Any
 
 _PLACEHOLDER = "\x00"
+
+# Сколько чисел в одной строке рассматриваем как кандидаты на подстановку, см. _extract_number_variants
+MAX_NUMBER_VARIANTS = 16
 
 # Поля, которые могут содержать варьирующийся номер и шаблонизируются
 _CHANNEL_TEMPLATED_FIELDS = {"group", "condition"}
@@ -42,12 +46,15 @@ _VARIANT_FIELDS = {"sporadic", "condition"}
 # ---------------------------------------------------------------------------
 
 def _extract_number_variants(text: str) -> list[tuple[str, int, int, int]]:
-    """Извлекает все варианты замены числа на placeholder в тексте.
+    """Извлекает варианты замены числа на placeholder в тексте.
 
-    Возвращает список кортежей (шаблон, число, start_позиция, end_позиция).
+    Возвращает кортежи (шаблон, число, start_позиция, end_позиция), не больше
+    `MAX_NUMBER_VARIANTS` штук — на каждое число копируется вся строка, и без потолка
+    имя канала из одних цифр даёт квадратичный расход памяти и времени. Обрезка не портит
+    результат, а лишь уменьшает шанс собрать цикл.
     """
     variants = []
-    for match in re.finditer(r"\d+", text):
+    for match in itertools.islice(re.finditer(r"\d+", text), MAX_NUMBER_VARIANTS):
         num = int(match.group())
         start, end = match.start(), match.end()
         template = text[:start] + _PLACEHOLDER + text[end:]

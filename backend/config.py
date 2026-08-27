@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     LLM_ALLOW_PRIVATE_URLS: bool = False  # True = адрес LLM из запроса может вести во внутреннюю сеть
     LLM_TIMEOUT: int = 600  # Жёсткий таймаут HTTP-запроса к LLM API (сек)
     LLM_SOFT_TIMEOUT: int = 180  # Мягкий таймаут — предложить продолжить/отменить (сек)
-    MAX_FILE_SIZE_MB: int = 2  # Максимальный размер одного файла в МБ
+    MAX_REQUEST_SIZE_MB: int = 2  # Потолок на запрос целиком в МБ, не на файл
+    MAX_FILES: int = 10  # Файлов в одном запросе — каждый это свой разбор и своя часть запроса к модели
 
     # Очереди
     QUEUE_SERVER_MAX_CONCURRENT: int = 15  # Параллельных запросов к серверному LLM
@@ -34,8 +35,8 @@ class Settings(BaseSettings):
     # Логирование
     LOG_FORMAT: str = "text"  # text или json
 
-    # CORS
-    CORS_ORIGINS: str = "*"  # Через запятую: "http://localhost:9080,https://app.example.com"
+    # Пусто = кросс-доменные запросы запрещены. Интерфейс ходит через тот же origin, CORS ему не нужен.
+    CORS_ORIGINS: str = ""  # Через запятую: "http://localhost:9080,https://app.example.com"
 
     # Telegram-уведомления о сбоях LLM API (только для серверного LLM)
     TELEGRAM_NOTIFY_ENABLED: bool = False           # выключено по умолчанию

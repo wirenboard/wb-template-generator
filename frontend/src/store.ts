@@ -4,7 +4,8 @@ import type {
   AnalyzeLlmConfig,
 } from './types';
 import { buildTemplate, analyzeFiles, fetchStatus, translateStrings, importTemplate as importTemplateApi, validateRegisters as validateRegistersApi, fixRegisters as fixRegistersApi } from './api';
-import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN, DEFAULT_MAX_FILE_SIZE_MB } from './constants';
+import { DEFAULT_LANGUAGES, LANGUAGES_STORAGE_KEY, HAS_NON_LATIN } from './constants';
+import { intakeFiles, type IntakeError } from './utils/uploadLimits';
 import { generateId } from './utils';
 import type { Locale } from './i18n';
 import { getT, getHasTranslations } from './i18n';
@@ -102,13 +103,19 @@ interface TemplateStore {
   llmConfig: AnalyzeLlmConfig;
   llmAvailable: boolean | null;
   serverModel: string | null;
-  maxFileSizeMb: number;
+  uploadErrors: IntakeError[];
+  // Потолки приёма файлов, приходят из /api/status. null = ответа ещё нет
+  maxRequestSizeMb: number | null;
+  maxFiles: number | null;
+  allowedExtensions: string[] | null;
   appVersion: string | null;
   previewLang: string;
 
   // Действия
   setFiles: (files: File[]) => void;
-  addFiles: (files: File[]) => void;
+  /** Отбирает файлы по потолкам сервера и возвращает число принятых. */
+  addFiles: (files: File[]) => number;
+  clearUploadErrors: () => void;
   removeFile: (index: number) => void;
   setRegisters: (registers: Register[]) => void;
   updateRegister: (id: string, patch: Partial<Register>) => void;
@@ -231,7 +238,10 @@ export const useStore = create<TemplateStore>((set, get) => ({
   llmConfig: _saved.llmConfig ?? {},
   llmAvailable: null,
   serverModel: null,
-  maxFileSizeMb: DEFAULT_MAX_FILE_SIZE_MB,
+  uploadErrors: [],
+  maxRequestSizeMb: null,
+  maxFiles: null,
+  allowedExtensions: null,
   appVersion: null,
   previewLang: 'en',
   languages: loadLanguages(),
@@ -255,7 +265,19 @@ export const useStore = create<TemplateStore>((set, get) => ({
   fixWithAiError: null,
 
   setFiles: (files) => set({ files }),
-  addFiles: (newFiles) => set((s) => ({ files: [...s.files, ...newFiles] })),
+  // Отбор живёт в сторе, а не в компоненте загрузки: файлы кладёт ещё и hero-блок
+  addFiles: (newFiles) => {
+    const s = get();
+    const { accepted, errors } = intakeFiles(s.files, newFiles, {
+      allowedExtensions: s.allowedExtensions,
+      maxFiles: s.maxFiles,
+      maxRequestSizeMb: s.maxRequestSizeMb,
+    });
+    set({ files: [...s.files, ...accepted], uploadErrors: errors });
+    return accepted.length;
+  },
+
+  clearUploadErrors: () => set({ uploadErrors: [] }),
   removeFile: (index) => set((s) => ({ files: s.files.filter((_, i) => i !== index) })),
 
   setRegisters: (registers) => {
@@ -909,7 +931,9 @@ export const useStore = create<TemplateStore>((set, get) => ({
     fetchStatus()
       .then((s) => {
         const patch: Record<string, unknown> = {
-          maxFileSizeMb: s.max_file_size_mb ?? DEFAULT_MAX_FILE_SIZE_MB,
+          maxRequestSizeMb: s.max_request_size_mb ?? null,
+          maxFiles: s.max_files ?? null,
+          allowedExtensions: s.allowed_extensions ?? null,
           serverModel: s.server_model ?? null,
           appVersion: s.version ?? null,
         };

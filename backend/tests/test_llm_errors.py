@@ -11,9 +11,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from llm_errors import (  # noqa: E402, I001
+    ALL_CATEGORIES,
     ErrorCategory,
     Severity,
     classify,
+    public_key,
 )
 
 
@@ -166,17 +168,17 @@ class TestOtherCategories:
         assert result.severity == Severity.CRITICAL
 
     def test_bad_request_error(self):
-        """400 → BAD_REQUEST/critical."""
+        """400 → BAD_REQUEST/warning."""
         exc = _make_status_error(
             openai.BadRequestError, 400,
             message="Invalid request",
         )
         result = classify(exc)
         assert result.category == ErrorCategory.BAD_REQUEST
-        assert result.severity == Severity.CRITICAL
+        assert result.severity == Severity.WARNING
 
     def test_unprocessable_entity_error(self):
-        """422 → BAD_REQUEST/critical."""
+        """422 → BAD_REQUEST/warning."""
         exc = _make_status_error(
             openai.UnprocessableEntityError, 422,
             message="Unprocessable",
@@ -276,6 +278,120 @@ class TestEdgeCases:
         )
         result = classify(exc)
         assert result.category in (ErrorCategory.RATE_LIMIT, ErrorCategory.QUOTA_EXCEEDED)
+
+
+class TestHttpxErrors:
+    """Список моделей запрашивается напрямую через httpx, минуя openai SDK.
+
+    Без этих ветвей его сбои попадали бы в «неизвестно».
+    """
+
+    def _status_error(self, status: int, message: str = "error") -> httpx.HTTPStatusError:
+        request = httpx.Request("GET", "https://api.provider.example/v1/models")
+        response = httpx.Response(status_code=status, request=request, json={})
+        return httpx.HTTPStatusError(message, request=request, response=response)
+
+    def test_unauthorized_is_auth(self):
+        """401 от провайдера — не принят ключ."""
+        assert classify(self._status_error(401)).category == ErrorCategory.AUTH
+
+    def test_not_found_is_not_found(self):
+        """404 — адрес или модель не найдены."""
+        assert classify(self._status_error(404)).category == ErrorCategory.NOT_FOUND
+
+    def test_server_error(self):
+        """5xx — сбой на стороне провайдера."""
+        result = classify(self._status_error(503))
+        assert result.category == ErrorCategory.SERVER_ERROR
+        assert result.severity == Severity.WARNING
+
+    @pytest.mark.parametrize("status,expected", [
+        (429, ErrorCategory.RATE_LIMIT),
+        (403, ErrorCategory.PERMISSION),
+    ])
+    def test_status_with_own_branch(self, status, expected):
+        """429 и 403 разветвляются внутри по quota-маркеру — без SDK-класса тоже.
+
+        Через httpx у этих статусов нет своего класса исключения, а список моделей
+        ходит только так, и 429 для него самый частый сбой.
+        """
+        assert classify(self._status_error(status)).category == expected
+
+    @pytest.mark.parametrize("status", [429, 403])
+    def test_quota_marker_wins_on_both_statuses(self, status):
+        """Маркер квоты в тексте важнее статуса: серьёзность у категорий разная."""
+        exc = self._status_error(status, "insufficient_quota")
+
+        result = classify(exc)
+        assert result.category == ErrorCategory.QUOTA_EXCEEDED
+        assert result.severity == Severity.CRITICAL
+
+    def test_connect_error_is_connection(self):
+        """Соединение не установилось."""
+        exc = httpx.ConnectError("connection refused")
+        assert classify(exc).category == ErrorCategory.CONNECTION
+
+    def test_timeout_is_timeout(self):
+        """Таймаут отличается от отказа соединения."""
+        exc = httpx.ReadTimeout("timed out")
+        assert classify(exc).category == ErrorCategory.TIMEOUT
+
+
+class TestStatusBranchOrder:
+    """Классификация по статусу общая для SDK и httpx, и стоит ниже проверок по классу.
+
+    Поднять её выше нельзя — RateLimitError с quota-маркерами перестанет попадать
+    в QUOTA_EXCEEDED.
+    """
+
+    def _status_error(self, status: int) -> openai.APIStatusError:
+        request = httpx.Request("POST", "https://api.provider.example/v1/chat/completions")
+        response = httpx.Response(status_code=status, request=request, json={})
+        return openai.APIStatusError("error", response=response, body=None)
+
+    @pytest.mark.parametrize("status,expected", [
+        (401, ErrorCategory.AUTH),
+        (404, ErrorCategory.NOT_FOUND),
+        (400, ErrorCategory.BAD_REQUEST),
+        (503, ErrorCategory.SERVER_ERROR),
+    ])
+    def test_bare_api_status_error_classified_by_status(self, status, expected):
+        assert classify(self._status_error(status)).category == expected
+
+    def test_quota_still_wins_over_status(self):
+        """Специфичная ветка выше общей: 429 с quota-маркером — не rate limit."""
+        request = httpx.Request("POST", "https://api.provider.example/v1/chat/completions")
+        response = httpx.Response(status_code=429, request=request, json={})
+        exc = openai.RateLimitError(
+            "You exceeded your current quota", response=response, body=None,
+        )
+
+        assert classify(exc).category == ErrorCategory.QUOTA_EXCEEDED
+
+
+class TestPublicPhrases:
+    """У каждой категории есть текст в каталоге.
+
+    `render_key` бросает `KeyError` на незнакомом ключе, поэтому новая категория без
+    записи в каталоге уронила бы саму обработку ошибки.
+    """
+
+    @pytest.mark.parametrize("category", ALL_CATEGORIES, ids=lambda c: c.value)
+    def test_every_category_has_text(self, category):
+        from user_errors import render_key
+
+        text = render_key(f"llmError.{category.value}")
+
+        assert text.strip()
+        assert "{" not in text  # плейсхолдеров у этих фраз нет, подставлять нечего
+
+    def test_unclassified_exception_still_gets_key(self):
+        """Любое исключение получает ключ, а не пустую строку.
+
+        Сборка фразы из ключа и сокрытие текста провайдера проверяются на самой
+        ошибке — `test_error_disclosure.TestLLMApiError`.
+        """
+        assert public_key(RuntimeError("boom")) == "llmError.unknown"
 
 
 if __name__ == "__main__":

@@ -53,7 +53,9 @@ async function errorDetail(
 
 export interface ServerStatus {
   llm_available: boolean;
-  max_file_size_mb: number;
+  max_request_size_mb?: number;
+  max_files?: number;
+  allowed_extensions?: string[];
   server_model?: string;
   version?: string;
 }

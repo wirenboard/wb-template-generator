@@ -7,7 +7,6 @@
 """
 
 import asyncio
-import time
 
 from queue_manager import AnalyzeQueue
 
@@ -151,24 +150,36 @@ async def test_drain_releases_waiters():
     assert queue.active_count == 0
 
 
-async def test_activation_delay_applies_to_waiters_only():
-    """Задержка тормозит только того, кто стоял в очереди."""
+async def test_activation_delay_applies_to_waiters_only(monkeypatch):
+    """Задержка тормозит только того, кто стоял в очереди.
+
+    Сны записываются, а не отсчитываются по часам - порог, равный самой задержке,
+    ложно срабатывал на загруженной машине.
+    """
+    delays: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def recording_sleep(delay, *args, **kwargs):
+        if delay:
+            delays.append(delay)
+            return None
+        return await real_sleep(delay, *args, **kwargs)  # нулевой сон это шаг цикла событий
+
+    monkeypatch.setattr(asyncio, "sleep", recording_sleep)
     queue = AnalyzeQueue(max_concurrent=1, name="test", activation_delay=0.2)
 
     holder_ctx = queue.ticket("holder")
     holder = await holder_ctx.__aenter__()
 
-    started = time.monotonic()
     assert await holder.wait(timeout=0) is True
-    assert time.monotonic() - started < 0.2  # свободный слот занимается без задержки
+    assert delays == [], "свободный слот занимается без задержки"
 
     async with queue.ticket("waiter") as waiter:
         assert await waiter.wait(timeout=0) is False
         await holder_ctx.__aexit__(None, None, None)
 
-        started = time.monotonic()
         assert await waiter.wait(timeout=2) is True
-        assert time.monotonic() - started >= 0.2
+        assert delays == [0.2], "ждавший в очереди тормозится ровно на задержку"
 
 
 def test_status_and_eta_defaults():

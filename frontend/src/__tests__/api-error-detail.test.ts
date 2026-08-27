@@ -77,6 +77,35 @@ describe('resolveMessage: ключ вместо русской прозы', () =
     expect(result).toContain('Unexpected end of template');
   });
 
+  // Вложенный ключ — единственный способ доставить категорию сбоя провайдера, сырой текст
+  // исключения наружу не уходит. Сломается подстановка — пользователь увидит «llmError.auth».
+  it('вложенный reasonKey переводится, а не подставляется ключом', () => {
+    const result = api.resolveMessage(
+      { message_key: 'serverError.fixFailed', message_params: { reasonKey: 'llmError.auth' } },
+      'русский фолбек',
+    );
+
+    expect(result).toBe(
+      translations.en['serverError.fixFailed'].replace('{reason}', translations.en['llmError.auth']),
+    );
+    expect(result).not.toContain('llmError');
+  });
+
+  it('вложенный ключ работает и для нашего сбоя разбора, не только для категорий', () => {
+    const result = api.resolveMessage(
+      {
+        message_key: 'serverError.translateFailed',
+        message_params: { reasonKey: 'serverError.llmUnparsableResponse' },
+      },
+      'русский фолбек',
+    );
+
+    expect(result).toBe(
+      translations.en['serverError.translateFailed']
+        .replace('{reason}', translations.en['serverError.llmUnparsableResponse']),
+    );
+  });
+
   it('незнакомый ключ — показываем текст бэкенда, а не сам ключ', () => {
     const result = api.resolveMessage(
       { message_key: 'serverError.fromFutureVersion', message_params: {} },

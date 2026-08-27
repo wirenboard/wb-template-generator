@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
 
-const ACCEPTED = '.pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.bmp';
-const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp'];
+// Типы, которые вынимаем из буфера обмена. Отбор по потолкам сервера живёт в сторе
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 /** Компонент загрузки файлов с drag-n-drop и вставкой из буфера */
 export default function FileUpload() {
@@ -11,32 +11,21 @@ export default function FileUpload() {
   const files = useStore((s) => s.files);
   const addFiles = useStore((s) => s.addFiles);
   const removeFile = useStore((s) => s.removeFile);
-  const maxFileSizeMb = useStore((s) => s.maxFileSizeMb);
+  const maxRequestSizeMb = useStore((s) => s.maxRequestSizeMb);
+  const allowedExtensions = useStore((s) => s.allowedExtensions);
+  const uploadErrors = useStore((s) => s.uploadErrors);
+  const clearUploadErrors = useStore((s) => s.clearUploadErrors);
   const [dragging, setDragging] = useState(false);
   const [pasteFlash, setPasteFlash] = useState(false);
-  const [sizeError, setSizeError] = useState<string | null>(null);
+
+  const uploadError = uploadErrors.map((e) => t(e.key, e.params)).join(' ');
 
   const handleFiles = useCallback(
     (fileList: FileList | null) => {
       if (!fileList) return;
-      const arr = Array.from(fileList);
-      const maxBytes = maxFileSizeMb * 1024 * 1024;
-      const oversized = arr.filter((f) => f.size > maxBytes);
-      if (oversized.length > 0) {
-        const names = oversized.map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`).join(', ');
-        setSizeError(
-          oversized.length > 1
-            ? t('upload.sizeErrorMulti', { size: maxFileSizeMb, names })
-            : t('upload.sizeError', { size: maxFileSizeMb, names })
-        );
-        const valid = arr.filter((f) => f.size <= maxBytes);
-        if (valid.length > 0) addFiles(valid);
-        return;
-      }
-      setSizeError(null);
-      addFiles(arr);
+      addFiles(Array.from(fileList));
     },
-    [addFiles, maxFileSizeMb, t],
+    [addFiles],
   );
 
   const handleDrop = useCallback(
@@ -83,7 +72,8 @@ export default function FileUpload() {
 
       if (imageFiles.length > 0) {
         e.preventDefault();
-        addFiles(imageFiles);
+        // Ранний выход, иначе вспышка «принято» показывается на отклонённой картинке
+        if (addFiles(imageFiles) === 0) return;
         // Визуальная обратная связь
         setPasteFlash(true);
         setTimeout(() => setPasteFlash(false), 600);
@@ -112,16 +102,18 @@ export default function FileUpload() {
         <p className="text-gray-600 font-medium">
           {t('upload.dropzone')}
         </p>
-        <p className="text-gray-400 text-sm mt-1">
-          {t('upload.formats', { size: maxFileSizeMb })}
-        </p>
+        {maxRequestSizeMb !== null && (
+          <p className="text-gray-400 text-sm mt-1">
+            {t('upload.formats', { size: maxRequestSizeMb })}
+          </p>
+        )}
         <p className="text-gray-400 text-xs mt-0.5">
           {t('upload.paste')}
         </p>
         <input
           type="file"
           multiple
-          accept={ACCEPTED}
+          accept={allowedExtensions?.join(',')}
           onChange={(e) => {
             handleFiles(e.target.files);
             e.target.value = '';
@@ -130,11 +122,16 @@ export default function FileUpload() {
         />
       </label>
 
-      {/* Ошибка размера файла */}
-      {sizeError && (
-        <div className="mt-2 bg-amber-50 text-amber-700 border border-amber-200 rounded p-2 text-xs flex items-start justify-between gap-2">
-          <span>{sizeError}</span>
-          <button onClick={() => setSizeError(null)} className="text-amber-500 hover:text-amber-700 flex-shrink-0 font-bold">&times;</button>
+      {/* Файлы, которые не приняли */}
+      {uploadError && (
+        <div role="alert" className="mt-2 bg-amber-50 text-amber-700 border border-amber-200 rounded p-2 text-xs flex items-start justify-between gap-2">
+          <span>{uploadError}</span>
+          <button
+            onClick={clearUploadErrors}
+            title={t('upload.dismissError')}
+            aria-label={t('upload.dismissError')}
+            className="text-amber-500 hover:text-amber-700 flex-shrink-0 font-bold"
+          >&times;</button>
         </div>
       )}
 

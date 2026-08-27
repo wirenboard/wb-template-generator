@@ -7,6 +7,7 @@ import re
 import time
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
@@ -18,24 +19,23 @@ from openai import AsyncOpenAI
 import queue_manager
 from config import get_settings
 from jinja_exporter import build_jinja_template
-from llm_errors import ALL_CATEGORIES, ErrorCategory
+from llm_errors import ALL_CATEGORIES, ErrorCategory, public_key
 from llm_service import (
     UnsafeLLMUrlError,
     analysis_metrics,
     analyze_document,
+    call_llm,
     close_llm_http_clients,
     ensure_public_llm_url,
+    extract_json_from_response,
     get_llm_http_client,
     is_custom_llm_url,
+    report_and_log_llm_failure,
     resolve_llm_target,
 )
+from log_utils import SecretRedactingFilter, sanitize_for_log
 from models import BuildRequest, FixRegistersRequest, TranslateRequest, ValidateRequest
-from notifier import (
-    init_notifier,
-    register_metric_hook,
-    report_llm_api_error,
-    shutdown_notifier,
-)
+from notifier import init_notifier, register_metric_hook, shutdown_notifier
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueTicket, init_queues
 from request_context import generate_request_id, get_request_id, set_request_id
@@ -59,8 +59,37 @@ def get_version() -> str:
     return "dev"
 
 
-# Допустимые расширения загружаемых файлов
-_ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".webp"}
+# Допустимые расширения загружаемых файлов. Совпадает со списком в диалоге выбора (FileUpload.tsx)
+_ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _declared_too_large(request: Request, request_id: str | None) -> JSONResponse | None:
+    """Отказ по заявленному размеру тела, до чтения файлов в память.
+
+    Content-Length меряет тело целиком, вместе с полями формы, — то же число, что и
+    nginx. При chunked-передаче заголовка нет, тогда размер ловится по ходу чтения.
+    """
+    raw = request.headers.get("content-length")
+    return _request_too_large(int(raw), request_id) if raw and raw.isdigit() else None
+
+
+def _request_too_large(size: int, request_id: str | None) -> JSONResponse | None:
+    """Готовый отказ 413, если запрос больше потолка. None — размер в порядке.
+
+    Потолок общий у анализа и импорта шаблона, статус и параметры текста обязаны совпадать.
+    """
+    max_mb = get_settings().MAX_REQUEST_SIZE_MB
+    if size <= max_mb * 1024 * 1024:
+        return None
+    return JSONResponse(
+        status_code=413,
+        content=UserError(
+            "serverError.requestTooLarge",
+            size=f"{size / 1024 / 1024:.1f}",
+            max=max_mb,
+        ).payload(request_id),
+    )
+
 
 # Структурированное логирование с request_id
 class RequestIdFilter(logging.Filter):
@@ -73,6 +102,7 @@ def _setup_logging() -> None:
     settings = get_settings()
     handler = logging.StreamHandler()
     handler.addFilter(RequestIdFilter())
+    handler.addFilter(SecretRedactingFilter())
 
     if settings.LOG_FORMAT == "json":
         from pythonjsonlogger.json import JsonFormatter
@@ -108,6 +138,30 @@ _metrics = {
     # Счётчики ошибок LLM API по категориям (для мониторинга и Telegram-алертов)
     "llm_errors_by_category": {cat.value: 0 for cat in ALL_CATEGORIES},
 }
+
+# Обращения по маршрутам, "POST /api/analyze" → сколько раз вызвали и сколько из них с ошибкой.
+# Показывает, какими действиями пользуются в UI.
+_endpoint_hits: dict[str, int] = defaultdict(int)
+_endpoint_errors: dict[str, int] = defaultdict(int)
+
+
+@lru_cache(maxsize=1)
+def _known_routes() -> frozenset[str]:
+    """Пути зарегистрированных маршрутов. Считается один раз, при первом запросе.
+
+    На импорте `app.routes` ещё пуст, а lifespan не годится — часть тестов поднимает
+    приложение без него.
+    """
+    return frozenset(p for p in (getattr(r, "path", None) for r in app.routes) if p)
+
+
+def _route_key(method: str, path: str) -> str | None:
+    """Ключ счётчика для запроса или None, если такого маршрута нет.
+
+    По сырому `request.url.path` считать нельзя — сканер накачал бы словарь метрик
+    несуществующими путями до отказа по памяти.
+    """
+    return f"{method} {path}" if path in _known_routes() else None
 
 
 def _record_llm_error_metric(category: ErrorCategory) -> None:
@@ -186,7 +240,9 @@ _cors_origins = [o.strip() for o in get_settings().CORS_ORIGINS.split(",") if o.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=True,
+    # Куки и сессии сервис не использует, а с allow_credentials middleware отражает origin
+    # запросившего вместо «*», и любая страница читала бы ответы API из браузера пользователя.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Request-Id"],
@@ -203,11 +259,35 @@ async def request_id_middleware(request: Request, call_next):
     rid = generate_request_id()
     set_request_id(rid)
     start = time.monotonic()
-    logger.info("%s %s", request.method, request.url.path)
-    response = await call_next(request)
+    safe_path = sanitize_for_log(request.url.path)
+    logger.info("%s %s", request.method, safe_path)
+
+    # Считаем до вызова — при исключении хвост middleware не выполняется и запрос потерялся бы
+    key = _route_key(request.method, request.url.path)
+    if key:
+        _endpoint_hits[key] += 1
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        # Ошибку не глотаем, ответ соберёт global_exception_handler. Считаем здесь, потому что
+        # снаружи стоит ServerErrorMiddleware и до строк ниже управление при падении не доходит.
+        # Ошибки внутри SSE-потока сюда не попадают, для них есть счётчик analyze_errors.
+        if key:
+            _endpoint_errors[key] += 1
+        logger.info(
+            "%s %s → 500 (%.0f мс)", request.method, safe_path,
+            (time.monotonic() - start) * 1000,
+        )
+        raise
+
     duration_ms = (time.monotonic() - start) * 1000
     response.headers["X-Request-Id"] = rid
-    logger.info("%s %s → %d (%.0f мс)", request.method, request.url.path, response.status_code, duration_ms)
+
+    if key and response.status_code >= 400:
+        _endpoint_errors[key] += 1
+
+    logger.info("%s %s → %d (%.0f мс)", request.method, safe_path, response.status_code, duration_ms)
     return response
 
 
@@ -229,10 +309,15 @@ async def unsafe_llm_url_handler(request: Request, exc: UnsafeLLMUrlError):
 async def global_exception_handler(request: Request, exc: Exception):
     """Ловит необработанные ошибки и возвращает JSON с request_id."""
     rid = get_request_id()
-    logger.exception("Необработанная ошибка в %s %s", request.method, request.url.path)
+    logger.exception(
+        "Необработанная ошибка в %s %s", request.method, sanitize_for_log(request.url.path),
+    )
     return JSONResponse(
         status_code=500,
         content=UserError("serverError.internal").payload(rid),
+        # Заголовок вешает middleware, но при исключении до него не доходит — обработчик
+        # зовёт ServerErrorMiddleware, а он стоит снаружи
+        headers={"X-Request-Id": rid} if rid else None,
     )
 
 
@@ -257,11 +342,16 @@ async def health():
 
 @app.get("/api/status")
 async def status():
-    """Статус сервера — доступность LLM, лимиты и название модели."""
+    """Статус сервера — доступность LLM, лимиты и название модели.
+
+    Потолки отдаются интерфейсу, чтобы он отсекал заведомо отвергаемый набор до отправки.
+    """
     settings = get_settings()
     result: dict = {
         "llm_available": bool(settings.LLM_API_URL),
-        "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+        "max_request_size_mb": settings.MAX_REQUEST_SIZE_MB,
+        "max_files": settings.MAX_FILES,
+        "allowed_extensions": sorted(_ALLOWED_EXTENSIONS),
         "version": app.version,
     }
     if settings.LLM_API_URL:
@@ -298,6 +388,8 @@ async def metrics():
         # Автофикс: сколько прогонов его запускало и в скольких из них он убрал
         # все ошибки (ручная кнопка «Исправить через AI» не понадобилась).
         "analysis": dict(analysis_metrics),
+        "endpoints": dict(_endpoint_hits),
+        "endpoint_errors": dict(_endpoint_errors),
     }
 
 
@@ -343,15 +435,27 @@ async def list_models(
         data = resp.json()
         models = sorted(m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m)
         return JSONResponse(content={"models": models})
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        # Ответ пришёл, но это не список моделей — HTML прокси или чужая схема, а не сбой обращения
+        logger.exception("Список моделей не разобран")
+        return JSONResponse(
+            status_code=502,
+            content=UserError(
+                "serverError.modelsFailed",
+                reasonKey="serverError.llmUnparsableResponse",
+            ).payload(get_request_id()),
+        )
     except Exception as e:
-        logger.exception("Ошибка получения списка моделей")
-        await report_llm_api_error(
+        await report_and_log_llm_failure(
             e, endpoint="list_models", request_id=get_request_id(),
             model="", is_custom_llm=target.is_custom,
+            action="Сбой получения списка моделей",
         )
         return JSONResponse(
             status_code=502,
-            content=UserError("serverError.modelsFailed", reason=str(e)).payload(get_request_id()),
+            content=UserError(
+                "serverError.modelsFailed", reasonKey=public_key(e),
+            ).payload(get_request_id()),
         )
 
 
@@ -403,6 +507,14 @@ async def analyze(
     if llm_api_url:
         await ensure_public_llm_url(llm_api_url, settings.LLM_ALLOW_PRIVATE_URLS)
 
+    if len(files) > settings.MAX_FILES:
+        return JSONResponse(
+            status_code=400,
+            content=UserError(
+                "serverError.tooManyFiles", max=settings.MAX_FILES,
+            ).payload(request_id),
+        )
+
     # Проверка допустимых расширений файлов
     for f in files:
         ext = ("." + f.filename.rsplit(".", 1)[-1].lower()) if f.filename and "." in f.filename else ""
@@ -414,21 +526,19 @@ async def analyze(
                 ).payload(request_id),
             )
 
-    # Читаем содержимое файлов и проверяем размер
-    max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+    too_large = _declared_too_large(request, request_id)
+    if too_large is not None:
+        return too_large
+
+    # Сумма растёт по ходу чтения, поэтому лишний файл не доедет в память целиком
     file_data: list[tuple[str, bytes]] = []
+    total = 0
     for f in files:
         content = await f.read()
-        if len(content) > max_bytes:
-            return JSONResponse(
-                status_code=413,
-                content=UserError(
-                    "serverError.fileTooLarge",
-                    file=f.filename,
-                    size=f"{len(content) / 1024 / 1024:.1f}",
-                    max=settings.MAX_FILE_SIZE_MB,
-                ).payload(request_id),
-            )
+        total += len(content)
+        too_large = _request_too_large(total, request_id)
+        if too_large is not None:
+            return too_large
         file_data.append((f.filename or "unknown", content))
 
     # Парсим языки переводов из comma-separated строки
@@ -496,6 +606,7 @@ async def analyze(
                     yield event
 
         except Exception:
+            # Текст исключения наружу не отдаём — сюда доходят и сбои обращения к LLM
             logger.exception("Ошибка в очереди/анализе")
             _metrics["analyze_errors"] += 1
             yield sse_user_error(UserError("serverError.internalAnalyze"), request_id=request_id)
@@ -684,76 +795,61 @@ async def translate(request: TranslateRequest):
     )
 
     try:
-        # Выбираем параметр токенов в зависимости от настройки
-        token_key = "max_tokens" if effective_legacy else "max_completion_tokens"
-        fallback_key = "max_completion_tokens" if effective_legacy else "max_tokens"
-        translate_kwargs: dict = {
-            "model": effective_model,
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": strings_json},
-            ],
-            token_key: 4096,
-            "timeout": effective_timeout,
-        }
-        if effective_temperature is not None:
-            translate_kwargs["temperature"] = effective_temperature
-        # До 3 попыток с автоудалением неподдерживаемых параметров
-        for _attempt in range(3):
-            try:
-                response = await client.chat.completions.create(**translate_kwargs)
-                break
-            except Exception as e:
-                err_str = str(e)
-                fixed = False
-                if token_key in translate_kwargs and (fallback_key in err_str or token_key in err_str):
-                    logger.warning("Translate: %s → %s", token_key, fallback_key)
-                    del translate_kwargs[token_key]
-                    translate_kwargs[fallback_key] = 4096
-                    token_key = fallback_key
-                    fixed = True
-                if "temperature" in err_str and "temperature" in translate_kwargs:
-                    logger.warning("Translate: убираем temperature (не поддерживается моделью)")
-                    del translate_kwargs["temperature"]
-                    fixed = True
-                if not fixed:
-                    raise
-        raw = response.choices[0].message.content or "{}"
-        # Извлекаем JSON из ответа
-        raw = raw.strip()
-        json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", raw, re.DOTALL)
-        if json_match:
-            raw = json_match.group(1)
-        brace_start = raw.find("{")
-        if brace_start > 0:
-            raw = raw[brace_start:]
-        brace_end = raw.rfind("}")
-        if brace_end >= 0:
-            raw = raw[: brace_end + 1]
-
-        translations = json.loads(raw)
+        raw_response, _usage = await call_llm(
+            client,
+            effective_model,
+            prompt,
+            strings_json,
+            timeout=effective_timeout,
+            max_tokens=4096,
+            legacy_max_tokens=effective_legacy,
+            temperature=effective_temperature,
+        )
+        translations = extract_json_from_response(raw_response)
         return JSONResponse(content={"translations": translations})
+    except (json.JSONDecodeError, IndexError, AttributeError):
+        # Провайдер ответил, а разобрать ответ не удалось — модель вернула прозу или обрезанный
+        # JSON. Сбой наш, поэтому без категории llmError.* и без алерта нотификатора.
+        logger.exception("Ответ модели на перевод не разобран")
+        return JSONResponse(
+            status_code=500,
+            content=UserError(
+                "serverError.translateFailed",
+                reasonKey="serverError.llmUnparsableResponse",
+            ).payload(request_id),
+        )
     except Exception as e:
-        logger.exception("Ошибка перевода через LLM")
-        await report_llm_api_error(
+        await report_and_log_llm_failure(
             e, endpoint="translate", request_id=request_id,
             model=effective_model, is_custom_llm=is_custom_llm,
+            action="Сбой перевода через LLM",
         )
         return JSONResponse(
             status_code=500,
-            content=UserError("serverError.translateFailed", reason=str(e)).payload(request_id),
+            content=UserError(
+                "serverError.translateFailed", reasonKey=public_key(e),
+            ).payload(request_id),
         )
 
 
 @app.post("/api/import-template")
-async def import_template_endpoint(file: UploadFile = File(...)):
+async def import_template_endpoint(request: Request, file: UploadFile = File(...)):
     """Импорт существующего JSON/Jinja шаблона wb-mqtt-serial в формат редактора.
 
     Возвращает {device_info, registers, groups} — тот же формат что /api/analyze.
     """
+    request_id = get_request_id()
+
+    # Шаблон читается целиком в память, потолок тот же, что у анализа
+    too_large = _declared_too_large(request, request_id)
+    if too_large is not None:
+        return too_large
+
     content = await file.read()
     filename = file.filename or "template.json"
-    request_id = get_request_id()
+    too_large = _request_too_large(len(content), request_id)
+    if too_large is not None:
+        return too_large
 
     try:
         result = detect_and_import(content, filename)
@@ -764,7 +860,7 @@ async def import_template_endpoint(file: UploadFile = File(...)):
         )
     except TemplateImportError as e:
         # В __cause__ у отказа песочницы лежит атрибут, к которому лез шаблон
-        logger.warning("Импорт отклонён (%s): %s", e.key, e.__cause__ or e)
+        logger.warning("Импорт отклонён (%s): %s", e.key, sanitize_for_log(e.__cause__ or e))
         return JSONResponse(status_code=400, content=e.payload(request_id))
     except Exception:
         logger.exception("Ошибка импорта шаблона")

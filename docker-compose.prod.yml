@@ -3,10 +3,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000", "--no-access-log"]
     env_file: .env
     environment:
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost}
       - LOG_FORMAT=${LOG_FORMAT:-json}
     restart: always
     healthcheck:

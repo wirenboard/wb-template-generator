@@ -25,7 +25,7 @@ warn_return_any = true
 disallow_any_generics = false
 
 [[tool.mypy.overrides]]
-module = ["openai.*", "pdf2image.*", "openpyxl.*", "PIL.*", "httpx.*", "pdfplumber.*"]
+module = ["openai.*", "openpyxl.*", "PIL.*", "httpx.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

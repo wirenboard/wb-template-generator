@@ -25,7 +25,7 @@ import yaml  # noqa: E402
 from openai import AsyncOpenAI  # noqa: E402
 
 from config import Settings  # noqa: E402
-from llm_service import _call_llm, _extract_json_from_response, _parse_registers  # noqa: E402
+from llm_service import _parse_registers, call_llm, extract_json_from_response  # noqa: E402
 from prompts import get_analyze_prompt  # noqa: E402
 
 CASES_DIR = Path(__file__).parent / "cases"
@@ -131,7 +131,7 @@ async def run_case(
     content = [{"type": "text", "text": case_text}]
 
     try:
-        raw_response, _usage = await _call_llm(
+        raw_response, _usage = await call_llm(
             client, model, system_prompt, content,
             timeout, max_tokens, legacy_max_tokens, temperature,
         )
@@ -144,7 +144,7 @@ async def run_case(
         return 0, len(expected.get("registers", []))
 
     try:
-        raw_data = _extract_json_from_response(raw_response)
+        raw_data = extract_json_from_response(raw_response)
         _device_info, registers, _fixes = _parse_registers(raw_data)
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"  {_RED}ОШИБКА парсинга: {e}{_RESET}")

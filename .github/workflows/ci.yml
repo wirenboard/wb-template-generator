@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
-        run: apt-get update && apt-get install -y poppler-utils curl && rm -rf /var/lib/apt/lists/*
+        run: apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
       - name: Install Python dependencies
         run: pip install --no-cache-dir -r requirements.txt

@@ -955,7 +955,7 @@ export default function RegisterTable({
           <span className="text-xs text-green-600">{translateResult}</span>
         )}
         {translateError && !translating && (
-          <span className="text-xs text-red-600 truncate max-w-48" title={translateError}>{translateError}</span>
+          <span className="text-xs text-red-600 max-w-72 whitespace-pre-wrap break-words">{translateError}</span>
         )}
         {/* Счётчик ошибок валидации + кнопка "Исправить через AI" */}
         {(validationErrorCount > 0 || validationWarningCount > 0) && (
@@ -979,7 +979,7 @@ export default function RegisterTable({
           </span>
         )}
         {fixWithAiError && (
-          <span className="text-xs text-red-600 truncate max-w-48" title={fixWithAiError}>{fixWithAiError}</span>
+          <span className="text-xs text-red-600 max-w-72 whitespace-pre-wrap break-words">{fixWithAiError}</span>
         )}
 
         {/* Экспорт (правая сторона) */}

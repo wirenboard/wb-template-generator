@@ -65,7 +65,7 @@ backend/
   template_builder.py  # Детерминированная сборка JSON-шаблона
   template_importer.py # Импорт существующих .json/.json.jinja шаблонов
   jinja_exporter.py    # Экспорт в .json.jinja с детекцией паттернов
-  file_converter.py    # PDF→images, Excel→text, Image→base64
+  file_converter.py    # Excel→text, изображения→base64 с потолками на разбор
   prompts.py           # Системные промпты для LLM
   queue_manager.py     # Управление очередями анализа (server + custom)
   sse.py               # Формирование SSE-событий
