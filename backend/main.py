@@ -63,14 +63,14 @@ def get_version() -> str:
 _ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".png", ".jpg", ".jpeg", ".webp"}
 
 
-def _request_size(request: Request, files_total: int) -> int:
-    """Размер запроса в байтах.
+def _declared_too_large(request: Request, request_id: str | None) -> JSONResponse | None:
+    """Отказ по заявленному размеру тела, до чтения файлов в память.
 
     Content-Length меряет тело целиком, вместе с полями формы, — то же число, что и
-    nginx. При chunked-передаче заголовка нет, тогда остаётся сумма файлов.
+    nginx. При chunked-передаче заголовка нет, тогда размер ловится по ходу чтения.
     """
     raw = request.headers.get("content-length")
-    return int(raw) if raw and raw.isdigit() else files_total
+    return _request_too_large(int(raw), request_id) if raw and raw.isdigit() else None
 
 
 def _request_too_large(size: int, request_id: str | None) -> JSONResponse | None:
@@ -526,16 +526,20 @@ async def analyze(
                 ).payload(request_id),
             )
 
-    # Тело FastAPI разобрал до входа в обработчик, поэтому размер проверяем после чтения
-    file_data: list[tuple[str, bytes]] = []
-    for f in files:
-        file_data.append((f.filename or "unknown", await f.read()))
-
-    too_large = _request_too_large(
-        _request_size(request, sum(len(content) for _, content in file_data)), request_id,
-    )
+    too_large = _declared_too_large(request, request_id)
     if too_large is not None:
         return too_large
+
+    # Сумма растёт по ходу чтения, поэтому лишний файл не доедет в память целиком
+    file_data: list[tuple[str, bytes]] = []
+    total = 0
+    for f in files:
+        content = await f.read()
+        total += len(content)
+        too_large = _request_too_large(total, request_id)
+        if too_large is not None:
+            return too_large
+        file_data.append((f.filename or "unknown", content))
 
     # Парсим языки переводов из comma-separated строки
     langs: list[str] | None = None
@@ -834,12 +838,16 @@ async def import_template_endpoint(request: Request, file: UploadFile = File(...
 
     Возвращает {device_info, registers, groups} — тот же формат что /api/analyze.
     """
-    content = await file.read()
-    filename = file.filename or "template.json"
     request_id = get_request_id()
 
     # Шаблон читается целиком в память, потолок тот же, что у анализа
-    too_large = _request_too_large(_request_size(request, len(content)), request_id)
+    too_large = _declared_too_large(request, request_id)
+    if too_large is not None:
+        return too_large
+
+    content = await file.read()
+    filename = file.filename or "template.json"
+    too_large = _request_too_large(len(content), request_id)
     if too_large is not None:
         return too_large
 

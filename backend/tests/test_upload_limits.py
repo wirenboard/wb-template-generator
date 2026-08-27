@@ -304,6 +304,21 @@ class TestAnalyzeUploadLimits:
         assert resp.status_code == 413
         assert resp.json()["message_key"] == "serverError.requestTooLarge"
 
+    def test_sum_checked_while_reading(self, client, monkeypatch):
+        """Без Content-Length сумма ловится по ходу чтения, а не после всех файлов."""
+        monkeypatch.setattr(main, "_declared_too_large", lambda request, request_id: None)
+        settings = main.get_settings()
+        half = b"0" * (settings.MAX_REQUEST_SIZE_MB * 1024 * 1024 // 2)
+        files = [("files", (f"page{i}.png", half, "image/png")) for i in range(3)]
+
+        resp = client.post(
+            "/api/analyze", files=files,
+            data={"llm_api_url": "https://api.provider.example/v1"},
+        )
+
+        assert resp.status_code == 413
+        assert resp.json()["message_key"] == "serverError.requestTooLarge"
+
     def test_form_fields_count_toward_limit(self, client):
         """Поля формы входят в потолок наравне с файлами — меряем тело, как nginx.
 
