@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, Fragment } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
+import { numericValue } from '../utils/serialValues';
 import GroupSection from './GroupSection';
 import ChannelPreview from './ChannelPreview';
 import ParameterPreview from './ParameterPreview';
@@ -209,7 +210,7 @@ export default function TemplatePreview() {
   useEffect(() => {
     if (!template) return;
     const initial: Record<string, number> = {};
-    const allChannels: Array<{ name?: string; type?: string; enum?: unknown[]; min?: number }> = [
+    const allChannels: Array<{ name?: string; type?: string; enum?: unknown[]; min?: number | string }> = [
       ...Object.values(template.device?.channels ?? {}),
       ...Object.values(template.device?.parameters ?? {}),
     ];
@@ -221,7 +222,7 @@ export default function TemplatePreview() {
       } else if (ch.type === 'switch') {
         initial[key] = 0;
       } else if (ch.type === 'range' && ch.min !== undefined) {
-        initial[key] = ch.min;
+        initial[key] = numericValue(ch.min) ?? 0;
       }
     }
     for (const [pKey, p] of Object.entries(template.device?.parameters ?? {})) {

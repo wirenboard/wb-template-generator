@@ -64,6 +64,7 @@ backend/
   llm_service.py       # LLM-интеграция: analyze_document, автофикс регистров
   template_builder.py  # Детерминированная сборка JSON-шаблона
   template_importer.py # Импорт существующих .json/.json.jinja шаблонов
+  serial_values.py     # Разбор значений в записи wb-mqtt-serial — одна трактовка на весь бэкенд
   jinja_exporter.py    # Экспорт в .json.jinja с детекцией паттернов
   file_converter.py    # Excel→text, изображения→base64 с потолками на разбор
   prompts.py           # Системные промпты для LLM

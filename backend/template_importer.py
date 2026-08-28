@@ -6,6 +6,7 @@ import re
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment, SecurityError
 
+from serial_values import parse_address, parse_number
 from user_errors import UserError
 
 # Шаблон приходит от пользователя, а обычный Environment исполняет из него любой код
@@ -98,18 +99,12 @@ def _extract_group_translations(
     return result or None
 
 
-def _parse_address(addr) -> int | str:
-    """Парсит адрес: hex-строки → int, строки с ':' → as-is, числа → int."""
-    if isinstance(addr, int):
-        return addr
-    if isinstance(addr, str):
-        if ":" in addr:
-            return addr
-        try:
-            return int(addr, 0)
-        except (ValueError, TypeError):
-            return addr
-    return addr
+# Поля, где драйвер ждёт число, а шаблон приносит их и строкой — с точкой или с
+# запятой. Hex законен только в min и max, parse_number его не трогает.
+_NUMERIC_FIELDS = frozenset({
+    "scale", "offset", "round_to", "min", "max", "string_data_size",
+    "on_value", "off_value",
+})
 
 
 def _copy_optional_fields(source: dict, target: dict, fields: tuple[str, ...] = _OPTIONAL_FIELDS) -> None:
@@ -117,7 +112,7 @@ def _copy_optional_fields(source: dict, target: dict, fields: tuple[str, ...] = 
     for field in fields:
         value = source.get(field)
         if value is not None:
-            target[field] = value
+            target[field] = parse_number(value) if field in _NUMERIC_FIELDS else value
 
 
 def _to_register(
@@ -134,14 +129,14 @@ def _to_register(
     reg: dict = {
         "id": original_id or re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "unknown",
         "name": name,
-        "address": _parse_address(source.get("address", 0)),
+        "address": parse_address(source.get("address", 0)),
         "reg_type": source.get("reg_type", "holding"),
         "channel_type": source.get("type", "value"),
         "group": source.get("group", "general"),
         "is_parameter": is_parameter,
         "enabled": source.get("enabled", True),
-        "scale": source.get("scale", 1),
-        "offset": source.get("offset", 0),
+        "scale": parse_number(source.get("scale", 1)),
+        "offset": parse_number(source.get("offset", 0)),
     }
 
     # format: сохраняем только если явно задан в оригинале

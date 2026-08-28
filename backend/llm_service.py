@@ -33,6 +33,7 @@ from log_utils import sanitize_for_log
 from models import AnalyzeResponse, DeviceInfo, Register
 from notifier import report_llm_api_error
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
+from serial_values import address_sort_value, canonical_address, parse_address
 from sse import sse_done, sse_progress, sse_result, sse_user_error
 from user_errors import UserError, render_key
 
@@ -423,7 +424,7 @@ def _parse_registers(raw: dict, *, preserve_id: bool = False) -> tuple[DeviceInf
             logger.warning("Ошибка парсинга регистра %s: %s", sanitize_for_log(raw_reg), e)
             try:
                 reg = Register(
-                    address=int(raw_reg.get("address", 0)),
+                    address=parse_address(raw_reg.get("address", 0)),
                     name=str(raw_reg.get("name", "Unknown")),
                     **({"id": raw_reg["id"]} if preserve_id and raw_reg.get("id") else {}),
                 )
@@ -476,8 +477,8 @@ def _merge_batch_results(
     """
     device_info = DeviceInfo(name="Unknown Device", id="unknown-device")
     all_registers: list[Register] = []
-    # Ключ дедупа — (адрес, тип регистра, condition); адрес бывает строкой «109:1:2»
-    seen: set[tuple[int | str, str, str | None]] = set()
+    # Адрес в ключе — канонической записью: 255 и «0xff» это один регистр
+    seen: set[tuple[str, str, str | None]] = set()
     total_auto_fixed = 0
 
     for batch_info, batch_regs, batch_fixed in batches:
@@ -487,24 +488,13 @@ def _merge_batch_results(
             device_info = batch_info
 
         for reg in batch_regs:
-            key = (reg.address, reg.reg_type, reg.condition)
+            key = (canonical_address(reg.address), reg.reg_type, reg.condition)
             if key in seen:
                 continue
             seen.add(key)
             all_registers.append(reg)
 
-    # Сортируем по адресу (address может быть int или str "109:1:2")
-    def _sort_key(r):
-        addr = r.address
-        if isinstance(addr, str):
-            # "109:1:2" → сортируем по первому числу
-            try:
-                addr = int(addr.split(":")[0])
-            except (ValueError, IndexError):
-                addr = 0
-        return (r.reg_type, addr)
-
-    all_registers.sort(key=_sort_key)
+    all_registers.sort(key=lambda r: (r.reg_type, address_sort_value(r.address)))
     return device_info, all_registers, total_auto_fixed
 
 

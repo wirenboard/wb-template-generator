@@ -13,6 +13,7 @@ from functools import lru_cache
 
 from log_utils import sanitize_for_log
 from models import Register
+from serial_values import canonical_address, numeric_value, parse_address
 
 logger = logging.getLogger("wb-template-gen")
 
@@ -500,12 +501,24 @@ def validate_register(reg: Register) -> RegisterValidation:
             message_key="validation.readonlyConflict",
         ))
 
-    # min > max
-    if reg.min is not None and reg.max is not None and reg.min > reg.max:
+    # Число или hex-строка — обе записи разрешает схема (`serial_num`, `serial_int`)
+    for field_name in ("min", "max", "error_value", "on_value", "off_value"):
+        written = getattr(reg, field_name)
+        if written is not None and numeric_value(written) is None:
+            errors.append(FieldError(
+                field=field_name, severity=Severity.ERROR,
+                message_key="validation.invalidNumber",
+                message_params={"field": field_name, "value": str(written)},
+            ))
+
+    # min > max. Сравниваем значения: записи бывают разными
+    min_value = numeric_value(reg.min) if reg.min is not None else None
+    max_value = numeric_value(reg.max) if reg.max is not None else None
+    if min_value is not None and max_value is not None and min_value > max_value:
         errors.append(FieldError(
             field="min", severity=Severity.WARNING,
             message_key="validation.minGreaterThanMax",
-            message_params={"min": reg.min, "max": reg.max},
+            message_params={"min": str(reg.min), "max": str(reg.max)},
         ))
 
     # Параметр отключён — полностью исключается из шаблона (в отличие от каналов)
@@ -540,7 +553,7 @@ def validate_registers(registers: list[Register]) -> ValidationResult:
     # rv берём по позиции (validations[i] ↔ registers[i]) — id в шаблонах не уникальны.
     seen_addresses: dict[str, Register] = {}  # key → первый регистр
     for i, reg in enumerate(registers):
-        key = f"{reg.address}:{reg.reg_type}"
+        key = f"{canonical_address(reg.address)}:{reg.reg_type}"
         first = seen_addresses.get(key)
         if first is None:
             seen_addresses[key] = reg
@@ -605,7 +618,7 @@ def auto_fix_and_validate(
             )
             try:
                 reg = Register(
-                    address=int(raw_reg.get("address", 0)),
+                    address=parse_address(raw_reg.get("address", 0)),
                     name=str(raw_reg.get("name", "Unknown")),
                 )
                 registers.append(reg)

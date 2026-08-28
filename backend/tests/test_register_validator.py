@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 # Добавляем backend/ в sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -461,6 +463,40 @@ class TestValidateRegisters:
         ]
         assert len(dup_warnings) == 0
 
+    @pytest.mark.parametrize("first,second", [(255, "0xff"), ("0xff", "0xFF")])
+    def test_duplicate_across_address_notations(self, first, second):
+        """Один адрес в разных записях — форма записи дубликат не прячет."""
+        regs = [
+            _reg(address=first, reg_type="holding", name="Reg A"),
+            _reg(address=second, reg_type="holding", name="Reg B"),
+        ]
+        result = validate_registers(regs)
+        dup_warnings = [
+            e for rv in result.registers for e in rv.errors
+            if e.message_key == "validation.duplicateAddress"
+        ]
+        assert len(dup_warnings) == 1
+
+    @pytest.mark.parametrize("field,value", [
+        ("max", "0xff"), ("min", 0),
+        ("error_value", "0xFFFF"), ("error_value", 65535),
+        ("on_value", "0x0101"), ("off_value", 0),
+    ])
+    def test_two_notation_fields_are_valid(self, field, value):
+        """Схема разрешает в этих полях и число, и hex — ошибкой это не считаем."""
+        rv = validate_register(_reg(**{field: value}))
+        assert [e for e in rv.errors if e.field == field] == []
+
+    def test_min_greater_than_max_across_notations(self):
+        """0xff меньше 300 — сравнение идёт по значению, а не по записи."""
+        rv = validate_register(_reg(min="0xff", max=100))
+        assert any(e.message_key == "validation.minGreaterThanMax" for e in rv.errors)
+
+    def test_unparsable_limit_is_an_error(self):
+        rv = validate_register(_reg(max="мин"))
+        assert any(e.message_key == "validation.invalidNumber" and e.field == "max"
+                   for e in rv.errors)
+
     def test_no_duplicates_clean(self):
         regs = [
             _reg(address=100, name="Reg A"),
@@ -538,6 +574,13 @@ class TestAutoFixAndValidate:
 # ===================================================================
 # Тесты format_validation_errors
 # ===================================================================
+
+
+    def test_hex_address_survives_soft_branch(self):
+        """Регистр с ошибкой в другом поле не должен теряться из-за записи адреса."""
+        raw = [{"address": "0xff", "name": "Voltage", "enum": "не список"}]
+        registers, _, _ = auto_fix_and_validate(raw)
+        assert [r.address for r in registers] == ["0xff"]
 
 
 class TestFormatValidationErrors:

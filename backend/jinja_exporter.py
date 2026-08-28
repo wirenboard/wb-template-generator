@@ -23,6 +23,8 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from serial_values import progression_address
+
 _PLACEHOLDER = "\x00"
 
 # Сколько чисел в одной строке рассматриваем как кандидаты на подстановку, см. _extract_number_variants
@@ -122,12 +124,9 @@ def _validate_address_progression(items: list[tuple[Any, int, dict]],
     """
     addresses = []
     for _, _, item in items:
-        addr = item.get(address_field, 0)
-        if isinstance(addr, str):
-            try:
-                addr = int(addr, 0)
-            except (ValueError, TypeError):
-                return False, 0, 0
+        addr = progression_address(item.get(address_field, 0))
+        if addr is None:
+            return False, 0, 0
         addresses.append(addr)
 
     if len(addresses) < 2:
@@ -680,8 +679,13 @@ def _detect_string_channel_patterns(
             continue
 
         # Проверяем арифметическую прогрессию адресов
-        addresses = [ch.get("address", 0) for _, ch in group_items]
-        if len(addresses) < 2:
+        addresses = []
+        for _, ch in group_items:
+            addr = progression_address(ch.get("address", 0))
+            if addr is None:
+                break
+            addresses.append(addr)
+        if len(addresses) != len(group_items) or len(addresses) < 2:
             continue
         steps = [addresses[i + 1] - addresses[i] for i in range(len(addresses) - 1)]
         if len(set(steps)) != 1:

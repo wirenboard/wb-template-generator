@@ -73,6 +73,8 @@ for each meaningful bit or bit group using this format
    - `format`: "u16", "s16", "u32", "s32", "u64", "float", "string" (based on data size). \
 Use "u16" for 1-word unsigned, "s16" for 1-word signed, "u32"/"s32" for 2-word, "float" for IEEE 754 float (2 words), \
 "string" for text (set `string_data_size` to number of registers).
+   - Numbers: always write the decimal separator as a DOT, never a comma - `0.1`, not `0,1`. \
+Datasheets in Russian and other locales print a comma; convert it. Never use a thousands separator.
    - `scale`: multiplier to convert raw register value to real units. \
 Final value = raw_value * scale + offset. Examples:
      - Document says "value in 0.1 °C" → scale = 0.1 (raw 250 → 25.0 °C)

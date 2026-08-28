@@ -124,13 +124,15 @@ class Register(BaseModel):
     string_data_size: int | None = None
     word_order: ShortText | None = None
     byte_order: ShortText | None = None
-    error_value: ShortText | None = None
+    # Число и hex-строка равноправны (`definitions/serial_int`), в шаблонах есть обе
+    error_value: int | ShortText | None = None
     readonly: bool | None = None
-    min: int | float | None = None
-    max: int | float | None = None
+    # Строка — hex-запись, её разрешает `definitions/serial_num`
+    min: int | float | Annotated[str, StringConstraints(max_length=64)] | None = None
+    max: int | float | Annotated[str, StringConstraints(max_length=64)] | None = None
     round_to: int | float | None = None
-    on_value: int | None = None
-    off_value: int | None = None
+    on_value: int | ShortText | None = None
+    off_value: int | ShortText | None = None
     default_value: int | float | None = None
     translations: dict[str, RegisterTranslation] | None = None
     group_title_translations: dict[str, ShortText] | None = None

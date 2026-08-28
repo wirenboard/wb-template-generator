@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
+import { numericValue } from '../utils/serialValues';
 import type { WBChannel } from '../types';
 
 /** Placeholder-значения по единицам измерения */
@@ -55,8 +56,10 @@ export default function ChannelPreview({ channel, registerId, displayName, condi
 
   // Визуальные состояния для интерактивных контролов
   const [toggleOn, setToggleOn] = useState(true);
+  const minValue = numericValue(min);
+  const maxValue = numericValue(max);
   const [rangeVal, setRangeVal] = useState(
-    min != null && max != null ? Math.round((min + max) / 2) : 50,
+    minValue != null && maxValue != null ? Math.round((minValue + maxValue) / 2) : 50,
   );
   const [colorVal, setColorVal] = useState('#3b82f6');
 
@@ -141,7 +144,7 @@ export default function ChannelPreview({ channel, registerId, displayName, condi
             </div>
             {max != null && <span className="text-[10px] text-gray-400">{max}</span>}
             <span className="text-xs text-gray-400 font-mono w-8 text-right">
-              {min != null && max != null ? Math.round((min + max) / 2) : '--'}
+              {minValue != null && maxValue != null ? Math.round((minValue + maxValue) / 2) : '--'}
             </span>
           </div>
         );
@@ -152,8 +155,8 @@ export default function ChannelPreview({ channel, registerId, displayName, condi
           <input
             type="range"
             className="w-16 h-1 accent-blue-500"
-            min={min ?? 0}
-            max={max ?? 100}
+            min={minValue ?? 0}
+            max={maxValue ?? 100}
             value={rangeVal}
             onChange={(e) => { stop(e); const v = Number(e.target.value); setRangeVal(v); onValueChange?.(channel.name, v); }}
           />

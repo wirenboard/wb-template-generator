@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
+import { addressSortValue, parseAddressInput } from '../utils/serialValues';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -348,11 +349,13 @@ export default function RegisterTable({
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
-      const cmp = typeof av === 'boolean' && typeof bv === 'boolean'
-        ? Number(av) - Number(bv)
-        : typeof av === 'number' && typeof bv === 'number'
-          ? av - bv
-          : String(av).localeCompare(String(bv));
+      const cmp = sortField === 'address'
+        ? addressSortValue(av as string | number) - addressSortValue(bv as string | number)
+        : typeof av === 'boolean' && typeof bv === 'boolean'
+          ? Number(av) - Number(bv)
+          : typeof av === 'number' && typeof bv === 'number'
+            ? av - bv
+            : String(av).localeCompare(String(bv));
       return sortDir === 'asc' ? cmp : -cmp;
     });
   }, [registers, sortField, sortDir]);
@@ -743,9 +746,7 @@ export default function RegisterTable({
         allRegs.push({
           id: generateId(),
           enabled: col(cols, 'enabled', 0) !== '0',
-          address: col(cols, 'address', 1)?.includes(':')
-            ? col(cols, 'address', 1)
-            : (parseInt(col(cols, 'address', 1), 10) || 0),
+          address: parseAddressInput(col(cols, 'address', 1)) || 0,
           name: col(cols, 'name', 2) || 'New Register',
           description: col(cols, 'description', 3) || undefined,
           reg_type: (col(cols, 'reg_type', 4) as Register['reg_type']) || 'holding',
@@ -1535,12 +1536,10 @@ function RegisterRow({
         type="text"
         defaultValue={getDefaultValue(reg, col.field)}
         onBlur={(e) => {
-          let val: string | number = e.target.value;
-          // Адрес: если чистое число — конвертируем, иначе строка (побитовый)
-          if (col.field === 'address' && !e.target.value.includes(':')) {
-            const num = parseInt(e.target.value, 10);
-            if (!isNaN(num)) val = num;
-          }
+          // Адрес: число для десятичной записи, строка для hex и побитовой
+          const val = col.field === 'address'
+            ? parseAddressInput(e.target.value)
+            : e.target.value;
           onChange(reg.id, col.field, val);
           onStopEdit();
         }}

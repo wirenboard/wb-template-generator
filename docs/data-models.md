@@ -12,7 +12,7 @@
 
 ## Register (ключевые поля)
 
-- `address: int | str` — число или `"109:1:2"` (register:bit_offset:bit_width)
+- `address: int | str` — число, hex-строка `"0xFF"` или `"109:1:2"` (register:bit_offset:bit_width)
 - `name: str` — английское имя
 - `reg_type`: holding, input, coil, discrete
 - `format`: u16, s16, u32, s32, u64, s64, float, double, u8, s8, string
