@@ -43,6 +43,19 @@ class TestAutoFix:
         assert len(fixes) == 1
         assert fixes[0].field == "format"
 
+    @pytest.mark.parametrize("written,expected", [("0xff", 255), ("1,5", 1.5), ("100", 100)])
+    def test_fix_limit_notation(self, written, expected):
+        """Лимит от модели приходит и строкой — до pydantic разворачиваем в число."""
+        fixed, fixes = auto_fix_register({"max": written})
+        assert fixed["max"] == expected
+        assert [f.field for f in fixes] == ["max"]
+
+    def test_unparsable_limit_dropped(self):
+        """Регистр важнее одного поля — иначе он уедет в мягкую ветку с дефолтами."""
+        fixed, _ = auto_fix_register({"min": "до 100", "scale": 0.1})
+        assert "min" not in fixed
+        assert fixed["scale"] == 0.1
+
     def test_fix_format_int32(self):
         raw = {"format": "int32"}
         fixed, fixes = auto_fix_register(raw)
@@ -477,26 +490,6 @@ class TestValidateRegisters:
         ]
         assert len(dup_warnings) == 1
 
-    @pytest.mark.parametrize("field,value", [
-        ("max", "0xff"), ("min", 0),
-        ("error_value", "0xFFFF"), ("error_value", 65535),
-        ("on_value", "0x0101"), ("off_value", 0),
-    ])
-    def test_two_notation_fields_are_valid(self, field, value):
-        """Схема разрешает в этих полях и число, и hex — ошибкой это не считаем."""
-        rv = validate_register(_reg(**{field: value}))
-        assert [e for e in rv.errors if e.field == field] == []
-
-    def test_min_greater_than_max_across_notations(self):
-        """0xff меньше 300 — сравнение идёт по значению, а не по записи."""
-        rv = validate_register(_reg(min="0xff", max=100))
-        assert any(e.message_key == "validation.minGreaterThanMax" for e in rv.errors)
-
-    def test_unparsable_limit_is_an_error(self):
-        rv = validate_register(_reg(max="мин"))
-        assert any(e.message_key == "validation.invalidNumber" and e.field == "max"
-                   for e in rv.errors)
-
     def test_no_duplicates_clean(self):
         regs = [
             _reg(address=100, name="Reg A"),
@@ -693,3 +686,40 @@ class TestLegacySixDigitAddress:
             assert not any(
                 e.field == "address" and e.severity == Severity.ERROR for e in result.errors
             ), f"адрес {addr} не должен считаться ошибкой"
+
+
+class TestNumericFieldNotation:
+    """Запись поля с двумя записями проверяется паттерном схемы."""
+
+    @pytest.mark.parametrize("field,value", [
+        ("error_value", "0xFFFF"), ("error_value", 65535),
+        ("on_value", "0x0101"), ("off_value", 0),
+    ])
+    def test_both_notations_are_valid(self, field, value):
+        """Схема разрешает в этих полях и число, и hex — ошибкой это не считаем."""
+        rv = validate_register(_reg(**{field: value}))
+        assert [e for e in rv.errors if e.field == field] == []
+
+    @pytest.mark.parametrize("field,value", [
+        ("on_value", "1.5"),        # serial_int дробную часть не разрешает
+        ("error_value", "1e5"),     # экспоненту не разрешает ни один паттерн
+        ("off_value", "выкл"),
+    ])
+    def test_notation_outside_schema_is_an_error(self, field, value):
+        rv = validate_register(_reg(**{field: value}))
+        assert any(e.field == field and e.message_key == "validation.invalidNumber"
+                   for e in rv.errors)
+
+    def test_zero_scale_is_an_error(self):
+        """Канал с scale=0 читает константный ноль; отключают каналы флагом enabled."""
+        rv = validate_register(_reg(scale=0))
+        assert any(e.field == "scale" and e.message_key == "validation.zeroScale"
+                   for e in rv.errors)
+
+    def test_llm_gets_actionable_text(self):
+        """Ключ локализации в подсказке для модели бесполезен — нужен текст."""
+        regs = [_reg(id="r", name="Voltage", address=100, on_value="1.5")]
+        result = validate_registers(regs)
+        text = format_validation_errors(result, regs)
+        assert "validation." not in text
+        assert "0xFF" in text

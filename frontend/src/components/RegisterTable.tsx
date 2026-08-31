@@ -3,7 +3,7 @@ import { useStore } from '../store';
 import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
-import { addressSortValue, parseAddressInput } from '../utils/serialValues';
+import { compareAddresses, parseAddressInput } from '../utils/serialValues';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -350,7 +350,7 @@ export default function RegisterTable({
       if (av == null) return 1;
       if (bv == null) return -1;
       const cmp = sortField === 'address'
-        ? addressSortValue(av as string | number) - addressSortValue(bv as string | number)
+        ? compareAddresses(av as string | number, bv as string | number)
         : typeof av === 'boolean' && typeof bv === 'boolean'
           ? Number(av) - Number(bv)
           : typeof av === 'number' && typeof bv === 'number'

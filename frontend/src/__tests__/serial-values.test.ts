@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { addressSortValue, numericValue, parseAddressInput } from '../utils/serialValues';
+import {
+  addressSortKey, compareAddresses, parseAddressInput, parseSerialIntInput,
+} from '../utils/serialValues';
 
 describe('parseAddressInput', () => {
   it('десятичную запись отдаёт числом', () => {
@@ -36,52 +38,59 @@ describe('parseAddressInput', () => {
   });
 });
 
-describe('addressSortValue', () => {
+describe('addressSortKey', () => {
   it('считает hex по значению, а не по строке', () => {
-    expect(addressSortValue('0xff')).toBe(255);
-    expect(addressSortValue('0x10')).toBe(16);
+    expect(addressSortKey('0xff')).toEqual([255]);
+    expect(addressSortKey(109)).toEqual([109]);
   });
 
-  it('число отдаёт как есть', () => {
-    expect(addressSortValue(109)).toBe(109);
-  });
-
-  it('побитовый адрес сортирует по своему регистру', () => {
-    expect(addressSortValue('109:1:2')).toBe(109);
-    expect(addressSortValue('0x6D:0:1')).toBe(109);
+  it('побитовый адрес раскладывает по частям', () => {
+    expect(addressSortKey('109:1:2')).toEqual([109, 1, 2]);
+    expect(addressSortKey('0x6D:0:1')).toEqual([109, 0, 1]);
   });
 
   it('неразобранный адрес не ломает сортировку', () => {
-    expect(addressSortValue('12abc')).toBe(0);
-    expect(addressSortValue(undefined)).toBe(0);
+    expect(addressSortKey('12abc')).toEqual([0]);
+    expect(addressSortKey(undefined)).toEqual([0]);
   });
 
   it('упорядочивает смешанный список по значению адреса', () => {
     const addresses: Array<string | number> = [9, '0xff', 10, 255, '0x10', 2];
-    const sorted = [...addresses].sort((a, b) => addressSortValue(a) - addressSortValue(b));
-    expect(sorted).toEqual([2, 9, 10, '0x10', '0xff', 255]);
+    expect([...addresses].sort(compareAddresses)).toEqual([2, 9, 10, '0x10', '0xff', 255]);
   });
 });
 
-describe('numericValue', () => {
-  it('разбирает hex-лимит — «max»: «0xff» есть в шаблонах wb-mqtt-serial', () => {
-    expect(numericValue('0xff')).toBe(255);
-    expect(numericValue('0x0A')).toBe(10);
+describe('parseSerialIntInput', () => {
+  it('оставляет hex записью — драйвер её принимает, а у somfy это код команды', () => {
+    expect(parseSerialIntInput('0x0A0404')).toBe('0x0A0404');
+    expect(parseSerialIntInput('0XFF')).toBe('0xFF');
   });
 
-  it('принимает обе записи дробного числа', () => {
-    expect(numericValue('0,5')).toBe(0.5);
-    expect(numericValue('0.5')).toBe(0.5);
+  it('десятичное даёт число, включая отрицательное', () => {
+    expect(parseSerialIntInput('255')).toBe(255);
+    expect(parseSerialIntInput('-1')).toBe(-1);
   });
 
-  it('число отдаёт как есть, включая отрицательное', () => {
-    expect(numericValue(100)).toBe(100);
-    expect(numericValue(-99.9)).toBe(-99.9);
+  it('пустое поле стирает значение, незавершённый ввод его не трогает', () => {
+    expect(parseSerialIntInput('  ')).toBeUndefined();
+    expect(parseSerialIntInput('0x')).toBeNull();
+    expect(parseSerialIntInput('1.5')).toBeNull();
+  });
+});
+
+describe('compareAddresses', () => {
+  it('упорядочивает биты одного регистра, а не считает их равными', () => {
+    const bits = ['109:0:2', '109:1:1', '109:0:1'];
+    expect([...bits].sort(compareAddresses)).toEqual(['109:0:1', '109:0:2', '109:1:1']);
   });
 
-  it('неразобранное даёт null, а не подставляет ноль', () => {
-    expect(numericValue('мин')).toBeNull();
-    expect(numericValue('')).toBeNull();
-    expect(numericValue(undefined)).toBeNull();
+  it('сравнивает hex и десятичные по значению', () => {
+    expect([9, '0xff', 10, 2].sort(compareAddresses)).toEqual([2, 9, 10, '0xff']);
+  });
+});
+
+describe('разбор совпадает с серверным', () => {
+  it('обрезает пробелы так же, как parse_address', () => {
+    expect(parseAddressInput(' 12abc ')).toBe('12abc');
   });
 });

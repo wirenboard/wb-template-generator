@@ -556,11 +556,11 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
               <div className="flex gap-1.5">
                 <div>
                   <label className={labelClass}>On</label>
-                  <NumberField value={reg.on_value} integer onChange={(v) => update({ on_value: v })} placeholder="—" className={`${inputClass} w-20`} />
+                  <NumberField value={reg.on_value} hex onChange={(v) => update({ on_value: v })} placeholder="—" className={`${inputClass} w-20`} />
                 </div>
                 <div>
                   <label className={labelClass}>Off</label>
-                  <NumberField value={reg.off_value} integer onChange={(v) => update({ off_value: v })} placeholder="—" className={`${inputClass} w-20`} />
+                  <NumberField value={reg.off_value} hex onChange={(v) => update({ off_value: v })} placeholder="—" className={`${inputClass} w-20`} />
                 </div>
               </div>
             </div>

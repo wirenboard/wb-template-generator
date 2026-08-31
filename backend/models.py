@@ -127,9 +127,8 @@ class Register(BaseModel):
     # Число и hex-строка равноправны (`definitions/serial_int`), в шаблонах есть обе
     error_value: int | ShortText | None = None
     readonly: bool | None = None
-    # Строка — hex-запись, её разрешает `definitions/serial_num`
-    min: int | float | Annotated[str, StringConstraints(max_length=64)] | None = None
-    max: int | float | Annotated[str, StringConstraints(max_length=64)] | None = None
+    min: int | float | None = None
+    max: int | float | None = None
     round_to: int | float | None = None
     on_value: int | ShortText | None = None
     off_value: int | ShortText | None = None
@@ -201,7 +200,8 @@ class LlmOverrides(BaseModel):
     llm_model: ShortText | None = None
     llm_timeout: int | None = None
     llm_legacy_max_tokens: bool | None = None
-    llm_temperature: float | None = None
+    # Верхняя граница у провайдеров разная, 2 — потолок OpenAI-совместимых
+    llm_temperature: Annotated[float, Field(ge=0, le=2)] | None = None
 
 
 class FixRegistersRequest(ValidateRequest, LlmOverrides):

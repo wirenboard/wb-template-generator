@@ -1,13 +1,11 @@
 /**
  * Разбор числа из текстового поля ввода.
  *
- * Поле type="number" на незавершённом вводе («0.», «-») отдаёт в value пустую
- * строку, и контролируемое поле откатывает набранное. Поэтому числовые поля
- * размечены как текстовые, а разбор и вывод значения живут здесь.
+ * Поле type="number" на незавершённом вводе («0.», «-») отдаёт пустой value, и
+ * контролируемое поле откатывает набранное. Поэтому поля текстовые, а разбор здесь.
  */
 
-// Экспонента принимается потому, что String() выводит значения вида 1e-7 только в
-// этой записи — иначе такое значение нельзя было бы отредактировать
+// String() выводит значения вида 1e-7 только в этой записи, иначе их не отредактировать
 const DECIMAL_REGEX = /^-?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?$/;
 const INTEGER_REGEX = /^-?\d+$/;
 
@@ -21,6 +19,22 @@ export function parseNumberInput(text: string, integer = false): number | undefi
   if (!(integer ? INTEGER_REGEX : DECIMAL_REGEX).test(value)) return null;
   const parsed = Number(value.replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Значение, которое поле отдаёт наружу. Пустое даёт `fallback` там, где значение
+ * обязательное, иначе `undefined`. Набранное зажимается в границы `min`/`max`.
+ */
+export function resolveFieldValue(
+  parsed: number | undefined,
+  fallback?: number,
+  min?: number,
+  max?: number,
+): number | undefined {
+  if (parsed === undefined) return fallback;
+  if (min !== undefined && parsed < min) return min;
+  if (max !== undefined && parsed > max) return max;
+  return parsed;
 }
 
 /** Текст поля для значения из состояния — всегда с точкой. */

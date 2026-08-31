@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatNumberValue, parseNumberInput } from '../utils/numberInput';
+import { formatNumberValue, parseNumberInput, resolveFieldValue } from '../utils/numberInput';
 
 describe('parseNumberInput', () => {
   // На цифровом блоке в русской раскладке набирается запятая
@@ -23,7 +23,7 @@ describe('parseNumberInput', () => {
     expect(parseNumberInput('1e-7')).toBe(1e-7);
   });
 
-  // Отличать пустое от нуля обязательно: иначе значение поля не стереть
+  // Пустое и ноль различаются, иначе значение поля не стереть
   it('пустое поле — отсутствие значения', () => {
     expect(parseNumberInput('')).toBeUndefined();
     expect(parseNumberInput('   ')).toBeUndefined();
@@ -62,5 +62,22 @@ describe('formatNumberValue', () => {
 
   it('ноль выводит, а не считает пустым', () => {
     expect(formatNumberValue(0)).toBe('0');
+  });
+});
+
+describe('resolveFieldValue', () => {
+  it('пустое поле даёт fallback там, где значение обязательное', () => {
+    expect(resolveFieldValue(undefined, 1)).toBe(1);
+    expect(resolveFieldValue(undefined, undefined)).toBeUndefined();
+  });
+
+  it('ноль отдаёт как есть, а не подменяет fallback', () => {
+    expect(resolveFieldValue(0, 1)).toBe(0);
+  });
+
+  it('зажимает значение в границы — их держал прежний type="number"', () => {
+    expect(resolveFieldValue(5, undefined, 0, 2)).toBe(2);
+    expect(resolveFieldValue(-1, undefined, 0, 2)).toBe(0);
+    expect(resolveFieldValue(1.5, undefined, 0, 2)).toBe(1.5);
   });
 });

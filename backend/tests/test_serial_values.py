@@ -3,13 +3,12 @@
 import pytest
 
 from serial_values import (
-    address_as_int,
     address_sort_value,
     canonical_address,
+    decimal_address,
     numeric_value,
     parse_address,
     parse_number,
-    progression_address,
 )
 
 
@@ -31,24 +30,6 @@ class TestParseAddress:
     def test_forms(self, raw, expected):
         """Запись адреса должна дойти до шаблона такой, какой её задали."""
         assert parse_address(raw) == expected
-
-
-class TestAddressAsInt:
-    """Числовое значение простого адреса."""
-
-    @pytest.mark.parametrize("raw,expected", [
-        (255, 255),
-        ("255", 255),
-        ("0xff", 255),
-        ("0xFF", 255),
-        (0, 0),
-    ])
-    def test_numeric_forms(self, raw, expected):
-        assert address_as_int(raw) == expected
-
-    @pytest.mark.parametrize("raw", ["109:0:1", "12abc", "", None, True])
-    def test_not_a_plain_address(self, raw):
-        assert address_as_int(raw) is None
 
 
 class TestAddressSortValue:
@@ -74,7 +55,7 @@ class TestProgressionAddress:
         ("109:0:1", None),
     ])
     def test_only_decimal_folds(self, raw, expected):
-        assert progression_address(raw) == expected
+        assert decimal_address(raw) == expected
 
 
 class TestCanonicalAddress:
@@ -116,17 +97,17 @@ class TestParseNumber:
         assert parse_number(raw) == expected
 
     def test_whole_number_stays_integer(self):
-        """Сравнение в test_forms типа не различает: 100 == 100.0."""
+        """Сравнение в test_forms типа не различает, 100 == 100.0."""
         assert isinstance(parse_number("100"), int)
 
     @pytest.mark.parametrize("raw", ["0xff", "0x012F0000", "мин", "", "1,2,3"])
     def test_left_as_is(self, raw):
-        """Hex законен в min и max, неразобранное пометит валидатор."""
+        """Hex законен в `on_value` и `off_value`, неразобранное пометит валидатор."""
         assert parse_number(raw) == raw
 
 
 class TestNumericValue:
-    """Значение для сравнения — записи бывают разными."""
+    """Числовое значение записи — им разворачивается hex в лимитах."""
 
     @pytest.mark.parametrize("raw,expected", [
         ("0xff", 255),

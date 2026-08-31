@@ -1707,3 +1707,37 @@ class TestNonNumericAddresses:
         result = build_jinja_template(self._template(addresses))
         for address in addresses:
             assert '"%s"' % address in result
+
+
+class TestNumericPatternAddresses:
+    """Свёртка по номеру в имени канала — путь через _validate_address_progression."""
+
+    def _template(self, addresses):
+        channels = [
+            {"name": "Relay %d" % (i + 1), "address": address, "reg_type": "holding",
+             "type": "value", "format": "u16", "group": "g"}
+            for i, address in enumerate(addresses)
+        ]
+        return {
+            "device_type": "test", "title": "test_title",
+            "device": {
+                "name": "Test", "id": "test",
+                "groups": [{"title": "Main", "id": "g"}],
+                "channels": channels, "parameters": {}, "translations": {},
+            },
+        }
+
+    def test_decimal_addresses_fold_into_loop(self):
+        result = build_jinja_template(self._template([16, 17, 18]))
+        assert "{% for" in result
+        assert '"address": {{ 16 + i - 1 }}' in result
+
+    @pytest.mark.parametrize("addresses", [
+        ["0x10", "0x11", "0x12"],
+        ["109:0:1", "109:0:2", "109:0:3"],
+    ])
+    def test_non_numeric_addresses_keep_their_notation(self, addresses):
+        """Цикл выразил бы адрес как «база + шаг» и переписал запись десятичной."""
+        result = build_jinja_template(self._template(addresses))
+        for address in addresses:
+            assert '"%s"' % address in result

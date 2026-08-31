@@ -656,7 +656,7 @@ class TestAddressNotation:
 
 
 class TestFieldNotation:
-    """Числовые поля: запятая и точка дают число, hex остаётся записью."""
+    """Числовые поля — запятая и точка дают число, hex остаётся там, где схема его разрешает."""
 
     @pytest.mark.parametrize("field,raw,expected", [
         ("scale", "0,5", 0.5),
@@ -672,11 +672,10 @@ class TestFieldNotation:
         assert imported["registers"][0][field] == expected
 
     @pytest.mark.parametrize("field,value", [
-        ("error_value", "0xFFFF"),   # 184 раза в шаблонах wb-mqtt-serial
-        ("error_value", 65535),      # столько же раз числом
+        ("error_value", "0xFFFF"),   # hex-запись стоит 333 раза в 38 шаблонах драйвера
+        ("error_value", 65535),      # то же поле числом, 1602 раза
         ("on_value", "0x0101"),      # config-somfy-sdn.json
         ("off_value", 1),
-        ("max", "0xff"),             # шесть шаблонов wb-mqtt-serial
         ("min", 0),
     ])
     def test_both_notations_accepted(self, channel_template, field, value):
@@ -685,3 +684,16 @@ class TestFieldNotation:
         reg = imported["registers"][0]
         assert reg[field] == value
         Register(**reg)   # модель редактора обязана принять обе записи
+
+    @pytest.mark.parametrize("written,expected", [("0xff", 255), ("0x10", 16), ("5", 5)])
+    def test_hex_limit_becomes_number(self, channel_template, written, expected):
+        """Лимит редактор держит числом — hex из шаблона разворачивается при импорте."""
+        imported = import_template(channel_template({"max": written}))
+        assert imported["registers"][0]["max"] == expected
+
+    def test_unparsable_limit_is_dropped(self, channel_template):
+        """Регистр важнее одного поля — остальные поля должны доехать."""
+        imported = import_template(channel_template({"max": "мин", "scale": 0.1}))
+        reg = imported["registers"][0]
+        assert "max" not in reg
+        assert reg["scale"] == 0.1

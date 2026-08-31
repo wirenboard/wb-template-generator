@@ -82,6 +82,8 @@ frontend/src/
   constants.ts         # Форматы, единицы, языки, channel_types
   utils/
     conditionValidation.ts  # Валидация condition-ссылок (только на параметры)
+    serialValues.ts         # Разбор адреса и полей serial_int в записи wb-mqtt-serial
+    numberInput.ts          # Разбор и вывод числа для текстового поля ввода
   components/
     RegisterTable.tsx         # Таблица + тулбар + hero-блок (пустое состояние)
     RegisterDetailPanel.tsx   # Панель деталей + NormalizeToEnButton
@@ -98,6 +100,7 @@ frontend/src/
     FileUpload.tsx             # Загрузка файлов (drag-n-drop)
     AnalyzeProgress.tsx        # Прогресс AI-анализа (SSE)
     ConfirmModal.tsx           # Модалка подтверждения (сброс и т.д.)
+    NumberField.tsx            # Числовое поле ввода — все числовые поля только через него
     ErrorBoundary.tsx          # Обработка ошибок React
     ErrorDisplay.tsx           # Отображение ошибок импорта
   __tests__/                  # Vitest: store, i18n, condition-validation

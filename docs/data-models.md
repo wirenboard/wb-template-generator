@@ -31,9 +31,12 @@
 - `translations: Record<lang, {name?, description?}>` — переводы на N языков
 - `string_data_size: int | None` — размер строки (для format=string)
 - `word_order`, `byte_order` — порядок байт/слов
-- `error_value: str | None` — значение ошибки
-- `min`, `max`, `round_to` — диапазон и округление
-- `on_value`, `off_value` — значения для switch
+- `error_value: int | str | None` — значение ошибки, числом или hex-строкой `"0xFFFF"`
+- `min`, `max` — диапазон, всегда число. Схема требует plain number у параметра, поэтому hex из шаблона
+  или из ответа модели разворачивается при импорте, а неразобранная запись поле не занимает. В шаблон
+  лимиты попадают только у канала с `type: "range"`
+- `round_to` — округление, только число
+- `on_value`, `off_value` — значения для switch, числом или hex-строкой (`definitions/serial_int`)
 - `default_value` — значение по умолчанию (для параметров)
 - `readonly: bool | None` — только чтение
 

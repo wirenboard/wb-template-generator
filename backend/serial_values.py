@@ -1,12 +1,11 @@
 """Разбор значений в записи wb-mqtt-serial — одна трактовка на весь бэкенд.
 
-Схема драйвера (wb-mqtt-serial-confed-common.schema.json) допускает у адреса три
-записи — десятичное число, hex-строку «0xFF» и побитовую «109:1:2», — а у числовых
-полей две: число и hex-строку. Записи равноправны, поэтому здесь они разбираются,
-а не приводятся к одной: развёрнутый в число hex перестаёт быть той записью, что
-стоит в шаблоне.
+Схема драйвера допускает у адреса три записи — десятичную, hex «0xFF» и побитовую
+«109:1:2», у числовых полей две. Записи равноправны, поэтому здесь они разбираются,
+а не сводятся к одной. Развёрнутый в число hex — уже не та запись, что в шаблоне.
 """
 
+import math
 import re
 
 _DECIMAL_REGEX = re.compile(r"^\d+$")
@@ -27,10 +26,10 @@ def parse_address(value: object) -> object:
     if _HEX_REGEX.match(text):
         # Схема требует префикс в нижнем регистре, сами цифры — в любом
         return "0x" + text[2:]
-    return value
+    return text
 
 
-def address_as_int(value: object) -> int | None:
+def _address_as_int(value: object) -> int | None:
     """Числовое значение простого адреса. None — побитовый или неразобранный.
 
     Побитовый адрес числом не выражается: «109:0:1» — это бит 0 регистра 109.
@@ -54,11 +53,11 @@ def address_sort_value(value: object) -> int:
 
     Неразобранное даёт 0, чтобы сортировка не падала на мусорном адресе.
     """
-    number = address_as_int(value)
+    number = _address_as_int(value)
     if number is not None:
         return number
     if isinstance(value, str):
-        head = address_as_int(value.split(":")[0])
+        head = _address_as_int(value.split(":")[0])
         if head is not None:
             return head
     return 0
@@ -68,15 +67,23 @@ def parse_number(value: object) -> object:
     """Число из строковой записи, точка и запятая равноправны.
 
     Драйвер ждёт в дробных полях JSON-число, а в шаблоне попадается строка. Hex
-    возвращается строкой: в `min` и `max` она законна (`definitions/serial_num`).
+    возвращается строкой — в этих полях схема его разрешает.
     """
     if not isinstance(value, str):
         return value
     text = value.strip().replace(",", ".")
-    if _NUMBER_REGEX.match(text):
-        number = float(text)
-        return int(number) if number.is_integer() and "." not in text else number
-    return value
+    number = _as_number(text)
+    return value if number is None else number
+
+
+def _as_number(text: str) -> int | float | None:
+    """Число из уже нормализованной строки, целое не превращается в дробное."""
+    if not _NUMBER_REGEX.match(text):
+        return None
+    number = float(text)
+    if not math.isfinite(number):
+        return None
+    return int(number) if number.is_integer() and "." not in text else number
 
 
 def numeric_value(value: object) -> int | float | None:
@@ -93,36 +100,33 @@ def numeric_value(value: object) -> int | float | None:
     text = value.strip()
     if _HEX_REGEX.match(text):
         return int(text, 16)
-    text = text.replace(",", ".")
-    return float(text) if _NUMBER_REGEX.match(text) else None
+    return _as_number(text.replace(",", "."))
 
 
-def progression_address(value: object) -> int | None:
-    """Адрес для свёртки в арифметическую прогрессию Jinja-цикла.
+def decimal_address(value: object) -> int | None:
+    """Число, если адрес записан десятичным. Для hex и побитовой записи — None.
 
-    Только числовая запись: цикл выражает адрес как «база + шаг», поэтому hex стал
-    бы в нём десятичным числом, а побитовая запись числом не выражается вовсе.
+    Обе записи в число не сворачиваются. В jinja-цикле адрес выражен как «база плюс
+    шаг», и hex стал бы там десятичным, а у не-Modbus протоколов hex-код законно
+    выходит за 16-битный диапазон.
     """
     if isinstance(value, bool):
         return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and _DECIMAL_REGEX.match(value.strip()):
-        return int(value)
-    return None
+    parsed = parse_address(value)
+    return parsed if isinstance(parsed, int) else None
 
 
 def canonical_address(value: object) -> str:
     """Канонический ключ адреса — разные записи дают одну строку.
 
-    «0xFF», «0xff» и 255 — один регистр. Побитовая запись нормализуется по
-    частям: «0x6D:0:1» → «109:0:1».
+    «0xFF», «0xff» и 255 — один регистр. Побитовая запись нормализуется по частям,
+    «0x6D:0:1» → «109:0:1».
     """
     if isinstance(value, str) and ":" in value:
         parts = []
         for part in value.split(":"):
-            number = address_as_int(part)
+            number = _address_as_int(part)
             parts.append(str(number) if number is not None else part.strip())
         return ":".join(parts)
-    number = address_as_int(value)
+    number = _address_as_int(value)
     return str(number) if number is not None else str(value)

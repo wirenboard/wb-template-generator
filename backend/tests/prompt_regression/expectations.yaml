@@ -67,3 +67,16 @@
       reg_type: discrete
       channel_type: switch
       has_enum: false
+
+# 06 — Hex-адреса: запись из документа сохраняется, в десятичное не конвертируется
+06_hex_addresses:
+  registers:
+    - address: "0x0000"
+      reg_type: holding
+      format: u16
+    - address: "0x000A"
+      reg_type: holding
+      format: u16
+    - address: "0x0064"
+      reg_type: holding
+      format: u32

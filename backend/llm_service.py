@@ -477,7 +477,7 @@ def _merge_batch_results(
     """
     device_info = DeviceInfo(name="Unknown Device", id="unknown-device")
     all_registers: list[Register] = []
-    # Адрес в ключе — канонической записью: 255 и «0xff» это один регистр
+    # Адрес в ключе канонической записью — 255 и «0xff» это один регистр
     seen: set[tuple[str, str, str | None]] = set()
     total_auto_fixed = 0
 

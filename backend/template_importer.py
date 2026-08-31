@@ -6,7 +6,7 @@ import re
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment, SecurityError
 
-from serial_values import parse_address, parse_number
+from serial_values import numeric_value, parse_address, parse_number
 from user_errors import UserError
 
 # Шаблон приходит от пользователя, а обычный Environment исполняет из него любой код
@@ -99,20 +99,27 @@ def _extract_group_translations(
     return result or None
 
 
-# Поля, где драйвер ждёт число, а шаблон приносит их и строкой — с точкой или с
-# запятой. Hex законен только в min и max, parse_number его не трогает.
-_NUMERIC_FIELDS = frozenset({
-    "scale", "offset", "round_to", "min", "max", "string_data_size",
-    "on_value", "off_value",
-})
+# Драйвер ждёт здесь число, а шаблон приносит и строку — с точкой или запятой.
+# У `on_value` и `off_value` hex законен, parse_number его не трогает
+_NUMERIC_FIELDS = frozenset({"round_to", "string_data_size", "on_value", "off_value"})
+
+# Лимиты в редакторе всегда число, поэтому hex разворачиваем. Неразобранную запись
+# не переносим — регистр важнее одного поля
+_LIMIT_FIELDS = frozenset({"min", "max"})
 
 
 def _copy_optional_fields(source: dict, target: dict, fields: tuple[str, ...] = _OPTIONAL_FIELDS) -> None:
     """Копирует опциональные поля из source в target, если они не None."""
     for field in fields:
         value = source.get(field)
-        if value is not None:
-            target[field] = parse_number(value) if field in _NUMERIC_FIELDS else value
+        if value is None:
+            continue
+        if field in _LIMIT_FIELDS:
+            number = numeric_value(value)
+            if number is not None:
+                target[field] = number
+            continue
+        target[field] = parse_number(value) if field in _NUMERIC_FIELDS else value
 
 
 def _to_register(

@@ -23,7 +23,7 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from serial_values import progression_address
+from serial_values import decimal_address
 
 _PLACEHOLDER = "\x00"
 
@@ -116,20 +116,25 @@ def _detect_templated_fields(items: list[tuple[Any, int, dict]],
     return result
 
 
+def _progression_addresses(items: list[dict], address_field: str = "address") -> list[int] | None:
+    """Адреса группы каналов для свёртки в цикл. None — хотя бы один не годится."""
+    addresses: list[int] = []
+    for item in items:
+        addr = decimal_address(item.get(address_field, 0))
+        if addr is None:
+            return None
+        addresses.append(addr)
+    return addresses
+
+
 def _validate_address_progression(items: list[tuple[Any, int, dict]],
                                   address_field: str = "address") -> tuple[bool, int, int]:
     """Проверяет арифметическую прогрессию адресов.
 
     Возвращает (valid, base_address, step).
     """
-    addresses = []
-    for _, _, item in items:
-        addr = progression_address(item.get(address_field, 0))
-        if addr is None:
-            return False, 0, 0
-        addresses.append(addr)
-
-    if len(addresses) < 2:
+    addresses = _progression_addresses([item for _, _, item in items], address_field)
+    if addresses is None or len(addresses) < 2:
         return False, 0, 0
 
     steps = [addresses[i + 1] - addresses[i] for i in range(len(addresses) - 1)]
@@ -679,13 +684,8 @@ def _detect_string_channel_patterns(
             continue
 
         # Проверяем арифметическую прогрессию адресов
-        addresses = []
-        for _, ch in group_items:
-            addr = progression_address(ch.get("address", 0))
-            if addr is None:
-                break
-            addresses.append(addr)
-        if len(addresses) != len(group_items) or len(addresses) < 2:
+        addresses = _progression_addresses([ch for _, ch in group_items])
+        if addresses is None or len(addresses) < 2:
             continue
         steps = [addresses[i + 1] - addresses[i] for i in range(len(addresses) - 1)]
         if len(set(steps)) != 1:

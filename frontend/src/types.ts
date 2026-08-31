@@ -65,10 +65,10 @@ export interface Register {
   byte_order?: string;
   error_value?: number | string;
   readonly?: boolean;
-  // Строка — hex-запись из шаблона, драйвер её разрешает («max»: «0xff»)
-  min?: number | string;
-  max?: number | string;
+  min?: number;
+  max?: number;
   round_to?: number;
+  // Строка — hex-запись из шаблона, драйвер её разрешает («on_value»: «0x0101»)
   on_value?: number | string;
   off_value?: number | string;
   default_value?: number;
@@ -111,8 +111,8 @@ export interface WBChannel {
   condition?: string;
   enum?: number[];
   enum_titles?: string[];
-  min?: number | string;
-  max?: number | string;
+  min?: number;
+  max?: number;
   round_to?: number;
   on_value?: number | string;
   off_value?: number | string;

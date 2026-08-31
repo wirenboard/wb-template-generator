@@ -115,6 +115,7 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
           <NumberField
             value={llmConfig.maxTokens}
             integer
+            min={1}
             onChange={(v) => setLlmConfig({ maxTokens: v })}
             placeholder="16384"
             className={inputClass}
@@ -125,6 +126,7 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
           <NumberField
             value={llmConfig.timeout}
             integer
+            min={10}
             onChange={(v) => setLlmConfig({ timeout: v })}
             placeholder="120"
             className={inputClass}
@@ -134,6 +136,8 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
           <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.temperature')}</label>
           <NumberField
             value={llmConfig.temperature}
+            min={0}
+            max={2}
             onChange={(v) => setLlmConfig({ temperature: v })}
             placeholder={t('llmSettings.temperaturePlaceholder')}
             className={inputClass}
