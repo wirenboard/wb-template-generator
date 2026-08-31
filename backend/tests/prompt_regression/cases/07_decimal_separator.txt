@@ -1,0 +1,8 @@
+Device: Flow Meter FM-12 (documentation printed with comma as decimal separator)
+
+Holding Registers:
+
+| Address | Name        | Data Type | R/W | Description                  |
+|---------|-------------|-----------|-----|------------------------------|
+| 0       | Flow Rate   | UINT16    | R   | Flow rate in 0,1 m3/h        |
+| 1       | Temperature | INT16     | R   | Temperature in 0,5 deg C     |

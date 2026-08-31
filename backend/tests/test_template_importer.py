@@ -691,6 +691,16 @@ class TestFieldNotation:
         imported = import_template(channel_template({"max": written}))
         assert imported["registers"][0]["max"] == expected
 
+    def test_serial_int_string_is_trimmed(self, channel_template):
+        """Пробелы по краям приезжают из копипасты даташита."""
+        imported = import_template(channel_template({"error_value": " 0x7FFF "}))
+        assert imported["registers"][0]["error_value"] == "0x7FFF"
+
+    def test_giant_hex_limit_is_dropped(self, channel_template):
+        """int из hex не ограничен лимитом CPython, а сериализация ответа ограничена."""
+        imported = import_template(channel_template({"max": "0x" + "F" * 3600}))
+        assert "max" not in imported["registers"][0]
+
     def test_unparsable_limit_is_dropped(self, channel_template):
         """Регистр важнее одного поля — остальные поля должны доехать."""
         imported = import_template(channel_template({"max": "мин", "scale": 0.1}))

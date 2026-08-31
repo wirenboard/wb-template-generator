@@ -4,6 +4,7 @@
 запроса обязан быть ограничен.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -154,3 +155,48 @@ class TestEndpointRejection:
         )
 
         assert resp.status_code == 422
+
+    def test_analyze_rejects_temperature_out_of_bounds(self, client):
+        """Граница 0..2 действует и на главном маршруте, не только в LlmOverrides."""
+        resp = client.post(
+            "/api/analyze",
+            data={"llm_temperature": "3"},
+            files={"files": ("doc.txt", b"table", "text/plain")},
+        )
+
+        assert resp.status_code == 422
+
+
+def _hex_demo_template(channel_fields: dict) -> bytes:
+    channel = {"name": "Ch", "reg_type": "holding", "address": 0, "type": "value", "group": "g"}
+    channel.update(channel_fields)
+    return json.dumps({
+        "device_type": "t", "title": "t",
+        "device": {"name": "T", "id": "t",
+                   "groups": [{"title": "Main", "id": "g"}], "channels": [channel]},
+    }).encode()
+
+
+class TestGiantNotation:
+    """Гигантская запись не роняет импорт — регистр выживает."""
+
+    @pytest.fixture
+    def client(self):
+        return TestClient(main.app)
+
+    def test_giant_hex_limit_dropped(self, client):
+        """int из такого hex не сериализуется в JSON — раньше ответ падал в 500."""
+        body = _hex_demo_template({"max": "0x" + "F" * 3600})
+        resp = client.post("/api/import-template", files={"file": ("t.json", body, "application/json")})
+
+        assert resp.status_code == 200
+        reg = resp.json()["registers"][0]
+        assert "max" not in reg
+
+    def test_giant_decimal_address_stays_string(self, client):
+        """Разбор десятичной записи ограничен лимитом CPython — импорт остаётся живым."""
+        body = _hex_demo_template({"address": "9" * 5000})
+        resp = client.post("/api/import-template", files={"file": ("t.json", body, "application/json")})
+
+        assert resp.status_code == 200
+        assert resp.json()["registers"][0]["address"] == "9" * 5000

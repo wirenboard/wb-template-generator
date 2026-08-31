@@ -100,7 +100,7 @@ frontend/src/
     FileUpload.tsx             # Загрузка файлов (drag-n-drop)
     AnalyzeProgress.tsx        # Прогресс AI-анализа (SSE)
     ConfirmModal.tsx           # Модалка подтверждения (сброс и т.д.)
-    NumberField.tsx            # Числовое поле ввода — все числовые поля только через него
+    NumberField.tsx            # Числовое поле ввода — редактируемые числовые поля только через него (кроме error_value, там любая запись serial_int)
     ErrorBoundary.tsx          # Обработка ошибок React
     ErrorDisplay.tsx           # Отображение ошибок импорта
   __tests__/                  # Vitest: store, i18n, condition-validation

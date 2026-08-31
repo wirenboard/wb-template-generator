@@ -104,6 +104,14 @@ def check_register(actual_regs, expected_reg) -> tuple[bool, str]:
                 f"получили {actual_has_enum}"
             )
 
+    # Проверяем scale — кейс про запятую как десятичный разделитель
+    if "scale" in expected_reg:
+        if found.scale != expected_reg["scale"]:
+            errors.append(
+                f"scale: ожидали {expected_reg['scale']!r}, "
+                f"получили {found.scale!r}"
+            )
+
     # Проверяем format
     if "format" in expected_reg:
         if found.format != expected_reg["format"]:

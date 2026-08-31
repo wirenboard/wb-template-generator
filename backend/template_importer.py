@@ -107,6 +107,9 @@ _NUMERIC_FIELDS = frozenset({"round_to", "string_data_size", "on_value", "off_va
 # не переносим — регистр важнее одного поля
 _LIMIT_FIELDS = frozenset({"min", "max"})
 
+# Поля с записью serial_int — у строк обрезаем пробелы по краям, копипаста из даташита
+_SERIAL_INT_FIELDS = frozenset({"error_value", "on_value", "off_value"})
+
 
 def _copy_optional_fields(source: dict, target: dict, fields: tuple[str, ...] = _OPTIONAL_FIELDS) -> None:
     """Копирует опциональные поля из source в target, если они не None."""
@@ -114,6 +117,8 @@ def _copy_optional_fields(source: dict, target: dict, fields: tuple[str, ...] = 
         value = source.get(field)
         if value is None:
             continue
+        if field in _SERIAL_INT_FIELDS and isinstance(value, str):
+            value = value.strip()
         if field in _LIMIT_FIELDS:
             number = numeric_value(value)
             if number is not None:

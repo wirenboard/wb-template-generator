@@ -36,6 +36,10 @@ describe('parseAddressInput', () => {
   it('пустое поле оставляет пустым', () => {
     expect(parseAddressInput('  ')).toBe('');
   });
+
+  it('за пределами точного целого оставляет строку — Number молча округляет', () => {
+    expect(parseAddressInput('18446744073709551615')).toBe('18446744073709551615');
+  });
 });
 
 describe('addressSortKey', () => {
@@ -76,6 +80,10 @@ describe('parseSerialIntInput', () => {
     expect(parseSerialIntInput('0x')).toBeNull();
     expect(parseSerialIntInput('1.5')).toBeNull();
   });
+
+  it('сторожевое значение шире 2^53 остаётся строкой — цифры не искажаются', () => {
+    expect(parseSerialIntInput('18446744073709551615')).toBe('18446744073709551615');
+  });
 });
 
 describe('compareAddresses', () => {
@@ -87,10 +95,10 @@ describe('compareAddresses', () => {
   it('сравнивает hex и десятичные по значению', () => {
     expect([9, '0xff', 10, 2].sort(compareAddresses)).toEqual([2, 9, 10, '0xff']);
   });
-});
 
-describe('разбор совпадает с серверным', () => {
-  it('обрезает пробелы так же, как parse_address', () => {
-    expect(parseAddressInput(' 12abc ')).toBe('12abc');
+  it('неразобранные записи сравнивает строкой — OBIS-адреса не слипаются', () => {
+    const obis = ['1.0.51.7.0.255', '1.0.31.7.0.255', '1.0.32.7.0.255'];
+    expect([...obis].sort(compareAddresses))
+      .toEqual(['1.0.31.7.0.255', '1.0.32.7.0.255', '1.0.51.7.0.255']);
   });
 });

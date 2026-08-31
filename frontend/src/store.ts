@@ -60,6 +60,15 @@ interface SavedState {
   llmConfig: AnalyzeLlmConfig;
 }
 
+/** Прежнее поле позволяло сохранить температуру за пределами 0..2 — зажимаем при загрузке. */
+export function restoreLlmConfig(saved: AnalyzeLlmConfig | undefined): AnalyzeLlmConfig {
+  const config = { ...(saved ?? {}) };
+  if (typeof config.temperature === 'number') {
+    config.temperature = Math.min(2, Math.max(0, config.temperature));
+  }
+  return config;
+}
+
 function loadState(): Partial<SavedState> {
   try {
     const stored = localStorage.getItem(STATE_STORAGE_KEY);
@@ -235,7 +244,7 @@ export const useStore = create<TemplateStore>((set, get) => ({
   lastActiveGroup: 'general',
   newlyAddedRegisterId: null,
   expandedRows: new Set(),
-  llmConfig: _saved.llmConfig ?? {},
+  llmConfig: restoreLlmConfig(_saved.llmConfig),
   llmAvailable: null,
   serverModel: null,
   uploadErrors: [],

@@ -2,8 +2,9 @@
  * Разбор значений в записи wb-mqtt-serial — адрес и поля `serial_int`.
  *
  * Схема допускает у адреса три записи — десятичную, hex «0xFF» и побитовую
- * «109:1:2», у `on_value` и `off_value` две. Поле ввода текстовое, поэтому число от
- * строковых записей отделяем здесь.
+ * «109:1:2», у полей serial_int (`on_value`, `off_value`, `error_value`) две. Поле
+ * ввода текстовое, поэтому число от строковых записей отделяем здесь. Контракт с
+ * backend/serial_values.py закреплён фикстурой serial_values_contract.json.
  */
 
 const DECIMAL_REGEX = /^\d+$/;
@@ -14,7 +15,11 @@ const INTEGER_REGEX = /^-?\d+$/;
 /** Число для десятичной записи, строка для hex и побитовой. Неразобранное — как введено. */
 export function parseAddressInput(raw: string): string | number {
   const value = raw.trim();
-  if (DECIMAL_REGEX.test(value)) return Number(value);
+  if (DECIMAL_REGEX.test(value)) {
+    const number = Number(value);
+    // За пределами точного целого Number молча округляет — оставляем строкой
+    return Number.isSafeInteger(number) ? number : value;
+  }
   // Схема требует префикс в нижнем регистре, сами цифры — в любом
   if (HEX_REGEX.test(value)) return `0x${value.slice(2)}`;
   return value;
@@ -41,7 +46,11 @@ export function addressSortKey(value: string | number | null | undefined): numbe
 export function parseSerialIntInput(raw: string): number | string | undefined | null {
   const value = raw.trim();
   if (!value) return undefined;
-  if (INTEGER_REGEX.test(value)) return Number(value);
+  if (INTEGER_REGEX.test(value)) {
+    const number = Number(value);
+    // За пределами точного целого оставляем строкой — запись законна по схеме, цифры целы
+    return Number.isSafeInteger(number) ? number : value;
+  }
   // Схема требует префикс в нижнем регистре, сами цифры — в любом
   if (HEX_REGEX.test(value)) return `0x${value.slice(2)}`;
   return null;
@@ -58,5 +67,10 @@ export function compareAddresses(
     const diff = (a[i] ?? 0) - (b[i] ?? 0);
     if (diff !== 0) return diff;
   }
-  return 0;
+  // Ключи не различили — OBIS-коды и команды разбору не поддаются, сравниваем
+  // строками. Посимвольно, а не localeCompare — так же сравнивает Python-близнец
+  const l = String(left ?? '');
+  const r = String(right ?? '');
+  if (l < r) return -1;
+  return l > r ? 1 : 0;
 }

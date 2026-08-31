@@ -1657,6 +1657,18 @@ class TestStringPatternRendering:
         assert len(patterns) == 0
 
 
+def _template_with(channels: list[dict]) -> dict:
+    """Каркас шаблона — тесты задают только каналы."""
+    return {
+        "device_type": "test", "title": "test_title",
+        "device": {
+            "name": "Test", "id": "test",
+            "groups": [{"title": "Main", "id": "g"}],
+            "channels": channels, "parameters": {}, "translations": {},
+        },
+    }
+
+
 class TestNonNumericAddresses:
     """Hex и побитовые адреса: экспорт не падает и запись адреса не переписывает."""
 
@@ -1672,19 +1684,6 @@ class TestNonNumericAddresses:
              "type": "value", "format": "u16", "group": "g"}
             for name, address in zip(self.NAMES, addresses)
         ]
-
-    def _template(self, addresses):
-        return {
-            "device_type": "test",
-            "title": "test_title",
-            "device": {
-                "name": "Test", "id": "test",
-                "groups": [{"title": "Main", "id": "g"}],
-                "channels": self._channels(addresses),
-                "parameters": {},
-                "translations": {},
-            },
-        }
 
     def test_decimal_addresses_still_fold(self):
         patterns = _detect_string_channel_patterns(self._channels([464, 480, 496]), set())
@@ -1704,7 +1703,7 @@ class TestNonNumericAddresses:
         ["109:0:1", "125:0:1", "141:0:1"],
     ])
     def test_addresses_survive_export(self, addresses):
-        result = build_jinja_template(self._template(addresses))
+        result = build_jinja_template(_template_with(self._channels(addresses)))
         for address in addresses:
             assert '"%s"' % address in result
 
@@ -1712,23 +1711,15 @@ class TestNonNumericAddresses:
 class TestNumericPatternAddresses:
     """Свёртка по номеру в имени канала — путь через _validate_address_progression."""
 
-    def _template(self, addresses):
-        channels = [
+    def _channels(self, addresses):
+        return [
             {"name": "Relay %d" % (i + 1), "address": address, "reg_type": "holding",
              "type": "value", "format": "u16", "group": "g"}
             for i, address in enumerate(addresses)
         ]
-        return {
-            "device_type": "test", "title": "test_title",
-            "device": {
-                "name": "Test", "id": "test",
-                "groups": [{"title": "Main", "id": "g"}],
-                "channels": channels, "parameters": {}, "translations": {},
-            },
-        }
 
     def test_decimal_addresses_fold_into_loop(self):
-        result = build_jinja_template(self._template([16, 17, 18]))
+        result = build_jinja_template(_template_with(self._channels([16, 17, 18])))
         assert "{% for" in result
         assert '"address": {{ 16 + i - 1 }}' in result
 
@@ -1738,6 +1729,6 @@ class TestNumericPatternAddresses:
     ])
     def test_non_numeric_addresses_keep_their_notation(self, addresses):
         """Цикл выразил бы адрес как «база + шаг» и переписал запись десятичной."""
-        result = build_jinja_template(self._template(addresses))
+        result = build_jinja_template(_template_with(self._channels(addresses)))
         for address in addresses:
             assert '"%s"' % address in result

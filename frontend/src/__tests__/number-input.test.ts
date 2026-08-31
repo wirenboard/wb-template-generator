@@ -37,6 +37,10 @@ describe('parseNumberInput', () => {
     expect(parseNumberInput('1.2.3')).toBeNull();
   });
 
+  it('переполнение экспоненты не превращается в Infinity', () => {
+    expect(parseNumberInput('1e400')).toBeNull();
+  });
+
   describe('только целые', () => {
     it('принимает целое', () => {
       expect(parseNumberInput('-42', true)).toBe(-42);

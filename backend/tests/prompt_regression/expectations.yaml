@@ -80,3 +80,13 @@
     - address: "0x0064"
       reg_type: holding
       format: u32
+
+# 07 — Запятая как десятичный разделитель: scale приходит числом с точкой
+07_decimal_separator:
+  registers:
+    - address: 0
+      reg_type: holding
+      scale: 0.1
+    - address: 1
+      reg_type: holding
+      scale: 0.5

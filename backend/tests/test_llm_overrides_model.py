@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 # Добавляем backend/ в sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -42,6 +43,13 @@ def test_both_requests_expose_all_overrides(model):
 def test_override_is_optional(field):
     """Каждое поле необязательное: «не прислал» должно отличаться от значения."""
     assert LlmOverrides().model_dump()[field] is None
+
+
+@pytest.mark.parametrize("bad", [-0.1, 2.5])
+def test_temperature_outside_bounds_rejected(bad):
+    """0..2 — потолок OpenAI-совместимых провайдеров, зажат на модели."""
+    with pytest.raises(ValidationError):
+        LlmOverrides(llm_temperature=bad)
 
 
 def test_fix_registers_accepts_registers_and_overrides():

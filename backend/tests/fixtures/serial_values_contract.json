@@ -1,0 +1,19 @@
+{
+    "_comment": "Общий контракт близнецов backend/serial_values.py и frontend/src/utils/serialValues.ts. Копии в backend/tests/fixtures и frontend/src/__tests__/fixtures обязаны совпадать байт в байт — идентичность сторожит test_fixture_copies_in_sync на бэкенде, он видит оба дерева на полном чекауте. Десятичные записи крупнее 2^53 в контракт не входят: Python держит их точным int, JS оставляет строкой.",
+    "parse": [
+        { "raw": "255", "stored": 255 },
+        { "raw": "0", "stored": 0 },
+        { "raw": "0xff", "stored": "0xff" },
+        { "raw": "0XFF", "stored": "0xFF" },
+        { "raw": "0x012F0000", "stored": "0x012F0000" },
+        { "raw": "109:0:1", "stored": "109:0:1" },
+        { "raw": "0x6D:0:1", "stored": "0x6D:0:1" },
+        { "raw": " 12abc ", "stored": "12abc" },
+        { "raw": "1.0.1.8.0.255", "stored": "1.0.1.8.0.255" },
+        { "raw": "ET0PE()", "stored": "ET0PE()" }
+    ],
+    "order": {
+        "unsorted": [9, "ET0PE()", "0xff", 10, 255, "0x10", 2, "109:0:2", "1.0.1.8.0.255", "109:0:1"],
+        "sorted": ["1.0.1.8.0.255", "ET0PE()", 2, 9, 10, "0x10", "109:0:1", "109:0:2", "0xff", 255]
+    }
+}

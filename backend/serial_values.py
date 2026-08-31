@@ -12,6 +12,10 @@ _DECIMAL_REGEX = re.compile(r"^\d+$")
 _HEX_REGEX = re.compile(r"^0x[\dA-F]+$", re.IGNORECASE)
 _NUMBER_REGEX = re.compile(r"^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
+# Шире u64 драйвер значений не читает (stoull), а int за пределами ~4300 цифр не
+# сериализуется в JSON — запись сверх потолка считаем неразобранной
+_MAX_SERIAL_VALUE = 0xFFFF_FFFF_FFFF_FFFF
+
 
 def parse_address(value: object) -> object:
     """Число для десятичной записи, строка для hex и побитовой.
@@ -22,7 +26,10 @@ def parse_address(value: object) -> object:
         return value
     text = value.strip()
     if _DECIMAL_REGEX.match(text):
-        return int(text)
+        try:
+            return int(text)
+        except ValueError:  # длиннее лимита CPython на разбор десятичной записи
+            return text
     if _HEX_REGEX.match(text):
         # Схема требует префикс в нижнем регистре, сами цифры — в любом
         return "0x" + text[2:]
@@ -42,25 +49,30 @@ def _address_as_int(value: object) -> int | None:
         return None
     text = value.strip()
     if _DECIMAL_REGEX.match(text):
-        return int(text)
-    if _HEX_REGEX.match(text):
-        return int(text, 16)
-    return None
+        try:
+            number = int(text)
+        except ValueError:  # длиннее лимита CPython на разбор десятичной записи
+            return None
+    elif _HEX_REGEX.match(text):
+        number = int(text, 16)
+    else:
+        return None
+    return number if number <= _MAX_SERIAL_VALUE else None
 
 
-def address_sort_value(value: object) -> int:
-    """Значение для сортировки. Побитовый адрес — по своему регистру.
+def address_sort_key(value: object) -> tuple[tuple[int, ...], str]:
+    """Ключ сортировки — значения всех частей записи, при равенстве сама запись.
 
-    Неразобранное даёт 0, чтобы сортировка не падала на мусорном адресе.
+    Биты одного регистра идут по порядку смещения, неразобранные записи (OBIS-коды)
+    упорядочиваются строкой. Порядок общий с compareAddresses на фронте — контракт
+    в serial_values_contract.json.
     """
+    text = value if isinstance(value, str) else str(value)
+    if isinstance(value, str) and ":" in value:
+        parts = tuple(_address_as_int(part) or 0 for part in value.split(":"))
+        return parts, text
     number = _address_as_int(value)
-    if number is not None:
-        return number
-    if isinstance(value, str):
-        head = _address_as_int(value.split(":")[0])
-        if head is not None:
-            return head
-    return 0
+    return ((number,) if number is not None else (0,)), text
 
 
 def parse_number(value: object) -> object:
@@ -80,6 +92,12 @@ def _as_number(text: str) -> int | float | None:
     """Число из уже нормализованной строки, целое не превращается в дробное."""
     if not _NUMBER_REGEX.match(text):
         return None
+    if "." not in text and "e" not in text and "E" not in text:
+        # Целую запись парсим напрямую — через float она теряет точность после 15 цифр
+        try:
+            return int(text)
+        except ValueError:  # длиннее лимита CPython на разбор
+            return None
     number = float(text)
     if not math.isfinite(number):
         return None
@@ -89,7 +107,7 @@ def _as_number(text: str) -> int | float | None:
 def numeric_value(value: object) -> int | float | None:
     """Числовое значение поля в любой из записей. None — не разобрано.
 
-    Нужно для сравнений: `min` и `max` бывают записаны по-разному.
+    Им разворачиваются `min` и `max` — лимиты редактор держит числом.
     """
     if isinstance(value, bool):
         return None
@@ -99,7 +117,8 @@ def numeric_value(value: object) -> int | float | None:
         return None
     text = value.strip()
     if _HEX_REGEX.match(text):
-        return int(text, 16)
+        number = int(text, 16)
+        return number if number <= _MAX_SERIAL_VALUE else None
     return _as_number(text.replace(",", "."))
 
 

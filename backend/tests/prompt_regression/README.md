@@ -32,6 +32,7 @@ tests/prompt_regression/
     04_bitwise_holding.txt          # Биты в holding → reg:bit:width
     05_coil_switch_no_enum.txt      # Coil/discrete → switch, без enum
     06_hex_addresses.txt            # Hex-адреса → запись сохраняется
+    07_decimal_separator.txt        # Запятая в даташите → scale с точкой
 ```
 
 ## Тест-кейсы
@@ -44,6 +45,7 @@ tests/prompt_regression/
 | 04 | Bitwise holding | Биты → отдельные регистры `"reg:bit:width"` |
 | 05 | Coil/discrete → switch | switch без enum, даже при описанных состояниях 0/1 |
 | 06 | Hex-адреса | `0x0064` доезжает записью, а не числом 100 |
+| 07 | Десятичная запятая | «0,1 m3/h» в даташите → `scale: 0.1` |
 
 ## Формат expectations.yaml
 

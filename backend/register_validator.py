@@ -134,12 +134,8 @@ _SCHEMA_PATTERNS = _schema_patterns()
 _FALLBACK_SERIAL_INT = re.compile(r"^(0x[A-Fa-f\d]+|[-]?\d+)$")
 SERIAL_INT_PATTERN = _SCHEMA_PATTERNS.get("serial_int") or _FALLBACK_SERIAL_INT
 
-# Какой записью поле разрешено в схеме. Лимиты сюда не входят, они всегда число
-_NUMERIC_FIELD_PATTERNS = {
-    "error_value": SERIAL_INT_PATTERN,
-    "on_value": SERIAL_INT_PATTERN,
-    "off_value": SERIAL_INT_PATTERN,
-}
+# Поля с записью serial_int. Лимиты сюда не входят, они всегда число
+_SERIAL_INT_FIELDS = ("error_value", "on_value", "off_value")
 
 _SCHEMA_SETS = _schema_value_sets()
 VALID_FORMATS = _SCHEMA_SETS.get("format") or _FALLBACK_FORMATS
@@ -546,20 +542,15 @@ def validate_register(reg: Register) -> RegisterValidation:
             message_key="validation.readonlyConflict",
         ))
 
-    # Число проходит всегда, строка — только в записи, которую разрешает схема
-    for field_name, pattern in _NUMERIC_FIELD_PATTERNS.items():
+    # Число модель уже проверила, гейт нужен только строковой записи. Матч без
+    # strip — запись с пробелами по краям схему драйвера не проходит
+    for field_name in _SERIAL_INT_FIELDS:
         written = getattr(reg, field_name)
-        if written is None:
-            continue
-        if isinstance(written, str):
-            allowed = bool(pattern.match(written.strip()))
-        else:
-            allowed = numeric_value(written) is not None
-        if not allowed:
+        if isinstance(written, str) and not SERIAL_INT_PATTERN.match(written):
             errors.append(FieldError(
                 field=field_name, severity=Severity.ERROR,
                 message_key="validation.invalidNumber",
-                message_params={"field": field_name, "value": str(written)},
+                message_params={"field": field_name, "value": written},
             ))
 
     # Канал с scale = 0 читает константный ноль, отключают канал флагом enabled
@@ -751,7 +742,8 @@ def format_validation_errors(
             elif e.field == "address":
                 lines.append(
                     f'{reg_label}: address "{e.message_params.get("value", "")}" is invalid. '
-                    f"Must be a non-negative integer or 'register:bit:width' string"
+                    f"Must be a non-negative integer, a hex string like \"0xFF\", "
+                    f"or a 'register:bit:width' string"
                 )
             elif e.field == "name":
                 if e.message_key == "validation.invalidNameChars":

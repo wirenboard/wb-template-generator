@@ -563,12 +563,6 @@ class TestAutoFixAndValidate:
         assert result.error_count == 0
         assert fixed_count == 0
 
-
-# ===================================================================
-# Тесты format_validation_errors
-# ===================================================================
-
-
     def test_hex_address_survives_soft_branch(self):
         """Регистр с ошибкой в другом поле не должен теряться из-за записи адреса."""
         raw = [{"address": "0xff", "name": "Voltage", "enum": "не список"}]
@@ -576,8 +570,21 @@ class TestAutoFixAndValidate:
         assert [r.address for r in registers] == ["0xff"]
 
 
+# ===================================================================
+# Тесты format_validation_errors
+# ===================================================================
+
+
+
 class TestFormatValidationErrors:
     """Форматирование ошибок для LLM retry."""
+
+    def test_zero_scale_message_is_text(self):
+        """Модель должна получить фразу, а не ключ локализации."""
+        reg = _reg(scale=0)
+        text = format_validation_errors(validate_registers([reg]), [reg])
+        assert "scale is 0" in text
+        assert "validation.zeroScale" not in text
 
     def test_format_error_output(self):
         reg = _reg(format="invalid_fmt", name="Voltage")
@@ -704,6 +711,7 @@ class TestNumericFieldNotation:
         ("on_value", "1.5"),        # serial_int дробную часть не разрешает
         ("error_value", "1e5"),     # экспоненту не разрешает ни один паттерн
         ("off_value", "выкл"),
+        ("on_value", " 0xff "),     # пробелы по краям схему не проходят
     ])
     def test_notation_outside_schema_is_an_error(self, field, value):
         rv = validate_register(_reg(**{field: value}))

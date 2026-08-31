@@ -33,7 +33,7 @@ from log_utils import sanitize_for_log
 from models import AnalyzeResponse, DeviceInfo, Register
 from notifier import report_llm_api_error
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
-from serial_values import address_sort_value, canonical_address, parse_address
+from serial_values import address_sort_key, canonical_address, parse_address
 from sse import sse_done, sse_progress, sse_result, sse_user_error
 from user_errors import UserError, render_key
 
@@ -494,7 +494,7 @@ def _merge_batch_results(
             seen.add(key)
             all_registers.append(reg)
 
-    all_registers.sort(key=lambda r: (r.reg_type, address_sort_value(r.address)))
+    all_registers.sort(key=lambda r: (r.reg_type, address_sort_key(r.address)))
     return device_info, all_registers, total_auto_fixed
 
 
