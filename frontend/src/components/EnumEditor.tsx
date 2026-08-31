@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { useT } from '../i18n';
 import type { EnumEntry } from '../types';
 import { translateStrings } from '../api';
+import NumberField from './NumberField';
 
 interface EnumEditorProps {
   entries: EnumEntry[];
@@ -144,10 +145,11 @@ function EnumRow({
     <>
       <tr>
         <td className="px-1 py-0.5">
-          <input
-            type="number"
+          <NumberField
             value={entry.value}
-            onChange={(e) => onUpdate({ value: parseInt(e.target.value, 10) || 0 })}
+            integer
+            fallback={0}
+            onChange={(v) => onUpdate({ value: v ?? 0 })}
             className={`${inputClass} w-14`}
           />
         </td>

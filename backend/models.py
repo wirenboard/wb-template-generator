@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, StringConstraints, model_validator
 # расход растёт и по длине строки, и по числу каналов.
 ShortText = Annotated[str, StringConstraints(max_length=512)]
 LongText = Annotated[str, StringConstraints(max_length=2048)]
+# Запись `definitions/serial_int` — число и hex-строка равноправны
+SerialInt = int | ShortText
 MAX_REGISTERS = 5_000
 MAX_GROUPS = 2_000
 MAX_ENUM_ENTRIES = 4_096
@@ -124,13 +126,13 @@ class Register(BaseModel):
     string_data_size: int | None = None
     word_order: ShortText | None = None
     byte_order: ShortText | None = None
-    error_value: ShortText | None = None
+    error_value: SerialInt | None = None
     readonly: bool | None = None
     min: int | float | None = None
     max: int | float | None = None
     round_to: int | float | None = None
-    on_value: int | None = None
-    off_value: int | None = None
+    on_value: SerialInt | None = None
+    off_value: SerialInt | None = None
     default_value: int | float | None = None
     translations: dict[str, RegisterTranslation] | None = None
     group_title_translations: dict[str, ShortText] | None = None
@@ -199,7 +201,8 @@ class LlmOverrides(BaseModel):
     llm_model: ShortText | None = None
     llm_timeout: int | None = None
     llm_legacy_max_tokens: bool | None = None
-    llm_temperature: float | None = None
+    # Верхняя граница у провайдеров разная, 2 — потолок OpenAI-совместимых
+    llm_temperature: Annotated[float, Field(ge=0, le=2)] | None = None
 
 
 class FixRegistersRequest(ValidateRequest, LlmOverrides):

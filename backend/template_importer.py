@@ -6,6 +6,7 @@ import re
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment, SecurityError
 
+from serial_values import numeric_value, parse_address, parse_number
 from user_errors import UserError
 
 # Шаблон приходит от пользователя, а обычный Environment исполняет из него любой код
@@ -98,26 +99,32 @@ def _extract_group_translations(
     return result or None
 
 
-def _parse_address(addr) -> int | str:
-    """Парсит адрес: hex-строки → int, строки с ':' → as-is, числа → int."""
-    if isinstance(addr, int):
-        return addr
-    if isinstance(addr, str):
-        if ":" in addr:
-            return addr
-        try:
-            return int(addr, 0)
-        except (ValueError, TypeError):
-            return addr
-    return addr
+# Драйвер ждёт здесь число, а шаблон приносит и строку — с точкой или запятой.
+# У `on_value` и `off_value` hex законен, parse_number его не трогает
+_NUMERIC_FIELDS = frozenset({"round_to", "string_data_size", "on_value", "off_value"})
+
+# Лимиты в редакторе всегда число, поэтому hex разворачиваем. Неразобранную запись
+# не переносим — регистр важнее одного поля
+_LIMIT_FIELDS = frozenset({"min", "max"})
+
+# Поля с записью serial_int — у строк обрезаем пробелы по краям, копипаста из даташита
+_SERIAL_INT_FIELDS = frozenset({"error_value", "on_value", "off_value"})
 
 
 def _copy_optional_fields(source: dict, target: dict, fields: tuple[str, ...] = _OPTIONAL_FIELDS) -> None:
     """Копирует опциональные поля из source в target, если они не None."""
     for field in fields:
         value = source.get(field)
-        if value is not None:
-            target[field] = value
+        if value is None:
+            continue
+        if field in _SERIAL_INT_FIELDS and isinstance(value, str):
+            value = value.strip()
+        if field in _LIMIT_FIELDS:
+            number = numeric_value(value)
+            if number is not None:
+                target[field] = number
+            continue
+        target[field] = parse_number(value) if field in _NUMERIC_FIELDS else value
 
 
 def _to_register(
@@ -134,14 +141,14 @@ def _to_register(
     reg: dict = {
         "id": original_id or re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "unknown",
         "name": name,
-        "address": _parse_address(source.get("address", 0)),
+        "address": parse_address(source.get("address", 0)),
         "reg_type": source.get("reg_type", "holding"),
         "channel_type": source.get("type", "value"),
         "group": source.get("group", "general"),
         "is_parameter": is_parameter,
         "enabled": source.get("enabled", True),
-        "scale": source.get("scale", 1),
-        "offset": source.get("offset", 0),
+        "scale": parse_number(source.get("scale", 1)),
+        "offset": parse_number(source.get("offset", 0)),
     }
 
     # format: сохраняем только если явно задан в оригинале

@@ -470,7 +470,7 @@ async def analyze(
     llm_max_tokens: Optional[int] = Form(None),
     llm_timeout: Optional[int] = Form(None),
     llm_legacy_max_tokens: Optional[bool] = Form(None),
-    llm_temperature: Optional[float] = Form(None),
+    llm_temperature: Optional[float] = Form(None, ge=0, le=2),
     system_prompt: Optional[str] = Form(None),
     translation_languages: Optional[str] = Form(None),
 ):

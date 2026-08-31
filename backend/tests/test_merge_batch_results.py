@@ -65,8 +65,8 @@ def test_mixed_numeric_and_bitwise_addresses_sort_without_error():
     """Сортировка не падает на смешанных адресах.
 
     Побитовый адрес приходит строкой «2000:0:1», числовой — int. Прямой sorted()
-    на таком наборе бросает TypeError, поэтому ключ сортировки берёт из строки
-    базовый адрес.
+    на таком наборе бросает TypeError, поэтому ключ сортировки считает значения
+    всех частей записи (0xF010 = 61456).
     """
     regs = [
         Register(address="2000:0:1", name="Bit flag", reg_type="holding"),
@@ -76,9 +76,7 @@ def test_mixed_numeric_and_bitwise_addresses_sort_without_error():
 
     _, merged, _ = _merge_batch_results([_batch(regs)])
 
-    assert len(merged) == 3
-    addresses = [r.address for r in merged]
-    assert 100 in addresses and "2000:0:1" in addresses and "0xF010" in addresses
+    assert [r.address for r in merged] == [100, "2000:0:1", "0xF010"]
 
 
 def test_device_info_taken_from_first_named_batch():
@@ -99,3 +97,16 @@ def test_auto_fix_counts_are_summed():
     _, _, total_fixed = _merge_batch_results([first, second])
 
     assert total_fixed == 5
+
+
+def test_same_address_in_two_notations_is_deduped():
+    """Один регистр, записанный десятичным и hex, — не два регистра."""
+    regs = [
+        Register(address=255, name="Voltage", reg_type="holding"),
+        Register(address="0xff", name="Voltage duplicate", reg_type="holding"),
+    ]
+
+    _, merged, _ = _merge_batch_results([_batch(regs)])
+
+    assert len(merged) == 1
+    assert merged[0].name == "Voltage"

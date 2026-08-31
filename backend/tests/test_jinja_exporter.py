@@ -1655,3 +1655,80 @@ class TestStringPatternRendering:
         ]
         patterns = _detect_string_channel_patterns(channels, set())
         assert len(patterns) == 0
+
+
+def _template_with(channels: list[dict]) -> dict:
+    """Каркас шаблона — тесты задают только каналы."""
+    return {
+        "device_type": "test", "title": "test_title",
+        "device": {
+            "name": "Test", "id": "test",
+            "groups": [{"title": "Main", "id": "g"}],
+            "channels": channels, "parameters": {}, "translations": {},
+        },
+    }
+
+
+class TestNonNumericAddresses:
+    """Hex и побитовые адреса: экспорт не падает и запись адреса не переписывает."""
+
+    NAMES = [
+        "Button Single Press Counter",
+        "Button Long Press Counter",
+        "Button Double Press Counter",
+    ]
+
+    def _channels(self, addresses):
+        return [
+            {"name": name, "address": address, "reg_type": "holding",
+             "type": "value", "format": "u16", "group": "g"}
+            for name, address in zip(self.NAMES, addresses)
+        ]
+
+    def test_decimal_addresses_still_fold(self):
+        patterns = _detect_string_channel_patterns(self._channels([464, 480, 496]), set())
+        assert len(patterns) == 1
+
+    @pytest.mark.parametrize("addresses", [
+        ["0x1D0", "0x1E0", "0x1F0"],
+        ["109:0:1", "125:0:1", "141:0:1"],
+    ])
+    def test_non_numeric_addresses_are_not_folded(self, addresses):
+        """Цикл считает адрес как «база + шаг» и потерял бы исходную запись."""
+        assert _detect_string_channel_patterns(self._channels(addresses), set()) == []
+
+    @pytest.mark.parametrize("addresses", [
+        ["0x1D0", "0x1E0", "0x1F0"],
+        ["0x012F0000", "0x012F0001", "0x012F0002"],
+        ["109:0:1", "125:0:1", "141:0:1"],
+    ])
+    def test_addresses_survive_export(self, addresses):
+        result = build_jinja_template(_template_with(self._channels(addresses)))
+        for address in addresses:
+            assert '"%s"' % address in result
+
+
+class TestNumericPatternAddresses:
+    """Свёртка по номеру в имени канала — путь через _validate_address_progression."""
+
+    def _channels(self, addresses):
+        return [
+            {"name": "Relay %d" % (i + 1), "address": address, "reg_type": "holding",
+             "type": "value", "format": "u16", "group": "g"}
+            for i, address in enumerate(addresses)
+        ]
+
+    def test_decimal_addresses_fold_into_loop(self):
+        result = build_jinja_template(_template_with(self._channels([16, 17, 18])))
+        assert "{% for" in result
+        assert '"address": {{ 16 + i - 1 }}' in result
+
+    @pytest.mark.parametrize("addresses", [
+        ["0x10", "0x11", "0x12"],
+        ["109:0:1", "109:0:2", "109:0:3"],
+    ])
+    def test_non_numeric_addresses_keep_their_notation(self, addresses):
+        """Цикл выразил бы адрес как «база + шаг» и переписал запись десятичной."""
+        result = build_jinja_template(_template_with(self._channels(addresses)))
+        for address in addresses:
+            assert '"%s"' % address in result

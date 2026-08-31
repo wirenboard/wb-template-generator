@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../store';
 import { fetchModels, fetchPrompts } from '../api';
 import { useT } from '../i18n';
+import NumberField from './NumberField';
 
 interface LlmSettingsFieldsProps {
   /** Показывать как развёрнутую форму (без заголовка-аккордеона) */
@@ -111,36 +112,34 @@ export default function LlmSettingsFields({ inline }: LlmSettingsFieldsProps) {
       <div className="flex gap-3">
         <div className="flex-1">
           <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.maxTokens')}</label>
-          <input
-            type="number"
-            value={llmConfig.maxTokens ?? ''}
-            onChange={(e) => setLlmConfig({ maxTokens: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="16384"
+          <NumberField
+            value={llmConfig.maxTokens}
+            integer
             min={1}
+            onChange={(v) => setLlmConfig({ maxTokens: v })}
+            placeholder="16384"
             className={inputClass}
           />
         </div>
         <div className="flex-1">
           <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.timeout')}</label>
-          <input
-            type="number"
-            value={llmConfig.timeout ?? ''}
-            onChange={(e) => setLlmConfig({ timeout: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="120"
+          <NumberField
+            value={llmConfig.timeout}
+            integer
             min={10}
+            onChange={(v) => setLlmConfig({ timeout: v })}
+            placeholder="120"
             className={inputClass}
           />
         </div>
         <div className="flex-1">
           <label className="block text-sm text-gray-600 mb-1">{t('llmSettings.temperature')}</label>
-          <input
-            type="number"
-            value={llmConfig.temperature ?? ''}
-            onChange={(e) => setLlmConfig({ temperature: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder={t('llmSettings.temperaturePlaceholder')}
+          <NumberField
+            value={llmConfig.temperature}
             min={0}
             max={2}
-            step={0.1}
+            onChange={(v) => setLlmConfig({ temperature: v })}
+            placeholder={t('llmSettings.temperaturePlaceholder')}
             className={inputClass}
           />
         </div>

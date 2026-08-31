@@ -50,14 +50,14 @@ some devices split registers across tables (e.g. "Input Registers" and "Holding 
    - The result MUST be ≤ 65535 — Modbus addresses are 16-bit. If your result is larger,
      you subtracted the wrong amount: re-check the digit count and convert again.
    - If the table ALSO has a hex column (e.g. 0xF010), trust the hex column — it is the real
-     Modbus address. Convert it to decimal and use that.
+     Modbus address. Keep it as written, the driver accepts hex.
    - ONLY apply this conversion for addresses starting with 3 or 4 in this legacy notation.
 
    **Case C — All other addresses** (plain numbers, hex, etc.):
    - Use addresses EXACTLY as given in the document — do NOT subtract 1.
    - If a table shows address 1, use 1. If it shows address 100, use 100.
    - Do NOT assume addresses are 1-based. Never subtract 1 unless it matches Case B.
-   - If addresses are given as hex (0x0000, 0x64, etc.), convert to decimal.
+   - If addresses are given as hex (0x0000, 0x64, etc.), keep the hex notation as printed.
    - **Bitwise access** (ONLY for holding registers): if the document describes individual bits
      within a holding register (e.g. "bit 0 = relay 1 status, bit 1 = relay 2 status"),
      use address format `"register:bit_offset:bit_width"`:
@@ -73,6 +73,8 @@ for each meaningful bit or bit group using this format
    - `format`: "u16", "s16", "u32", "s32", "u64", "float", "string" (based on data size). \
 Use "u16" for 1-word unsigned, "s16" for 1-word signed, "u32"/"s32" for 2-word, "float" for IEEE 754 float (2 words), \
 "string" for text (set `string_data_size` to number of registers).
+   - Numbers: always write the decimal separator as a DOT, never a comma - `0.1`, not `0,1`. \
+Datasheets in Russian and other locales print a comma; convert it. Never use a thousands separator.
    - `scale`: multiplier to convert raw register value to real units. \
 Final value = raw_value * scale + offset. Examples:
      - Document says "value in 0.1 °C" → scale = 0.1 (raw 250 → 25.0 °C)
@@ -364,7 +366,7 @@ Important:
 - Return ONLY the JSON object, no additional text.
 - Include ALL registers from the document, don't skip any.
 - If unsure about a field, use the default value (null for optional fields).
-- `address` — zero-based integer, or string "register:bit:width" for bitwise access.
+- `address` — zero-based integer, hex string like "0xFF", or string "register:bit:width" for bitwise access.
 - `group` must be snake_case (lowercase, underscores).
 - Coil and discrete registers use format "u16" and scale 1.
 - For float registers (2 words), address is the first word address.
@@ -484,7 +486,7 @@ float, double, char8, string, string8
 - reg_type: coil, discrete, holding, holding_single, holding_multi, input
 - channel_type: "value" for measurements, "switch" for on/off toggles, \
 "wo-switch" for write-only switches, "pushbutton" for buttons, "range" for sliders
-- address: non-negative integer or "register:bit:width" string (e.g. "109:1:2")
+- address: non-negative integer, hex string ("0xFF") or "register:bit:width" string (e.g. "109:1:2")
 
 Return ONLY the corrected JSON with the same structure, no markdown code blocks, no explanation.
 """
@@ -525,7 +527,7 @@ holding_single, holding_multi, press_counter, and other driver-specific types). 
 Keep the given reg_type unless the error explicitly flags it as invalid.
 - channel_type: "value" for measurements, "switch" for on/off toggles, \
 "wo-switch" for write-only switches, "pushbutton" for buttons, "range" for sliders
-- address: non-negative integer or "register:bit:width" string (e.g. "109:1:2")
+- address: non-negative integer, hex string ("0xFF") or "register:bit:width" string (e.g. "109:1:2")
 - enum and enum_titles must have the same length
 - name must not be empty and must not contain any of: $ # + / \\ " '
 - string format requires string_data_size

@@ -64,6 +64,7 @@ backend/
   llm_service.py       # LLM-интеграция: analyze_document, автофикс регистров
   template_builder.py  # Детерминированная сборка JSON-шаблона
   template_importer.py # Импорт существующих .json/.json.jinja шаблонов
+  serial_values.py     # Разбор значений в записи wb-mqtt-serial — одна трактовка на весь бэкенд
   jinja_exporter.py    # Экспорт в .json.jinja с детекцией паттернов
   file_converter.py    # Excel→text, изображения→base64 с потолками на разбор
   prompts.py           # Системные промпты для LLM
@@ -81,6 +82,8 @@ frontend/src/
   constants.ts         # Форматы, единицы, языки, channel_types
   utils/
     conditionValidation.ts  # Валидация condition-ссылок (только на параметры)
+    serialValues.ts         # Разбор адреса и полей serial_int в записи wb-mqtt-serial
+    numberInput.ts          # Разбор и вывод числа для текстового поля ввода
   components/
     RegisterTable.tsx         # Таблица + тулбар + hero-блок (пустое состояние)
     RegisterDetailPanel.tsx   # Панель деталей + NormalizeToEnButton
@@ -97,6 +100,7 @@ frontend/src/
     FileUpload.tsx             # Загрузка файлов (drag-n-drop)
     AnalyzeProgress.tsx        # Прогресс AI-анализа (SSE)
     ConfirmModal.tsx           # Модалка подтверждения (сброс и т.д.)
+    NumberField.tsx            # Числовое поле ввода — редактируемые числовые поля только через него (кроме error_value, там любая запись serial_int)
     ErrorBoundary.tsx          # Обработка ошибок React
     ErrorDisplay.tsx           # Отображение ошибок импорта
   __tests__/                  # Vitest: store, i18n, condition-validation
