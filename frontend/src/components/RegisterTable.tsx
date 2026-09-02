@@ -4,6 +4,7 @@ import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { compareAddresses, parseAddressInput } from '../utils/serialValues';
+import { nextField } from '../utils/tableNavigation';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -1348,6 +1349,9 @@ const COLUMNS: ColumnConfig[] = [
   { field: 'group', type: 'group' },
 ];
 
+/** Поля в порядке колонок — он же порядок обхода по Tab */
+const FIELDS: readonly EditableField[] = COLUMNS.map((c) => c.field);
+
 function getDisplayValue(reg: Register, field: EditableField): string {
   const value = reg[field];
   if (value == null) return '';
@@ -1459,13 +1463,55 @@ function RegisterRow({
   const inputClass =
     'w-full border border-blue-400 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500';
 
+  /**
+   * Переход на соседнюю ячейку строки. За краем колонок редактирование
+   * закрывается, а фокус уходит на соседний чекбокс — так строка обходится
+   * целиком: Адрес → … → Группа → R/O → Параметр → кнопки.
+   */
+  const moveEdit = (field: EditableField, dir: 1 | -1) => {
+    const next = nextField(FIELDS, field, dir);
+    if (next) {
+      onStartEdit(reg.id, next);
+    } else {
+      onStopEdit();
+      focusRowEdge(reg.id, dir === 1 ? 'after' : 'before');
+    }
+  };
+
+  /**
+   * Клавиатура открытой ячейки: Enter — коммит, Escape — отмена, Tab — переход.
+   * Tab перехватываем: без этого onBlur размонтирует поле, и фокус,
+   * лишившись элемента-источника, сваливается в document.body.
+   */
+  const handleEditKeyDown = (
+    field: EditableField,
+    e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    if (e.key === 'Enter') {
+      // Только для текстового поля: у списка Enter выбирает подсвеченную опцию
+      // в раскрытом дропдауне, и перехват отнял бы выбор с клавиатуры
+      if (e.currentTarget.tagName === 'INPUT') e.currentTarget.blur();
+    } else if (e.key === 'Escape') {
+      onStopEdit();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      // blur синхронно коммитит значение через onBlur и закрывает ячейку,
+      // moveEdit тут же открывает соседнюю — оба setState батчатся
+      e.currentTarget.blur();
+      moveEdit(field, e.shiftKey ? -1 : 1);
+    }
+  };
+
   const renderColumnInput = (col: ColumnConfig): ((ref: React.RefCallback<HTMLElement>) => React.ReactNode) => {
     // Формат — используем FormatSelect
     if (col.type === 'format') {
-      return () => (
+      return (ref) => (
         <FormatSelect
+          inputRef={ref}
           value={String(getDefaultValue(reg, col.field))}
-          onChange={(val) => { onChange(reg.id, col.field, val); onStopEdit(); }}
+          onChange={(val) => onChange(reg.id, col.field, val)}
+          onKeyDown={(e) => handleEditKeyDown(col.field, e)}
+          onBlur={onStopEdit}
           className={inputClass}
         />
       );
@@ -1491,8 +1537,8 @@ function RegisterRow({
           onChange={(e) => {
             if (e.target.value === '__new__') return;
             onChange(reg.id, col.field, e.target.value);
-            onStopEdit();
           }}
+          onKeyDown={(e) => handleEditKeyDown(col.field, e)}
           className={inputClass}
         >
           {groupOptions.map((g) => (
@@ -1518,7 +1564,8 @@ function RegisterRow({
           ref={ref}
           defaultValue={currentValue}
           onBlur={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
-          onChange={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
+          onChange={(e) => onChange(reg.id, col.field, e.target.value)}
+          onKeyDown={(e) => handleEditKeyDown(col.field, e)}
           className={`${inputClass}${isCurrentInvalid ? ' text-red-600 ring-1 ring-red-400' : ''}`}
         >
           {allOptions.map((opt) => (
@@ -1543,7 +1590,7 @@ function RegisterRow({
           onChange(reg.id, col.field, val);
           onStopEdit();
         }}
-        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') onStopEdit(); }}
+        onKeyDown={(e) => handleEditKeyDown(col.field, e)}
         placeholder={col.field === 'address' ? t('row.addressPlaceholder') : col.placeholder}
         className={inputClass}
       />
@@ -1601,12 +1648,12 @@ function RegisterRow({
                 </svg>
               </span>
             )}
-            <input type="checkbox" checked={isSelected} onChange={onToggleSelect} className="rounded" />
+            <input type="checkbox" data-cell={`${reg.id}:select`} checked={isSelected} onChange={onToggleSelect} className="rounded" />
           </div>
         </td>
         <td className="px-1 py-1">
           {!reg.is_parameter && (
-            <input type="checkbox" checked={reg.enabled} onChange={onToggle} className="rounded" />
+            <input type="checkbox" data-cell={`${reg.id}:enabled`} checked={reg.enabled} onChange={onToggle} className="rounded" />
           )}
         </td>
 
@@ -1682,7 +1729,7 @@ function RegisterRow({
 
         {/* R/O */}
         <td className="px-1 py-1 text-center">
-          <input type="checkbox" checked={reg.readonly ?? false} onChange={(e) => updateRegister(reg.id, { readonly: e.target.checked })} className="rounded" title={t('row.readonlyTip')} />
+          <input type="checkbox" data-cell={`${reg.id}:readonly`} checked={reg.readonly ?? false} onChange={(e) => updateRegister(reg.id, { readonly: e.target.checked })} className="rounded" title={t('row.readonlyTip')} />
         </td>
 
         {/* Параметр */}
@@ -1729,6 +1776,23 @@ function RegisterRow({
 
 // --- Ячейка с inline-редактированием ---
 
+/**
+ * Увести фокус за пределы редактируемых колонок строки: вперёд — на чекбокс R/O,
+ * назад — на «Вкл». У параметров чекбокса «Вкл» нет, там крайний слева — выбор строки.
+ */
+function focusRowEdge(regId: string, edge: 'before' | 'after') {
+  const keys = edge === 'after'
+    ? [`${regId}:readonly`]
+    : [`${regId}:enabled`, `${regId}:select`];
+  for (const key of keys) {
+    const el = document.querySelector<HTMLElement>(`[data-cell="${key}"]`);
+    if (el) {
+      el.focus();
+      return;
+    }
+  }
+}
+
 interface EditableCellProps {
   isEditing: boolean;
   displayValue: string;
@@ -1758,8 +1822,21 @@ function EditableCell({ isEditing, displayValue, placeholder, onStartEdit, rende
     );
   }
 
+  // tabIndex обязателен: без него span выпадает из порядка табуляции,
+  // и Tab уходил с чекбокса «Вкл» сразу на «R/O», минуя все колонки
   return (
-    <span onClick={onStartEdit} className="cursor-pointer block truncate min-h-[1.25rem] text-xs" title={t('row.clickToEdit')}>
+    <span
+      tabIndex={0}
+      onClick={onStartEdit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === 'F2') {
+          e.preventDefault();
+          onStartEdit();
+        }
+      }}
+      className="cursor-pointer block truncate min-h-[1.25rem] text-xs rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+      title={t('row.clickToEdit')}
+    >
       {displayValue || <span className="text-gray-300">{placeholder ?? ''}</span>}
     </span>
   );
