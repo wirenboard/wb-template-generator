@@ -1488,7 +1488,9 @@ function RegisterRow({
     e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
     if (e.key === 'Enter') {
-      e.currentTarget.blur();
+      // Только для текстового поля: у списка Enter выбирает подсвеченную опцию
+      // в раскрытом дропдауне, и перехват отнял бы выбор с клавиатуры
+      if (e.currentTarget.tagName === 'INPUT') e.currentTarget.blur();
     } else if (e.key === 'Escape') {
       onStopEdit();
     } else if (e.key === 'Tab') {
@@ -1532,6 +1534,10 @@ function RegisterRow({
             }
             onStopEdit();
           }}
+          onChange={(e) => {
+            if (e.target.value === '__new__') return;
+            onChange(reg.id, col.field, e.target.value);
+          }}
           onKeyDown={(e) => handleEditKeyDown(col.field, e)}
           className={inputClass}
         >
@@ -1558,6 +1564,7 @@ function RegisterRow({
           ref={ref}
           defaultValue={currentValue}
           onBlur={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
+          onChange={(e) => onChange(reg.id, col.field, e.target.value)}
           onKeyDown={(e) => handleEditKeyDown(col.field, e)}
           className={`${inputClass}${isCurrentInvalid ? ' text-red-600 ring-1 ring-red-400' : ''}`}
         >
