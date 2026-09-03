@@ -5,6 +5,11 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.7.9] - 2026-09-03
+
+### Добавлено
+- **Горячие клавиши для строк таблицы: `Insert` добавляет регистр, `Delete` удаляет.** Insert сразу открывает «Адрес» новой строки, поэтому вместе с переходом по Tab ввод идёт без мыши. Delete удаляет отмеченные чекбоксами строки, а если таких нет — выделенную; вернуть можно тостом отмены или Ctrl+Z. Вторая половина обращения с форума.
+
 ## [0.7.8] - 2026-09-02
 
 ### Добавлено
@@ -409,6 +414,7 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
+[0.7.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.8...v0.7.9
 [0.7.8]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.5...v0.7.6

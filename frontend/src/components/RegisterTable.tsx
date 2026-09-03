@@ -4,7 +4,7 @@ import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { compareAddresses, parseAddressInput } from '../utils/serialValues';
-import { nextField } from '../utils/tableNavigation';
+import { nextField, deleteTargets } from '../utils/tableNavigation';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -109,6 +109,7 @@ export default function RegisterTable({
   const removeRegister = useStore((s) => s.removeRegister);
   const toggleRegister = useStore((s) => s.toggleRegister);
   const highlightedRegisterId = useStore((s) => s.highlightedRegisterId);
+  const setHighlightedRegister = useStore((s) => s.setHighlightedRegister);
   const newlyAddedRegisterId = useStore((s) => s.newlyAddedRegisterId);
   const expandedRows = useStore((s) => s.expandedRows);
   const toggleRowExpanded = useStore((s) => s.toggleRowExpanded);
@@ -504,6 +505,47 @@ export default function RegisterTable({
     setSelected(new Set());
   }, [selected, deleteWithUndo]);
 
+  // Новая строка сразу открывается на «Адресе»: вместе с переходом по Tab
+  // это даёт непрерывный ввод — Insert, адрес, Tab, имя, Insert
+  useEffect(() => {
+    if (!newlyAddedRegisterId) return;
+    startEdit(newlyAddedRegisterId, 'address');
+  }, [newlyAddedRegisterId, startEdit]);
+
+  // Insert — добавить регистр, Delete — удалить отмеченные или подсвеченную строку
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Пока открыта модалка, таблица под ней клавиши не слушает
+      if (groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen) return;
+      // В полях ввода клавиши работают по своему прямому назначению
+      const target = e.target as HTMLElement;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+
+      if (e.key === 'Insert') {
+        e.preventDefault();
+        addRegister();
+        return;
+      }
+      if (e.key === 'Delete') {
+        const targets = deleteTargets(selected, highlightedRegisterId);
+        if (!targets) return;
+        e.preventDefault();
+        deleteWithUndo(targets);
+        setSelected(new Set());
+        if (highlightedRegisterId && targets.has(highlightedRegisterId)) {
+          setHighlightedRegister(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [
+    addRegister, deleteWithUndo, selected, highlightedRegisterId, setHighlightedRegister,
+    groupManagerOpen, languageManagerOpen, llmImportOpen, llmSettingsOpen,
+  ]);
+
   // --- Скачать CSV-шаблон с примерами ---
   const downloadCsvTemplate = useCallback(() => {
     const languages = useStore.getState().languages;
@@ -829,10 +871,10 @@ export default function RegisterTable({
       {hasRegisters && (
       <div className="flex flex-wrap items-center gap-2 mb-3" ref={menuRef}>
         {/* Редактирование */}
-        <button onClick={addRegister} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+        <button onClick={addRegister} title={t('toolbar.addTip')} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
           {t('toolbar.add')}
         </button>
-        <button onClick={deleteSelected} disabled={selected.size === 0} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+        <button onClick={deleteSelected} disabled={selected.size === 0} title={t('toolbar.deleteTip')} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           {t('toolbar.delete')} ({selected.size})
         </button>
 

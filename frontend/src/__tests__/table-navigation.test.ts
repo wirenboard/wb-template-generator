@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextField } from '../utils/tableNavigation';
+import { nextField, deleteTargets } from '../utils/tableNavigation';
 
 // Порядок колонок таблицы регистров — тот же, что в COLUMNS (RegisterTable.tsx)
 const FIELDS = ['address', 'name', 'reg_type', 'format', 'units', 'channel_type', 'group'] as const;
@@ -52,5 +52,32 @@ describe('nextField', () => {
     const single = ['address'] as const;
     expect(nextField(single, 'address', 1)).toBeNull();
     expect(nextField(single, 'address', -1)).toBeNull();
+  });
+});
+
+describe('deleteTargets', () => {
+  it('отмеченные чекбоксами строки удаляются все', () => {
+    const targets = deleteTargets(new Set(['a', 'b']), null);
+    expect(targets).toEqual(new Set(['a', 'b']));
+  });
+
+  it('без отметок удаляется подсвеченная строка', () => {
+    expect(deleteTargets(new Set(), 'c')).toEqual(new Set(['c']));
+  });
+
+  // Отметки чекбоксами приоритетнее: подсветка ставится любым кликом по строке,
+  // поэтому она почти всегда есть и сама по себе не выражает намерения удалить
+  it('при отметках подсветка не влияет на набор', () => {
+    expect(deleteTargets(new Set(['a']), 'c')).toEqual(new Set(['a']));
+  });
+
+  it('когда удалять нечего — null, клавиша достаётся браузеру', () => {
+    expect(deleteTargets(new Set(), null)).toBeNull();
+  });
+
+  it('возвращается копия, а не сам набор выбранных строк', () => {
+    const selected = new Set(['a']);
+    const targets = deleteTargets(selected, null);
+    expect(targets).not.toBe(selected);
   });
 });

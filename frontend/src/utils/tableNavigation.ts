@@ -23,3 +23,17 @@ export function nextField<F extends string>(
   if (index === -1) return null;
   return fields[index + dir] ?? null;
 }
+
+/**
+ * Что удаляет Delete: отмеченные чекбоксами строки, а если таких нет — подсвеченную.
+ *
+ * @returns набор id либо null, если удалять нечего — тогда клавиша не перехватывается
+ */
+export function deleteTargets(
+  selected: ReadonlySet<string>,
+  highlightedId: string | null,
+): Set<string> | null {
+  if (selected.size > 0) return new Set(selected);
+  if (highlightedId) return new Set([highlightedId]);
+  return null;
+}
