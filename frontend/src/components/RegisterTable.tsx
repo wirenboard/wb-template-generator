@@ -24,6 +24,8 @@ interface RegisterTableProps {
   setDownloadOpen: (open: boolean) => void;
   downloadRef: React.RefObject<HTMLDivElement>;
   onResetAll: () => void;
+  /** Открыта модалка, которой владеет App — тогда таблица не слушает клавиши строк */
+  modalOpen?: boolean;
 }
 
 /** Состояние undo-удаления */
@@ -99,6 +101,7 @@ export default function RegisterTable({
   setDownloadOpen,
   downloadRef,
   onResetAll,
+  modalOpen,
 }: RegisterTableProps) {
   const t = useT();
   const hasTranslations = useHasTranslations();
@@ -516,7 +519,7 @@ export default function RegisterTable({
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // Пока открыта модалка, таблица под ней клавиши не слушает
-      if (groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen) return;
+      if (modalOpen || groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen) return;
       // В полях ввода клавиши работают по своему прямому назначению
       if (isTypingTarget(e.target as HTMLElement)) return;
 
@@ -540,7 +543,7 @@ export default function RegisterTable({
     return () => window.removeEventListener('keydown', handler);
   }, [
     addRegister, deleteWithUndo, selected, highlightedRegisterId, setHighlightedRegister,
-    groupManagerOpen, languageManagerOpen, llmImportOpen, llmSettingsOpen,
+    modalOpen, groupManagerOpen, languageManagerOpen, llmImportOpen, llmSettingsOpen,
   ]);
 
   // --- Скачать CSV-шаблон с примерами ---
