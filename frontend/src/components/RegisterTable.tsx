@@ -4,7 +4,7 @@ import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { compareAddresses, parseAddressInput } from '../utils/serialValues';
-import { nextField, deleteTargets } from '../utils/tableNavigation';
+import { nextField, deleteTargets, isTypingTarget } from '../utils/tableNavigation';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -322,9 +322,8 @@ export default function RegisterTable({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && undoState) {
-        // Не перехватываем если фокус в input/textarea
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        // Не перехватываем, когда пользователь набирает текст
+        if (isTypingTarget(e.target as HTMLElement)) return;
         e.preventDefault();
         handleUndo();
       }
@@ -519,9 +518,7 @@ export default function RegisterTable({
       // Пока открыта модалка, таблица под ней клавиши не слушает
       if (groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen) return;
       // В полях ввода клавиши работают по своему прямому назначению
-      const target = e.target as HTMLElement;
-      const tag = target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+      if (isTypingTarget(e.target as HTMLElement)) return;
 
       if (e.key === 'Insert') {
         e.preventDefault();

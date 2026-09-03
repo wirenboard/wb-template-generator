@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextField, deleteTargets } from '../utils/tableNavigation';
+import { nextField, deleteTargets, isTypingTarget } from '../utils/tableNavigation';
 
 // Порядок колонок таблицы регистров — тот же, что в COLUMNS (RegisterTable.tsx)
 const FIELDS = ['address', 'name', 'reg_type', 'format', 'units', 'channel_type', 'group'] as const;
@@ -79,5 +79,42 @@ describe('deleteTargets', () => {
     const selected = new Set(['a']);
     const targets = deleteTargets(selected, null);
     expect(targets).not.toBe(selected);
+  });
+});
+
+describe('isTypingTarget', () => {
+  // Из-за этого случая Delete не срабатывал после отметки строк галками:
+  // фокус остаётся на чекбоксе, а он тоже <input>
+  it('чекбокс — не набор текста, клавиши строк работают', () => {
+    expect(isTypingTarget({ tagName: 'INPUT', type: 'checkbox' })).toBe(false);
+  });
+
+  it('текстовое поле защищено', () => {
+    expect(isTypingTarget({ tagName: 'INPUT', type: 'text' })).toBe(true);
+    expect(isTypingTarget({ tagName: 'TEXTAREA' })).toBe(true);
+  });
+
+  it('список защищён — в нём идёт выбор значения', () => {
+    expect(isTypingTarget({ tagName: 'SELECT' })).toBe(true);
+  });
+
+  it('input без указанного типа считается текстовым', () => {
+    expect(isTypingTarget({ tagName: 'INPUT' })).toBe(true);
+  });
+
+  it('contenteditable защищён', () => {
+    expect(isTypingTarget({ tagName: 'DIV', isContentEditable: true })).toBe(true);
+  });
+
+  it('кнопки и ячейки таблицы клавиши не перехватывают', () => {
+    expect(isTypingTarget({ tagName: 'BUTTON' })).toBe(false);
+    expect(isTypingTarget({ tagName: 'INPUT', type: 'button' })).toBe(false);
+    expect(isTypingTarget({ tagName: 'SPAN' })).toBe(false);
+    expect(isTypingTarget({ tagName: 'BODY' })).toBe(false);
+  });
+
+  it('регистр в tagName и type не важен', () => {
+    expect(isTypingTarget({ tagName: 'input', type: 'CHECKBOX' })).toBe(false);
+    expect(isTypingTarget({ tagName: 'input', type: 'Text' })).toBe(true);
   });
 });

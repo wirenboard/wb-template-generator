@@ -37,3 +37,23 @@ export function deleteTargets(
   if (highlightedId) return new Set([highlightedId]);
   return null;
 }
+
+/**
+ * Печатает ли пользователь в этом элементе — тогда клавиши строк ему не мешают.
+ *
+ * Чекбокс к таким не относится: Delete в нём ничего не делает, а фокус остаётся
+ * ровно на нём сразу после того, как строку отметили галкой, — то есть в тот
+ * момент, когда удаление и нужно.
+ */
+export function isTypingTarget(el: {
+  tagName: string;
+  type?: string;
+  isContentEditable?: boolean;
+}): boolean {
+  if (el.isContentEditable) return true;
+  const tag = el.tagName.toUpperCase();
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag !== 'INPUT') return false;
+  const type = (el.type ?? 'text').toLowerCase();
+  return !['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color'].includes(type);
+}
