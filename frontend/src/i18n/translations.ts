@@ -23,7 +23,9 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // --- Toolbar ---
     'toolbar.add': '+ Добавить',
+    'toolbar.addTip': 'Добавить регистр (Insert)',
     'toolbar.delete': 'Удалить',
+    'toolbar.deleteTip': 'Удалить отмеченные строки, иначе выделенную (Delete)',
     'toolbar.csv': 'CSV',
     'toolbar.csvExport': 'Экспорт',
     'toolbar.csvImport': 'Импорт',
@@ -490,7 +492,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'footer.source': 'Source code on GitHub',
 
     'toolbar.add': '+ Add',
+    'toolbar.addTip': 'Add register (Insert)',
     'toolbar.delete': 'Delete',
+    'toolbar.deleteTip': 'Delete checked rows, otherwise the highlighted one (Delete)',
     'toolbar.csv': 'CSV',
     'toolbar.csvExport': 'Export',
     'toolbar.csvImport': 'Import',
@@ -928,7 +932,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'footer.source': 'GitHub-тағы бастапқы код',
 
     'toolbar.add': '+ Қосу',
+    'toolbar.addTip': 'Регистр қосу (Insert)',
     'toolbar.delete': 'Жою',
+    'toolbar.deleteTip': 'Белгіленген жолдарды, әйтпесе ерекшеленгенді жою (Delete)',
     'toolbar.csv': 'CSV',
     'toolbar.csvExport': 'Экспорт',
     'toolbar.csvImport': 'Импорт',
@@ -1365,7 +1371,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'footer.source': 'Codice sorgente su GitHub',
 
     'toolbar.add': '+ Aggiungi',
+    'toolbar.addTip': 'Aggiungi registro (Ins)',
     'toolbar.delete': 'Elimina',
+    'toolbar.deleteTip': 'Elimina le righe spuntate, altrimenti quella evidenziata (Canc)',
     'toolbar.csv': 'CSV',
     'toolbar.csvExport': 'Esporta',
     'toolbar.csvImport': 'Importa',

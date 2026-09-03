@@ -4,7 +4,7 @@ import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { compareAddresses, parseAddressInput } from '../utils/serialValues';
-import { nextField } from '../utils/tableNavigation';
+import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId, rowHotkeyAction } from '../utils/tableNavigation';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -24,6 +24,8 @@ interface RegisterTableProps {
   setDownloadOpen: (open: boolean) => void;
   downloadRef: React.RefObject<HTMLDivElement>;
   onResetAll: () => void;
+  /** Открыта модалка, которой владеет App — тогда таблица не слушает клавиши строк */
+  modalOpen?: boolean;
 }
 
 /** Состояние undo-удаления */
@@ -99,6 +101,7 @@ export default function RegisterTable({
   setDownloadOpen,
   downloadRef,
   onResetAll,
+  modalOpen,
 }: RegisterTableProps) {
   const t = useT();
   const hasTranslations = useHasTranslations();
@@ -109,6 +112,7 @@ export default function RegisterTable({
   const removeRegister = useStore((s) => s.removeRegister);
   const toggleRegister = useStore((s) => s.toggleRegister);
   const highlightedRegisterId = useStore((s) => s.highlightedRegisterId);
+  const setHighlightedRegister = useStore((s) => s.setHighlightedRegister);
   const newlyAddedRegisterId = useStore((s) => s.newlyAddedRegisterId);
   const expandedRows = useStore((s) => s.expandedRows);
   const toggleRowExpanded = useStore((s) => s.toggleRowExpanded);
@@ -321,9 +325,8 @@ export default function RegisterTable({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && undoState) {
-        // Не перехватываем если фокус в input/textarea
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        // Не перехватываем, когда пользователь набирает текст
+        if (isTypingTarget(e.target as HTMLElement)) return;
         e.preventDefault();
         handleUndo();
       }
@@ -499,10 +502,95 @@ export default function RegisterTable({
     showUndoToast(deleted);
   }, [registers, removeRegister, showUndoToast]);
 
+  /**
+   * Единственный путь удаления — из кнопки тулбара, «x» в строке и с клавиатуры.
+   * Помимо тоста отмены убирает удалённые id из отметок и снимает подсветку,
+   * иначе они указывают на строки, которых больше нет.
+   */
+  const aliveIds = useMemo(() => new Set(registers.map((r) => r.id)), [registers]);
+
+  /**
+   * Отметки без исчезнувших строк. Локальный `selected` переживает и удаление
+   * строки кнопкой «x», и сброс шаблона, и замену таблицы импортом или анализом,
+   * поэтому счётчик на кнопке показывал бы строки, которых нет.
+   */
+  const selectedAlive = useMemo(
+    () => new Set([...selected].filter((id) => aliveIds.has(id))),
+    [selected, aliveIds],
+  );
+
+  const runDelete = useCallback((ids: Set<string>) => {
+    deleteWithUndo(ids);
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((id) => !ids.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    if (highlightedRegisterId && ids.has(highlightedRegisterId)) {
+      setHighlightedRegister(null);
+    }
+  }, [deleteWithUndo, highlightedRegisterId, setHighlightedRegister]);
+
   const deleteSelected = useCallback(() => {
-    deleteWithUndo(selected);
-    setSelected(new Set());
-  }, [selected, deleteWithUndo]);
+    runDelete(selectedAlive);
+  }, [selectedAlive, runDelete]);
+
+  // Новая строка сразу открывается на «Адресе»: вместе с переходом по Tab
+  // это даёт непрерывный ввод — Insert, адрес, Tab, имя, Insert
+  useEffect(() => {
+    if (!newlyAddedRegisterId) return;
+    setHighlightedRegister(newlyAddedRegisterId);
+    startEdit(newlyAddedRegisterId, 'address');
+  }, [newlyAddedRegisterId, startEdit, setHighlightedRegister]);
+
+  // Insert — добавить регистр, Delete — удалить отмеченные или текущую строку
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Один источник «где фокус» на обе клавиши
+      const active = (document.activeElement as HTMLElement | null) ?? (e.target as HTMLElement | null);
+      const typing = active ? isTypingTarget(active) : false;
+      const focusedRow = active?.closest('tr[id^="reg-row-"]') ?? null;
+
+      const action = rowHotkeyAction({
+        key: e.key,
+        repeat: e.repeat,
+        // Shift+Insert — вставка из буфера, Shift+Delete — вырезание
+        hasModifier: e.ctrlKey || e.metaKey || e.altKey || e.shiftKey,
+        // Пока открыта модалка, таблица под ней клавиши не слушает
+        modalOpen: Boolean(modalOpen) || groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen,
+        typing,
+        inRow: focusedRow !== null,
+      });
+      if (!action) return;
+
+      if (action === 'add') {
+        e.preventDefault();
+        // blur коммитит значение открытой ячейки, поэтому ввод не теряется
+        if (typing) active?.blur();
+        addRegister();
+        return;
+      }
+
+      // Цель — строка, где стоит фокус: подсветка ставится только кликом мыши
+      // и обходом по Tab не двигается.
+      const focusedRowId = rowIdFromDomId(focusedRow?.id);
+      // Подсветка — запасной вариант и только когда фокус нигде. Иначе Delete
+      // сносил бы регистр, пока пользователь работает в его же панели деталей
+      // (она лежит в соседнем <tr> без id) или в панели превью.
+      const focusNowhere = !active || active === document.body || active === document.documentElement;
+      const currentId = focusedRowId ?? (focusNowhere ? highlightedRegisterId : null);
+      // Строку в свёрнутой группе не видно — удалять её молча нельзя
+      const visibleId = currentId && document.getElementById(`reg-row-${currentId}`) ? currentId : null;
+      const targets = deleteTargets(selectedAlive, visibleId, aliveIds);
+      if (!targets) return;
+      e.preventDefault();
+      runDelete(targets);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [
+    addRegister, runDelete, selectedAlive, aliveIds, highlightedRegisterId,
+    modalOpen, groupManagerOpen, languageManagerOpen, llmImportOpen, llmSettingsOpen,
+  ]);
 
   // --- Скачать CSV-шаблон с примерами ---
   const downloadCsvTemplate = useCallback(() => {
@@ -829,12 +917,14 @@ export default function RegisterTable({
       {hasRegisters && (
       <div className="flex flex-wrap items-center gap-2 mb-3" ref={menuRef}>
         {/* Редактирование */}
-        <button onClick={addRegister} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+        <button onClick={addRegister} title={t('toolbar.addTip')} aria-keyshortcuts="Insert" className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
           {t('toolbar.add')}
         </button>
-        <button onClick={deleteSelected} disabled={selected.size === 0} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          {t('toolbar.delete')} ({selected.size})
-        </button>
+        <span title={t('toolbar.deleteTip')}>
+          <button onClick={deleteSelected} disabled={selectedAlive.size === 0} aria-keyshortcuts="Delete" className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            {t('toolbar.delete')} ({selectedAlive.size})
+          </button>
+        </span>
 
         {/* CSV dropdown */}
         <div className="relative">
@@ -1161,7 +1251,7 @@ export default function RegisterTable({
                           }}
                           onToggle={() => toggleRegister(reg.id)}
                           onToggleSelect={() => toggleSelected(reg.id)}
-                          onRemove={() => deleteWithUndo(new Set([reg.id]))}
+                          onRemove={() => runDelete(new Set([reg.id]))}
                           onStartEdit={startEdit}
                           onStopEdit={stopEdit}
                           onChange={handleCellChange}
@@ -1202,7 +1292,7 @@ export default function RegisterTable({
                     }}
                     onToggle={() => toggleRegister(reg.id)}
                     onToggleSelect={() => toggleSelected(reg.id)}
-                    onRemove={() => deleteWithUndo(new Set([reg.id]))}
+                    onRemove={() => runDelete(new Set([reg.id]))}
                     onStartEdit={startEdit}
                     onStopEdit={stopEdit}
                     onChange={handleCellChange}
@@ -1745,7 +1835,7 @@ function RegisterRow({
         </td>
 
         <td className="px-1 py-1">
-          <button onClick={onRemove} className="text-red-400 hover:text-red-600 font-bold text-xs" title={t('row.deleteRegister')}>x</button>
+          <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 font-bold text-xs" title={t('row.deleteRegister')}>x</button>
         </td>
 
         {/* Раскрыть/свернуть — в самом конце строки */}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '../store';
 import { useT } from '../i18n';
+import { isTypingTarget } from '../utils/tableNavigation';
 
 // Типы, которые вынимаем из буфера обмена. Отбор по потолкам сервера живёт в сторе
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
@@ -50,9 +51,8 @@ export default function FileUpload() {
   // Ctrl+V / Cmd+V — вставка изображения из буфера обмена
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      // Не перехватываем если фокус в input/textarea
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // Не перехватываем, когда пользователь набирает текст
+      if (isTypingTarget(e.target as HTMLElement)) return;
 
       const items = e.clipboardData?.items;
       if (!items) return;
