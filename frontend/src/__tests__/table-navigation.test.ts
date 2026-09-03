@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextField, deleteTargets, isTypingTarget } from '../utils/tableNavigation';
+import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId } from '../utils/tableNavigation';
 
 // Порядок колонок таблицы регистров — тот же, что в COLUMNS (RegisterTable.tsx)
 const FIELDS = ['address', 'name', 'reg_type', 'format', 'units', 'channel_type', 'group'] as const;
@@ -56,29 +56,47 @@ describe('nextField', () => {
 });
 
 describe('deleteTargets', () => {
+  const alive = new Set(['a', 'b', 'c']);
+
   it('отмеченные чекбоксами строки удаляются все', () => {
-    const targets = deleteTargets(new Set(['a', 'b']), null);
-    expect(targets).toEqual(new Set(['a', 'b']));
+    expect(deleteTargets(new Set(['a', 'b']), null, alive)).toEqual(new Set(['a', 'b']));
   });
 
-  it('без отметок удаляется подсвеченная строка', () => {
-    expect(deleteTargets(new Set(), 'c')).toEqual(new Set(['c']));
+  it('без отметок удаляется текущая строка', () => {
+    expect(deleteTargets(new Set(), 'c', alive)).toEqual(new Set(['c']));
   });
 
-  // Отметки чекбоксами приоритетнее: подсветка ставится любым кликом по строке,
-  // поэтому она почти всегда есть и сама по себе не выражает намерения удалить
-  it('при отметках подсветка не влияет на набор', () => {
-    expect(deleteTargets(new Set(['a']), 'c')).toEqual(new Set(['a']));
+  // Отметки чекбоксами приоритетнее: текущая строка задаётся фокусом или кликом
+  // и есть почти всегда, поэтому сама по себе не выражает намерения удалить
+  it('при отметках текущая строка не влияет на набор', () => {
+    expect(deleteTargets(new Set(['a']), 'c', alive)).toEqual(new Set(['a']));
   });
 
   it('когда удалять нечего — null, клавиша достаётся браузеру', () => {
-    expect(deleteTargets(new Set(), null)).toBeNull();
+    expect(deleteTargets(new Set(), null, alive)).toBeNull();
   });
 
   it('возвращается копия, а не сам набор выбранных строк', () => {
     const selected = new Set(['a']);
-    const targets = deleteTargets(selected, null);
-    expect(targets).not.toBe(selected);
+    expect(deleteTargets(selected, null, alive)).not.toBe(selected);
+  });
+
+  // Строку отметили галкой, потом удалили кнопкой «x» — id остаётся в selected.
+  // Раньше первое нажатие Delete уходило в пустоту вместо удаления текущей строки
+  it('отметки на исчезнувших строках отбрасываются', () => {
+    expect(deleteTargets(new Set(['ghost']), 'c', alive)).toEqual(new Set(['c']));
+  });
+
+  it('из отметок остаются только живые строки', () => {
+    expect(deleteTargets(new Set(['a', 'ghost']), null, alive)).toEqual(new Set(['a']));
+  });
+
+  it('текущая строка, которой уже нет, не удаляется', () => {
+    expect(deleteTargets(new Set(), 'ghost', alive)).toBeNull();
+  });
+
+  it('в пустой таблице удалять нечего', () => {
+    expect(deleteTargets(new Set(['a']), 'a', new Set())).toBeNull();
   });
 });
 
@@ -116,5 +134,23 @@ describe('isTypingTarget', () => {
   it('регистр в tagName и type не важен', () => {
     expect(isTypingTarget({ tagName: 'input', type: 'CHECKBOX' })).toBe(false);
     expect(isTypingTarget({ tagName: 'input', type: 'Text' })).toBe(true);
+  });
+});
+
+describe('rowIdFromDomId', () => {
+  it('достаёт id регистра из id строки таблицы', () => {
+    expect(rowIdFromDomId('reg-row-uuid-1')).toBe('uuid-1');
+  });
+
+  it('id с дефисами не обрезается', () => {
+    expect(rowIdFromDomId('reg-row-3f2b1a-9c-44')).toBe('3f2b1a-9c-44');
+  });
+
+  it('чужой или пустой id — не строка таблицы', () => {
+    expect(rowIdFromDomId('some-other-id')).toBeNull();
+    expect(rowIdFromDomId('reg-row-')).toBeNull();
+    expect(rowIdFromDomId('')).toBeNull();
+    expect(rowIdFromDomId(null)).toBeNull();
+    expect(rowIdFromDomId(undefined)).toBeNull();
   });
 });

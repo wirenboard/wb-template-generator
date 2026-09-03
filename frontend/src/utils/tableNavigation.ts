@@ -25,17 +25,36 @@ export function nextField<F extends string>(
 }
 
 /**
- * Что удаляет Delete: отмеченные чекбоксами строки, а если таких нет — подсвеченную.
+ * Что удаляет Delete: отмеченные чекбоксами строки, а если таких нет — текущую.
  *
+ * @param selected    id, отмеченные чекбоксами
+ * @param currentId   строка, на которой стоит пользователь (фокус, иначе подсветка)
+ * @param existingIds id живых регистров — в selected остаётся мусор от строк,
+ *                    удалённых кнопкой «x», и от замены таблицы импортом или анализом
  * @returns набор id либо null, если удалять нечего — тогда клавиша не перехватывается
  */
 export function deleteTargets(
   selected: ReadonlySet<string>,
-  highlightedId: string | null,
+  currentId: string | null,
+  existingIds: ReadonlySet<string>,
 ): Set<string> | null {
-  if (selected.size > 0) return new Set(selected);
-  if (highlightedId) return new Set([highlightedId]);
+  const alive = [...selected].filter((id) => existingIds.has(id));
+  if (alive.length > 0) return new Set(alive);
+  if (currentId && existingIds.has(currentId)) return new Set([currentId]);
   return null;
+}
+
+/**
+ * id регистра из id DOM-строки (`reg-row-<uuid>`).
+ *
+ * Нужно, чтобы Delete бил по строке, где стоит фокус: подсветка ставится только
+ * кликом мыши, а обход по Tab её не двигает — без этого клавиатурный флоу удалял
+ * бы не ту строку, которую пользователь видит перед собой.
+ */
+export function rowIdFromDomId(domId: string | null | undefined): string | null {
+  const prefix = 'reg-row-';
+  if (!domId || !domId.startsWith(prefix)) return null;
+  return domId.slice(prefix.length) || null;
 }
 
 /**
@@ -46,12 +65,12 @@ export function deleteTargets(
  * момент, когда удаление и нужно.
  */
 export function isTypingTarget(el: {
-  tagName: string;
+  tagName?: string;
   type?: string;
   isContentEditable?: boolean;
 }): boolean {
   if (el.isContentEditable) return true;
-  const tag = el.tagName.toUpperCase();
+  const tag = (el.tagName ?? '').toUpperCase();
   if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
   if (tag !== 'INPUT') return false;
   const type = (el.type ?? 'text').toLowerCase();

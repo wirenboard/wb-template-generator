@@ -4,7 +4,7 @@ import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { compareAddresses, parseAddressInput } from '../utils/serialValues';
-import { nextField, deleteTargets, isTypingTarget } from '../utils/tableNavigation';
+import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId } from '../utils/tableNavigation';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -502,47 +502,76 @@ export default function RegisterTable({
     showUndoToast(deleted);
   }, [registers, removeRegister, showUndoToast]);
 
+  /**
+   * Единственный путь удаления — из кнопки тулбара, «x» в строке и с клавиатуры.
+   * Помимо тоста отмены убирает удалённые id из отметок и снимает подсветку,
+   * иначе они указывают на строки, которых больше нет.
+   */
+  const runDelete = useCallback((ids: Set<string>) => {
+    deleteWithUndo(ids);
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((id) => !ids.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    if (highlightedRegisterId && ids.has(highlightedRegisterId)) {
+      setHighlightedRegister(null);
+    }
+  }, [deleteWithUndo, highlightedRegisterId, setHighlightedRegister]);
+
   const deleteSelected = useCallback(() => {
-    deleteWithUndo(selected);
-    setSelected(new Set());
-  }, [selected, deleteWithUndo]);
+    runDelete(selected);
+  }, [selected, runDelete]);
 
   // Новая строка сразу открывается на «Адресе»: вместе с переходом по Tab
   // это даёт непрерывный ввод — Insert, адрес, Tab, имя, Insert
   useEffect(() => {
     if (!newlyAddedRegisterId) return;
+    setHighlightedRegister(newlyAddedRegisterId);
     startEdit(newlyAddedRegisterId, 'address');
-  }, [newlyAddedRegisterId, startEdit]);
+  }, [newlyAddedRegisterId, startEdit, setHighlightedRegister]);
 
-  // Insert — добавить регистр, Delete — удалить отмеченные или подсвеченную строку
+  // Insert — добавить регистр, Delete — удалить отмеченные или текущую строку
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Shift+Insert — вставка из буфера, Shift+Delete — вырезание
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       // Пока открыта модалка, таблица под ней клавиши не слушает
       if (modalOpen || groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen) return;
-      // В полях ввода клавиши работают по своему прямому назначению
-      if (isTypingTarget(e.target as HTMLElement)) return;
+
+      const target = e.target as HTMLElement;
+      const typing = isTypingTarget(target);
 
       if (e.key === 'Insert') {
+        // Внутри открытой ячейки Insert полезной нагрузки не несёт, поэтому
+        // доводим ввод до конца: blur коммитит значение и строка добавляется
+        // без лишнего Enter. В полях вне таблицы клавишу не забираем.
+        if (typing && !target.closest('tr[id^="reg-row-"]')) return;
         e.preventDefault();
+        if (typing) target.blur();
         addRegister();
         return;
       }
+
       if (e.key === 'Delete') {
-        const targets = deleteTargets(selected, highlightedRegisterId);
+        // В поле ввода Delete стирает символ
+        if (typing) return;
+        // Цель — строка, где стоит фокус: подсветка ставится только кликом мыши
+        // и обходом по Tab не двигается. Подсветка остаётся запасным вариантом.
+        const active = document.activeElement as HTMLElement | null;
+        const focusedRowId = rowIdFromDomId(active?.closest('tr[id^="reg-row-"]')?.id);
+        const currentId = focusedRowId ?? highlightedRegisterId;
+        // Строку в свёрнутой группе не видно — удалять её молча нельзя
+        const visibleId = currentId && document.getElementById(`reg-row-${currentId}`) ? currentId : null;
+        const targets = deleteTargets(selected, visibleId, new Set(registers.map((r) => r.id)));
         if (!targets) return;
         e.preventDefault();
-        deleteWithUndo(targets);
-        setSelected(new Set());
-        if (highlightedRegisterId && targets.has(highlightedRegisterId)) {
-          setHighlightedRegister(null);
-        }
+        runDelete(targets);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [
-    addRegister, deleteWithUndo, selected, highlightedRegisterId, setHighlightedRegister,
+    addRegister, runDelete, selected, registers, highlightedRegisterId,
     modalOpen, groupManagerOpen, languageManagerOpen, llmImportOpen, llmSettingsOpen,
   ]);
 
@@ -874,9 +903,11 @@ export default function RegisterTable({
         <button onClick={addRegister} title={t('toolbar.addTip')} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
           {t('toolbar.add')}
         </button>
-        <button onClick={deleteSelected} disabled={selected.size === 0} title={t('toolbar.deleteTip')} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          {t('toolbar.delete')} ({selected.size})
-        </button>
+        <span title={t('toolbar.deleteTip')}>
+          <button onClick={deleteSelected} disabled={selected.size === 0} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            {t('toolbar.delete')} ({selected.size})
+          </button>
+        </span>
 
         {/* CSV dropdown */}
         <div className="relative">
@@ -1203,7 +1234,7 @@ export default function RegisterTable({
                           }}
                           onToggle={() => toggleRegister(reg.id)}
                           onToggleSelect={() => toggleSelected(reg.id)}
-                          onRemove={() => deleteWithUndo(new Set([reg.id]))}
+                          onRemove={() => runDelete(new Set([reg.id]))}
                           onStartEdit={startEdit}
                           onStopEdit={stopEdit}
                           onChange={handleCellChange}
@@ -1244,7 +1275,7 @@ export default function RegisterTable({
                     }}
                     onToggle={() => toggleRegister(reg.id)}
                     onToggleSelect={() => toggleSelected(reg.id)}
-                    onRemove={() => deleteWithUndo(new Set([reg.id]))}
+                    onRemove={() => runDelete(new Set([reg.id]))}
                     onStartEdit={startEdit}
                     onStopEdit={stopEdit}
                     onChange={handleCellChange}
