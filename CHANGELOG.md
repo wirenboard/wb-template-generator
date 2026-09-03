@@ -5,6 +5,11 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.7.10] - 2026-09-03
+
+### Изменено
+- **Тулбар таблицы закреплён сверху.** Кнопки «Добавить», «Удалить» и выпадающие меню нужны там, где идёт правка, а раньше при длинном списке за ними приходилось прокручивать страницу в начало. Запрошено с форума.
+
 ## [0.7.9] - 2026-09-03
 
 ### Добавлено
@@ -418,6 +423,7 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
+[0.7.10]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.9...v0.7.10
 [0.7.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.8...v0.7.9
 [0.7.8]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.6...v0.7.7
