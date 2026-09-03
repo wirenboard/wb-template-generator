@@ -76,3 +76,43 @@ export function isTypingTarget(el: {
   const type = (el.type ?? 'text').toLowerCase();
   return !['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color'].includes(type);
 }
+
+/** Что делает нажатая клавиша со строками таблицы */
+export type RowHotkeyAction = 'add' | 'delete' | null;
+
+/**
+ * Решение по нажатой клавише — вынесено из компонента, чтобы гарды
+ * (модалка, набор текста, автоповтор) проверялись тестами без DOM.
+ *
+ * @param key         значение KeyboardEvent.key
+ * @param repeat      автоповтор зажатой клавиши
+ * @param hasModifier зажат Ctrl/Cmd/Alt/Shift — тогда клавиша принадлежит системе
+ * @param modalOpen   открыта любая модалка приложения
+ * @param typing      фокус в поле, где набирают текст
+ * @param inRow       фокус внутри строки таблицы регистров
+ */
+export function rowHotkeyAction({
+  key, repeat, hasModifier, modalOpen, typing, inRow,
+}: {
+  key: string;
+  repeat?: boolean;
+  hasModifier: boolean;
+  modalOpen: boolean;
+  typing: boolean;
+  inRow: boolean;
+}): RowHotkeyAction {
+  // Автоповтор зажатой клавиши плодил бы строки десятками, а при удалении
+  // затирал бы тост отмены до того, как им успеют воспользоваться
+  if (hasModifier || repeat || modalOpen) return null;
+
+  if (key === 'Insert') {
+    // В открытой ячейке Insert полезной нагрузки не несёт, поэтому забираем его
+    // и коммитим ввод. В полях вне таблицы клавиша принадлежит им.
+    return typing && !inRow ? null : 'add';
+  }
+  if (key === 'Delete') {
+    // В поле ввода и в списке Delete стирает символ
+    return typing ? null : 'delete';
+  }
+  return null;
+}

@@ -4,7 +4,7 @@ import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
 import { compareAddresses, parseAddressInput } from '../utils/serialValues';
-import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId } from '../utils/tableNavigation';
+import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId, rowHotkeyAction } from '../utils/tableNavigation';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -507,6 +507,18 @@ export default function RegisterTable({
    * Помимо тоста отмены убирает удалённые id из отметок и снимает подсветку,
    * иначе они указывают на строки, которых больше нет.
    */
+  const aliveIds = useMemo(() => new Set(registers.map((r) => r.id)), [registers]);
+
+  /**
+   * Отметки без исчезнувших строк. Локальный `selected` переживает и удаление
+   * строки кнопкой «x», и сброс шаблона, и замену таблицы импортом или анализом,
+   * поэтому счётчик на кнопке показывал бы строки, которых нет.
+   */
+  const selectedAlive = useMemo(
+    () => new Set([...selected].filter((id) => aliveIds.has(id))),
+    [selected, aliveIds],
+  );
+
   const runDelete = useCallback((ids: Set<string>) => {
     deleteWithUndo(ids);
     setSelected((prev) => {
@@ -519,8 +531,8 @@ export default function RegisterTable({
   }, [deleteWithUndo, highlightedRegisterId, setHighlightedRegister]);
 
   const deleteSelected = useCallback(() => {
-    runDelete(selected);
-  }, [selected, runDelete]);
+    runDelete(selectedAlive);
+  }, [selectedAlive, runDelete]);
 
   // Новая строка сразу открывается на «Адресе»: вместе с переходом по Tab
   // это даёт непрерывный ввод — Insert, адрес, Tab, имя, Insert
@@ -533,45 +545,50 @@ export default function RegisterTable({
   // Insert — добавить регистр, Delete — удалить отмеченные или текущую строку
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Shift+Insert — вставка из буфера, Shift+Delete — вырезание
-      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-      // Пока открыта модалка, таблица под ней клавиши не слушает
-      if (modalOpen || groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen) return;
+      // Один источник «где фокус» на обе клавиши
+      const active = (document.activeElement as HTMLElement | null) ?? (e.target as HTMLElement | null);
+      const typing = active ? isTypingTarget(active) : false;
+      const focusedRow = active?.closest('tr[id^="reg-row-"]') ?? null;
 
-      const target = e.target as HTMLElement;
-      const typing = isTypingTarget(target);
+      const action = rowHotkeyAction({
+        key: e.key,
+        repeat: e.repeat,
+        // Shift+Insert — вставка из буфера, Shift+Delete — вырезание
+        hasModifier: e.ctrlKey || e.metaKey || e.altKey || e.shiftKey,
+        // Пока открыта модалка, таблица под ней клавиши не слушает
+        modalOpen: Boolean(modalOpen) || groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen,
+        typing,
+        inRow: focusedRow !== null,
+      });
+      if (!action) return;
 
-      if (e.key === 'Insert') {
-        // Внутри открытой ячейки Insert полезной нагрузки не несёт, поэтому
-        // доводим ввод до конца: blur коммитит значение и строка добавляется
-        // без лишнего Enter. В полях вне таблицы клавишу не забираем.
-        if (typing && !target.closest('tr[id^="reg-row-"]')) return;
+      if (action === 'add') {
         e.preventDefault();
-        if (typing) target.blur();
+        // blur коммитит значение открытой ячейки, поэтому ввод не теряется
+        if (typing) active?.blur();
         addRegister();
         return;
       }
 
-      if (e.key === 'Delete') {
-        // В поле ввода Delete стирает символ
-        if (typing) return;
-        // Цель — строка, где стоит фокус: подсветка ставится только кликом мыши
-        // и обходом по Tab не двигается. Подсветка остаётся запасным вариантом.
-        const active = document.activeElement as HTMLElement | null;
-        const focusedRowId = rowIdFromDomId(active?.closest('tr[id^="reg-row-"]')?.id);
-        const currentId = focusedRowId ?? highlightedRegisterId;
-        // Строку в свёрнутой группе не видно — удалять её молча нельзя
-        const visibleId = currentId && document.getElementById(`reg-row-${currentId}`) ? currentId : null;
-        const targets = deleteTargets(selected, visibleId, new Set(registers.map((r) => r.id)));
-        if (!targets) return;
-        e.preventDefault();
-        runDelete(targets);
-      }
+      // Цель — строка, где стоит фокус: подсветка ставится только кликом мыши
+      // и обходом по Tab не двигается.
+      const focusedRowId = rowIdFromDomId(focusedRow?.id);
+      // Подсветка — запасной вариант и только когда фокус нигде. Иначе Delete
+      // сносил бы регистр, пока пользователь работает в его же панели деталей
+      // (она лежит в соседнем <tr> без id) или в панели превью.
+      const focusNowhere = !active || active === document.body || active === document.documentElement;
+      const currentId = focusedRowId ?? (focusNowhere ? highlightedRegisterId : null);
+      // Строку в свёрнутой группе не видно — удалять её молча нельзя
+      const visibleId = currentId && document.getElementById(`reg-row-${currentId}`) ? currentId : null;
+      const targets = deleteTargets(selectedAlive, visibleId, aliveIds);
+      if (!targets) return;
+      e.preventDefault();
+      runDelete(targets);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [
-    addRegister, runDelete, selected, registers, highlightedRegisterId,
+    addRegister, runDelete, selectedAlive, aliveIds, highlightedRegisterId,
     modalOpen, groupManagerOpen, languageManagerOpen, llmImportOpen, llmSettingsOpen,
   ]);
 
@@ -900,12 +917,12 @@ export default function RegisterTable({
       {hasRegisters && (
       <div className="flex flex-wrap items-center gap-2 mb-3" ref={menuRef}>
         {/* Редактирование */}
-        <button onClick={addRegister} title={t('toolbar.addTip')} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+        <button onClick={addRegister} title={t('toolbar.addTip')} aria-keyshortcuts="Insert" className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
           {t('toolbar.add')}
         </button>
         <span title={t('toolbar.deleteTip')}>
-          <button onClick={deleteSelected} disabled={selected.size === 0} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-            {t('toolbar.delete')} ({selected.size})
+          <button onClick={deleteSelected} disabled={selectedAlive.size === 0} aria-keyshortcuts="Delete" className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            {t('toolbar.delete')} ({selectedAlive.size})
           </button>
         </span>
 
@@ -1818,7 +1835,7 @@ function RegisterRow({
         </td>
 
         <td className="px-1 py-1">
-          <button onClick={onRemove} className="text-red-400 hover:text-red-600 font-bold text-xs" title={t('row.deleteRegister')}>x</button>
+          <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 font-bold text-xs" title={t('row.deleteRegister')}>x</button>
         </td>
 
         {/* Раскрыть/свернуть — в самом конце строки */}

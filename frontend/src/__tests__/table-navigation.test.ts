@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId } from '../utils/tableNavigation';
+import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId, rowHotkeyAction } from '../utils/tableNavigation';
 
 // Порядок колонок таблицы регистров — тот же, что в COLUMNS (RegisterTable.tsx)
 const FIELDS = ['address', 'name', 'reg_type', 'format', 'units', 'channel_type', 'group'] as const;
@@ -131,6 +131,14 @@ describe('isTypingTarget', () => {
     expect(isTypingTarget({ tagName: 'BODY' })).toBe(false);
   });
 
+  // Скрытый <input type="file"> держит фокус после нативного диалога выбора файла —
+  // именно из-за него правка в загрузке файлов и имеет смысл
+  it('file, number и range различаются верно', () => {
+    expect(isTypingTarget({ tagName: 'INPUT', type: 'file' })).toBe(false);
+    expect(isTypingTarget({ tagName: 'INPUT', type: 'range' })).toBe(false);
+    expect(isTypingTarget({ tagName: 'INPUT', type: 'number' })).toBe(true);
+  });
+
   it('регистр в tagName и type не важен', () => {
     expect(isTypingTarget({ tagName: 'input', type: 'CHECKBOX' })).toBe(false);
     expect(isTypingTarget({ tagName: 'input', type: 'Text' })).toBe(true);
@@ -152,5 +160,52 @@ describe('rowIdFromDomId', () => {
     expect(rowIdFromDomId('')).toBeNull();
     expect(rowIdFromDomId(null)).toBeNull();
     expect(rowIdFromDomId(undefined)).toBeNull();
+  });
+});
+
+describe('rowHotkeyAction', () => {
+  const base = { hasModifier: false, modalOpen: false, typing: false, inRow: false };
+
+  it('Insert добавляет строку, Delete удаляет', () => {
+    expect(rowHotkeyAction({ ...base, key: 'Insert' })).toBe('add');
+    expect(rowHotkeyAction({ ...base, key: 'Delete' })).toBe('delete');
+  });
+
+  it('прочие клавиши таблицу не трогают', () => {
+    expect(rowHotkeyAction({ ...base, key: 'a' })).toBeNull();
+    expect(rowHotkeyAction({ ...base, key: 'Backspace' })).toBeNull();
+    expect(rowHotkeyAction({ ...base, key: 'Enter' })).toBeNull();
+  });
+
+  // Shift+Insert — вставка из буфера, Ctrl+Delete и подобное принадлежат системе
+  it('с модификатором клавиша достаётся системе', () => {
+    expect(rowHotkeyAction({ ...base, key: 'Insert', hasModifier: true })).toBeNull();
+    expect(rowHotkeyAction({ ...base, key: 'Delete', hasModifier: true })).toBeNull();
+  });
+
+  // Иначе зажатая клавиша плодила бы строки десятками, а при удалении
+  // затирала бы тост отмены до того, как им успеют воспользоваться
+  it('автоповтор зажатой клавиши игнорируется', () => {
+    expect(rowHotkeyAction({ ...base, key: 'Insert', repeat: true })).toBeNull();
+    expect(rowHotkeyAction({ ...base, key: 'Delete', repeat: true })).toBeNull();
+  });
+
+  it('под открытой модалкой таблица клавиши не слушает', () => {
+    expect(rowHotkeyAction({ ...base, key: 'Insert', modalOpen: true })).toBeNull();
+    expect(rowHotkeyAction({ ...base, key: 'Delete', modalOpen: true })).toBeNull();
+  });
+
+  it('в поле ввода Delete стирает символ', () => {
+    expect(rowHotkeyAction({ ...base, key: 'Delete', typing: true })).toBeNull();
+    expect(rowHotkeyAction({ ...base, key: 'Delete', typing: true, inRow: true })).toBeNull();
+  });
+
+  // Ради непрерывного ввода: Insert, адрес, Tab, имя, Insert
+  it('Insert в открытой ячейке таблицы добавляет строку', () => {
+    expect(rowHotkeyAction({ ...base, key: 'Insert', typing: true, inRow: true })).toBe('add');
+  });
+
+  it('Insert в поле вне таблицы принадлежит полю', () => {
+    expect(rowHotkeyAction({ ...base, key: 'Insert', typing: true, inRow: false })).toBeNull();
   });
 });
