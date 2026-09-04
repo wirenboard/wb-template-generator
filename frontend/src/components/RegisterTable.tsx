@@ -914,8 +914,14 @@ export default function RegisterTable({
 
   return (
     <div>
+      {/* Тулбар закреплён: при длинном списке кнопки нужны там, где идёт правка,
+          а не в начале страницы. Отрицательные отступы растягивают фон на padding
+          секции, иначе строки таблицы просвечивали бы по краям. */}
       {hasRegisters && (
-      <div className="flex flex-wrap items-center gap-2 mb-3" ref={menuRef}>
+      <div
+        className="sticky top-0 z-30 -mx-4 px-4 py-2 mb-1 bg-white border-b border-gray-100 flex flex-wrap items-center gap-2"
+        ref={menuRef}
+      >
         {/* Редактирование */}
         <button onClick={addRegister} title={t('toolbar.addTip')} aria-keyshortcuts="Insert" className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
           {t('toolbar.add')}
