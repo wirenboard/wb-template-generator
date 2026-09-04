@@ -1,0 +1,12 @@
+// ВРЕМЕННО, снять при слиянии jenkins-pipeline-lib#183
+@Library('wbci@feature/docker-service-deploy') _
+
+rollbackDockerService(
+    deployHost: 'tgen.wirenboard.com',
+    imageRepo:  'ghcr.io/wirenboard/wb-template-generator-backend',
+    deployJob:  'wb-template-generator/deploy',
+    composeRolling: false,
+    knownHostsEntry: 'tgen.wirenboard.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICG9KJjbI1Cd78VY+m2rmmkIKQQy8uQW1sOSrMm6E+U+',
+    composeServices: ['backend', 'frontend'],
+    revisionUrl: 'https://tgen.wirenboard.com/api/status',
+)

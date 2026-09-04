@@ -1,3 +1,5 @@
+# Проверки кода переехали в Jenkins (Jenkinsfile): линт, типы, тесты, сборка образов.
+# Здесь остаётся только то, чего в Jenkins нет — дисциплина CHANGELOG и выпуск тега.
 name: CI
 
 on:
@@ -7,62 +9,6 @@ on:
     branches: [main]
 
 jobs:
-  backend:
-    name: Backend — lint, typecheck, test
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-
-    container:
-      image: python:3.12-slim
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
-      - name: Install Python dependencies
-        run: pip install --no-cache-dir -r requirements.txt
-
-      - name: Ruff check
-        run: ruff check . --config pyproject.toml
-
-      - name: Mypy
-        run: mypy --config-file pyproject.toml models.py template_builder.py jinja_exporter.py
-
-      - name: Tests with coverage
-        run: pytest tests/ -v --cov=. --cov-report=term --cov-fail-under=70
-
-  frontend:
-    name: Frontend — lint, typecheck
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: ESLint
-        run: npx eslint .
-
-      - name: TypeScript check
-        run: npx tsc -b
-
-      - name: Tests
-        run: npm test
-
   changelog:
     name: CHANGELOG — проверка версии
     runs-on: ubuntu-latest

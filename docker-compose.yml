@@ -1,3 +1,4 @@
+# Локальная разработка. Прод-файл выката — в wirenboard/infra, роль wb_template_generator.
 services:
   backend:
     build:
@@ -7,12 +8,6 @@ services:
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000", "--no-access-log"]
     env_file: .env
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
   frontend:
     build: ./frontend
@@ -20,3 +15,10 @@ services:
     volumes:
       - ./frontend/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
+    # в образе HEALTHCHECK бьёт в :80, а dev-конфиг слушает 9080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

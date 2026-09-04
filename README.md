@@ -30,7 +30,7 @@ cp env.example .env
 # Отредактируйте .env — укажите LLM_API_KEY и LLM_API_URL
 
 docker compose up --build -d
-# Откройте http://localhost:8080
+# Откройте http://localhost:9080
 ```
 
 ## Как это работает
@@ -54,7 +54,7 @@ docker compose up --build -d
 ```
                 ┌─────────┐     ┌─────────┐     ┌─────────────┐
  Браузер ──────>│  nginx  │────>│ FastAPI  │────>│ OpenAI API  │
-                │ :8080   │     │ :8000    │     │ (любой LLM) │
+                │ :9080   │     │ :9000    │     │ (любой LLM) │
                 └─────────┘     └─────────┘     └─────────────┘
                  frontend        backend
 ```
@@ -93,8 +93,12 @@ frontend/src/
   constants.ts         # Форматы, единицы, языки
   components/          # UI-компоненты редактора
 
-.github/workflows/
-  ci.yml               # CI: ruff, mypy, pytest, eslint, tsc
+Jenkinsfile.checks     # проверки: сторож свежести → lint → test → сборка образов ветки
+Jenkinsfile            # выкат: по метке <ветка>-<git-SHA> → проверка живости → авто-возврат
+Jenkinsfile.rollback   # кнопка отката
+
+Makefile               # локальные команды: make lint / test / build / up / down / smoke
+DEPLOYING.md           # операторская карточка: как выкатить, откатить, что делать при аварии
 ```
 
 ## API
@@ -181,17 +185,25 @@ event: error     ->  {message, request_id}
 
 ### Продакшен-деплой
 
-```bash
-# Копируйте .env и настройте для production
-cp env.example .env
+Выкат автоматический и **сборки на сервере нет**: образы собираются в CI и помечаются
+git-SHA, сервер только скачивает готовый образ. Поэтому любую версию можно вернуть за
+секунды — она уже лежит в реестре.
 
-# В файле .env важно добавить ваш API ключ из личного кабинета OpenAI
+- Смержил PR в `main` → джоба выката в Jenkins сама выкатывает и проверяет живость.
+- Откат — **Jenkins → rollback → Build with Parameters** (пустой `TARGET_SHA` = предыдущая выкаченная версия).
+- Пошагово, включая аварийные сценарии и break-glass, — в [`DEPLOYING.md`](DEPLOYING.md).
+- Что сейчас в проде: имя последнего зелёного прогона джобы выката или `/api/status` (поле `revision`).
 
-# Запуск через prod-конфигурацию (bridge networking, restart: always)
-docker compose -f docker-compose.prod.yml up --build -d
-```
+Прод-конфигурация — `docker-compose.deploy.yml` в репозитории `wirenboard/infra`
+(роль `wb_template_generator`): образы по
+git-SHA из `ghcr.io`, bridge-сеть, `restart: always`, healthcheck-зависимость frontend от
+backend. Порт публикуется **только на `127.0.0.1:8080`** — снаружи сервис отдаёт nginx на
+хосте (он держит TLS и домен), напрямую в контейнер извне не ходят. Креды (ключ на хост, push в реестр) живут в Jenkins, в папке сервиса; `Jenkinsfile`
+называет их по имени. `.env` с ключами — на сервере, в репозиторий не попадает.
 
-`docker-compose.prod.yml` отличается от dev: bridge-сеть вместо host, `restart: always`, healthcheck-зависимость frontend от backend, без volume-маунтов исходников.
+**Здесь лежит только `docker-compose.yml` — для локальной разработки** (`make up`): собирает образы из исходников, host networking, порты 9080/9000.
+
+Прод-файл выката (`docker-compose.deploy.yml`) живёт в `wirenboard/infra`, роль `wb_template_generator`: скачивает готовый образ по метке из `ghcr.io`, публикует только на `127.0.0.1:8080`.
 
 ## Разработка
 
@@ -223,9 +235,21 @@ docker compose logs -f backend
 
 ### CI/CD
 
-GitHub Actions (`ci.yml`) запускается на push/PR в `main`:
-- **Backend**: `ruff check`, `mypy`, `pytest --cov` (порог покрытия 70%)
-- **Frontend**: `npm ci`, `eslint`, `tsc -b`
+Один вход для всех проверок — `make`: те же команды локально и в CI.
+
+```bash
+make lint      # ruff + mypy, eslint + tsc
+make test      # pytest --cov (порог 70%) + vitest
+```
+
+| Джоба | Когда | Что делает |
+|---|---|---|
+| `Jenkinsfile.checks` | ветки и PR | сторож свежести → `make lint` → `make test` → сборка образов ветки в реестр |
+| `Jenkinsfile` | merge в `main` или кнопка | выкат по метке → проверка живости → авто-возврат при провале |
+| `Jenkinsfile.rollback` | кнопка | откат на предыдущую выкаченную версию или на указанную метку |
+
+Логика выката живёт в общей библиотеке Jenkins (`wirenboard/jenkins-pipeline-lib`),
+здесь — только тонкие вызовы с настройками сервиса.
 
 ## Формат шаблона wb-mqtt-serial
 
