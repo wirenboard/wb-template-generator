@@ -11,7 +11,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import lru_cache
 
+from log_utils import sanitize_for_log
 from models import Register
+from serial_values import (
+    canonical_address,
+    decimal_address,
+    numeric_value,
+    parse_address,
+)
 
 logger = logging.getLogger("wb-template-gen")
 
@@ -99,6 +106,37 @@ def _schema_value_sets() -> dict[str, frozenset]:
         return {}
 
 
+@lru_cache(maxsize=1)
+def _schema_patterns() -> dict[str, re.Pattern]:
+    """Паттерны строковых записей (serial_int, address) из схемы драйвера.
+
+    Тот же источник и та же деградация, что у _schema_value_sets.
+    """
+    try:
+        from schema_validator import _load_schema
+        defs = _load_schema().get("definitions", {})
+        out: dict[str, re.Pattern] = {}
+        for key in ("serial_int", "address"):
+            for variant in defs.get(key, {}).get("oneOf", []):
+                pattern = variant.get("pattern")
+                if pattern:
+                    out[key] = re.compile(pattern)
+                    break
+        return out
+    except Exception as e:  # noqa: BLE001 — деградируем на fallback, не падаем
+        logger.warning("Не удалось загрузить паттерны из схемы драйвера: %s", e)
+        return {}
+
+
+_SCHEMA_PATTERNS = _schema_patterns()
+
+# serial_int разрешает целое и hex, дробную часть и экспоненту не разрешает
+_FALLBACK_SERIAL_INT = re.compile(r"^(0x[A-Fa-f\d]+|[-]?\d+)$")
+SERIAL_INT_PATTERN = _SCHEMA_PATTERNS.get("serial_int") or _FALLBACK_SERIAL_INT
+
+# Поля с записью serial_int. Лимиты сюда не входят, они всегда число
+_SERIAL_INT_FIELDS = ("error_value", "on_value", "off_value")
+
 _SCHEMA_SETS = _schema_value_sets()
 VALID_FORMATS = _SCHEMA_SETS.get("format") or _FALLBACK_FORMATS
 VALID_REG_TYPES = _SCHEMA_SETS.get("reg_type") or _FALLBACK_REG_TYPES
@@ -130,7 +168,9 @@ CHANNEL_NAME_FORBIDDEN_CHARS = frozenset('$#+/\\"\'')
 STRING_FORMATS = frozenset({"string", "string8"})
 
 # Регулярка адреса из JSON-схемы драйвера
-ADDRESS_REGEX = re.compile(r"^(?:0x[A-Fa-f0-9]+|\d+)(?::\d+:\d+)?$")
+ADDRESS_REGEX = _SCHEMA_PATTERNS.get("address") or re.compile(
+    r"^(?:0x[A-Fa-f0-9]+|\d+)(?::\d+:\d+)?$"
+)
 
 # Modbus-адрес 16-битный, больше этого значения физически не бывает.
 MODBUS_MAX_ADDRESS = 65535
@@ -234,21 +274,6 @@ def _try_fix(value: str | None, synonyms: dict[str, str],
     return value, None
 
 
-def _as_plain_address(value) -> int | None:
-    """Возвращает адрес как int, если это обычный числовой адрес.
-
-    Побитовый ("109:0:1") и hex ("0xF010") адреса не трогаем — их приводит к числу
-    драйвер, и legacy-нотации в них не бывает.
-    """
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and value.isdigit():
-        return int(value)
-    return None
-
-
 def auto_fix_register(raw_reg: dict) -> tuple[dict, list[FieldError]]:
     """Авто-исправление полей регистра перед Pydantic-парсингом.
 
@@ -308,8 +333,26 @@ def auto_fix_register(raw_reg: dict) -> tuple[dict, list[FieldError]]:
                 suggestion=fixed,
             ))
 
+    # Лимит от модели приходит и hex-строкой. Разворачиваем до pydantic, иначе
+    # регистр не соберётся и уедет в мягкую ветку с дефолтами
+    for limit in ("min", "max"):
+        written = raw_reg.get(limit)
+        if written is None or (isinstance(written, (int, float)) and not isinstance(written, bool)):
+            continue
+        number = numeric_value(written)
+        if number is None:
+            del raw_reg[limit]
+            continue
+        raw_reg[limit] = number
+        fixes.append(FieldError(
+            field=limit, severity=Severity.WARNING,
+            message_key="validation.autoFixed",
+            message_params={"field": limit, "from": str(written), "to": str(number)},
+            suggestion=str(number),
+        ))
+
     # address: шестизначная legacy-нотация, не сконвертированная моделью в offset
-    addr_int = _as_plain_address(raw_reg.get("address"))
+    addr_int = decimal_address(raw_reg.get("address"))
     if addr_int is not None and addr_int > MODBUS_MAX_ADDRESS:
         for base, upper in LEGACY_6DIGIT_BASES:
             if base <= addr_int <= upper:
@@ -434,7 +477,7 @@ def validate_register(reg: Register) -> RegisterValidation:
         # Hex-запись и побитовые адреса под это правило НЕ попадают: у не-Modbus
         # протоколов (neva, energomera_iec, energomera_ce) адрес — код параметра, и в
         # официальных шаблонах wb-mqtt-serial таких значений 125, например 0x012F0000.
-        addr_value = _as_plain_address(reg.address)
+        addr_value = decimal_address(reg.address)
         if addr_value is not None and (addr_value < 0 or addr_value > MODBUS_MAX_ADDRESS):
             errors.append(FieldError(
                 field="address", severity=Severity.ERROR,
@@ -499,6 +542,24 @@ def validate_register(reg: Register) -> RegisterValidation:
             message_key="validation.readonlyConflict",
         ))
 
+    # Число модель уже проверила, гейт нужен только строковой записи. Матч без
+    # strip — запись с пробелами по краям схему драйвера не проходит
+    for field_name in _SERIAL_INT_FIELDS:
+        written = getattr(reg, field_name)
+        if isinstance(written, str) and not SERIAL_INT_PATTERN.match(written):
+            errors.append(FieldError(
+                field=field_name, severity=Severity.ERROR,
+                message_key="validation.invalidNumber",
+                message_params={"field": field_name, "value": written},
+            ))
+
+    # Канал с scale = 0 читает константный ноль, отключают канал флагом enabled
+    if reg.scale == 0:
+        errors.append(FieldError(
+            field="scale", severity=Severity.ERROR,
+            message_key="validation.zeroScale",
+        ))
+
     # min > max
     if reg.min is not None and reg.max is not None and reg.min > reg.max:
         errors.append(FieldError(
@@ -539,7 +600,7 @@ def validate_registers(registers: list[Register]) -> ValidationResult:
     # rv берём по позиции (validations[i] ↔ registers[i]) — id в шаблонах не уникальны.
     seen_addresses: dict[str, Register] = {}  # key → первый регистр
     for i, reg in enumerate(registers):
-        key = f"{reg.address}:{reg.reg_type}"
+        key = f"{canonical_address(reg.address)}:{reg.reg_type}"
         first = seen_addresses.get(key)
         if first is None:
             seen_addresses[key] = reg
@@ -598,15 +659,20 @@ def auto_fix_and_validate(
             reg = Register(**fixed_reg)
             registers.append(reg)
         except Exception as e:
-            logger.warning("Ошибка парсинга регистра после авто-фикса %s: %s", raw_reg, e)
+            logger.warning(
+                "Ошибка парсинга регистра после авто-фикса %s: %s",
+                sanitize_for_log(raw_reg), e,
+            )
             try:
                 reg = Register(
-                    address=int(raw_reg.get("address", 0)),
+                    address=parse_address(raw_reg.get("address", 0)),
                     name=str(raw_reg.get("name", "Unknown")),
                 )
                 registers.append(reg)
             except Exception:
-                logger.error("Не удалось распарсить регистр, пропускаем: %s", raw_reg)
+                logger.error(
+                    "Не удалось распарсить регистр, пропускаем: %s", sanitize_for_log(raw_reg),
+                )
 
     # Валидация
     result = validate_registers(registers)
@@ -676,7 +742,8 @@ def format_validation_errors(
             elif e.field == "address":
                 lines.append(
                     f'{reg_label}: address "{e.message_params.get("value", "")}" is invalid. '
-                    f"Must be a non-negative integer or 'register:bit:width' string"
+                    f"Must be a non-negative integer, a hex string like \"0xFF\", "
+                    f"or a 'register:bit:width' string"
                 )
             elif e.field == "name":
                 if e.message_key == "validation.invalidNameChars":
@@ -691,6 +758,17 @@ def format_validation_errors(
                 lines.append(
                     f"{reg_label}: enum has {e.message_params.get('enumLen', '?')} values "
                     f"but enum_titles has {e.message_params.get('titlesLen', '?')}"
+                )
+            elif e.message_key == "validation.invalidNumber":
+                field = e.message_params.get("field", e.field)
+                lines.append(
+                    f'{reg_label}: {field} "{e.message_params.get("value", "")}" is invalid. '
+                    f"Use a number, or a hex string like \"0xFF\""
+                )
+            elif e.field == "scale":
+                lines.append(
+                    f"{reg_label}: scale is 0, so the channel always reads zero. "
+                    f"Use the real multiplier, or 1 when no conversion is needed"
                 )
             else:
                 lines.append(f"{reg_label}: {e.field} — {e.message_key}")

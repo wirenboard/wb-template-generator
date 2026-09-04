@@ -59,14 +59,13 @@ async def _run_analysis(fix_mock, settings: Settings | None = None) -> list[dict
     """Прогоняет analyze_document с замоканным LLM и подменённым ядром автофикса."""
     with (
         patch("llm_service.AsyncOpenAI") as mock_openai,
-        patch("llm_service.Image") as mock_image,
+        patch("llm_service.open_image", return_value=MagicMock()),
         patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         patch("llm_service._fix_registers_core", fix_mock),
     ):
         client = AsyncMock()
         mock_openai.return_value = client
         client.chat.completions.create = AsyncMock(return_value=_llm_response(_BAD_REGISTER_RESPONSE))
-        mock_image.open.return_value = MagicMock()
 
         events = []
         async for event in analyze_document(
@@ -109,7 +108,9 @@ async def test_autofix_sends_keepalive_while_llm_works(fast_keepalive):
 
 async def test_autofix_failure_falls_back_to_manual_button(fast_keepalive):
     """Сбой LLM-фикса не роняет анализ — результат приходит с исходными регистрами."""
-    data = await _run_analysis(AsyncMock(side_effect=LLMApiError("429 quota")))
+    data = await _run_analysis(AsyncMock(
+        side_effect=LLMApiError("llmError.quota_exceeded", raw="429 quota"),
+    ))
 
     assert not [d for d in data if d.get("stage") == "error"]
     result = [d for d in data if "registers" in d]
@@ -133,13 +134,12 @@ async def test_client_disconnect_cancels_llm_request(fast_keepalive):
 
     with (
         patch("llm_service.AsyncOpenAI") as mock_openai,
-        patch("llm_service.Image") as mock_image,
+        patch("llm_service.open_image", return_value=MagicMock()),
         patch("llm_service.image_to_base64", return_value="dGVzdA=="),
     ):
         client = AsyncMock()
         mock_openai.return_value = client
         client.chat.completions.create = AsyncMock(side_effect=never_ending_call)
-        mock_image.open.return_value = MagicMock()
 
         gen = analyze_document(
             files=[("doc.png", b"fake-png")],
@@ -183,13 +183,14 @@ async def test_api_error_is_not_reported_as_document_format_problem():
     """Ошибка LLM API не выдаётся за проблему с форматом документа."""
     with (
         patch("llm_service.AsyncOpenAI") as mock_openai,
-        patch("llm_service.Image") as mock_image,
+        patch("llm_service.open_image", return_value=MagicMock()),
         patch("llm_service.image_to_base64", return_value="dGVzdA=="),
     ):
         client = AsyncMock()
         mock_openai.return_value = client
-        client.chat.completions.create = AsyncMock(side_effect=LLMApiError("429 insufficient_quota"))
-        mock_image.open.return_value = MagicMock()
+        client.chat.completions.create = AsyncMock(
+            side_effect=LLMApiError("llmError.quota_exceeded", raw="429 insufficient_quota"),
+        )
 
         events = []
         async for event in analyze_document(
@@ -235,13 +236,12 @@ async def _run_analysis_with_real_core() -> list[dict]:
     """Прогон анализа без подмены ядра автофикса (его патчит сам тест)."""
     with (
         patch("llm_service.AsyncOpenAI") as mock_openai,
-        patch("llm_service.Image") as mock_image,
+        patch("llm_service.open_image", return_value=MagicMock()),
         patch("llm_service.image_to_base64", return_value="dGVzdA=="),
     ):
         client = AsyncMock()
         mock_openai.return_value = client
         client.chat.completions.create = AsyncMock(return_value=_llm_response(_BAD_REGISTER_RESPONSE))
-        mock_image.open.return_value = MagicMock()
 
         events = []
         async for event in analyze_document(

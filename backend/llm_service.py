@@ -2,7 +2,6 @@
 
 import asyncio
 import base64
-import io
 import ipaddress
 import json
 import logging
@@ -15,21 +14,28 @@ from urllib.parse import urlsplit
 
 import httpx
 from openai import AsyncOpenAI
+from openai.types import CompletionUsage
 from PIL import Image
 
 from config import Settings
 from file_converter import (
+    FileParseError,
+    ImageTooLargeError,
     excel_to_text,
     image_to_base64,
     is_excel_file,
     is_image_file,
     is_pdf_file,
+    open_image,
 )
+from llm_errors import public_key
+from log_utils import sanitize_for_log
 from models import AnalyzeResponse, DeviceInfo, Register
 from notifier import report_llm_api_error
 from prompts import get_analyze_prompt, get_retry_prompt, render_custom_prompt
-from sse import sse_done, sse_error, sse_progress, sse_result, sse_user_error
-from user_errors import UserError
+from serial_values import address_sort_key, canonical_address, parse_address
+from sse import sse_done, sse_progress, sse_result, sse_user_error
+from user_errors import UserError, render_key
 
 # Интервал SSE keepalive (сек) — поддерживает соединение через nginx
 _KEEPALIVE_INTERVAL = 15
@@ -52,7 +58,47 @@ analysis_metrics: dict[str, int] = {
 
 
 class LLMApiError(Exception):
-    """Ошибка при обращении к LLM API (сеть, авторизация, модель не найдена)."""
+    """Ошибка при обращении к LLM API (сеть, авторизация, модель не найдена).
+
+    Наружу уходит только `key` — ключ локализации фразы по категории сбоя, текст собирается
+    из него же. Текст провайдера лежит в `raw`, он нужен логу и эвристике
+    `_is_file_unsupported`, но клиенту не уходит.
+    """
+
+    def __init__(self, key: str, *, raw: str | None = None) -> None:
+        message = render_key(key)
+        super().__init__(message)
+        self.key = key
+        self.raw = raw if raw is not None else message
+
+    @classmethod
+    def from_provider(cls, exc: Exception) -> "LLMApiError":
+        """Отказ обращения к провайдеру — категория ключом, текст исключения в raw."""
+        return cls(public_key(exc), raw=str(exc))
+
+
+def log_llm_failure(key: str, raw: str, *, request_id: str | None, action: str) -> None:
+    """Пишет отказ обращения к LLM в лог одним форматом на всех маршрутах.
+
+    Текст провайдера идёт через санитайз — со своим адресом LLM его задаёт клиент.
+    """
+    logger.warning("[%s] %s (%s) — %s", request_id, action, key, sanitize_for_log(raw))
+
+
+async def report_and_log_llm_failure(
+    exc: Exception,
+    *,
+    endpoint: str,
+    request_id: str | None,
+    model: str,
+    is_custom_llm: bool,
+    action: str,
+) -> None:
+    """Лог плюс уведомление дежурного для маршрутов, которые зовут провайдера сами."""
+    log_llm_failure(public_key(exc), str(exc), request_id=request_id, action=action)
+    await report_llm_api_error(
+        exc, endpoint=endpoint, request_id=request_id, model=model, is_custom_llm=is_custom_llm,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -206,16 +252,24 @@ async def ensure_public_llm_url(url: str, allow_private: bool = False) -> None:
     соединения, а резолвится ещё раз при самом запросе.
 
     Raises:
-        UnsafeLLMUrlError: схема не http(s), хост не указан, не резолвится или
-            разрешается во внутреннюю сеть.
+        UnsafeLLMUrlError: схема не http(s), адрес не разбирается, хост не указан,
+            не резолвится или разрешается во внутреннюю сеть.
     """
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError as e:
+        # «[» urlsplit читает как начало IPv6-литерала и на незакрытой скобке бросает
+        raise UnsafeLLMUrlError("serverError.llmUrlNoHost") from e
+
     if parts.scheme not in _ALLOWED_LLM_SCHEMES:
         raise UnsafeLLMUrlError("serverError.llmUrlScheme")
 
     hostname = parts.hostname
     if not hostname:
         raise UnsafeLLMUrlError("serverError.llmUrlNoHost")
+
+    # Имя пришло от клиента, а urlsplit пропускает в хост что угодно, включая ESC
+    safe_host = sanitize_for_log(hostname)
 
     if allow_private:
         return
@@ -224,10 +278,10 @@ async def ensure_public_llm_url(url: str, allow_private: bool = False) -> None:
         addresses = await _resolve_host(hostname)
     except TimeoutError as e:
         # Выше OSError — TimeoutError его подкласс, иначе ветка недостижима
-        logger.warning("Имя «%s» не разрешилось за %s с, отклоняем адрес LLM", hostname, _DNS_TIMEOUT)
+        logger.warning("Имя «%s» не разрешилось за %s с, отклоняем адрес LLM", safe_host, _DNS_TIMEOUT)
         raise UnsafeLLMUrlError("serverError.llmUrlUnresolvable", host=hostname) from e
     except (OSError, UnicodeError) as e:
-        logger.info("Имя «%s» не разрешилось (%s), отклоняем адрес LLM", hostname, e)
+        logger.info("Имя «%s» не разрешилось (%s), отклоняем адрес LLM", safe_host, e)
         raise UnsafeLLMUrlError("serverError.llmUrlUnresolvable", host=hostname) from e
 
     for raw in addresses:
@@ -244,7 +298,7 @@ async def ensure_public_llm_url(url: str, allow_private: bool = False) -> None:
         internal = any(ip.version == net.version and ip in net for net in _EXTRA_INTERNAL_NETS)
         if (ip.is_private or ip.is_loopback or ip.is_link_local
                 or ip.is_reserved or ip.is_multicast or ip.is_unspecified or internal):
-            logger.warning("Имя «%s» разрешилось во внутренний адрес %s, отклоняем", hostname, ip)
+            logger.warning("Имя «%s» разрешилось во внутренний адрес %s, отклоняем", safe_host, ip)
             raise UnsafeLLMUrlError("serverError.llmUrlPrivate")
 
 
@@ -296,7 +350,7 @@ async def close_llm_http_clients() -> None:
 # Парсинг JSON из ответа LLM
 # ---------------------------------------------------------------------------
 
-def _extract_json_from_response(text: str) -> dict:
+def extract_json_from_response(text: str) -> dict:
     """Извлекает JSON из ответа LLM.
 
     Ответ может быть чистым JSON или обёрнут в ```json ... ```.
@@ -359,21 +413,26 @@ def _parse_registers(raw: dict, *, preserve_id: bool = False) -> tuple[DeviceInf
                 fix_desc = ", ".join(f'{f.message_params.get("field", "")}: '
                                      f'{f.message_params.get("from", "")}→{f.message_params.get("to", "")}'
                                      for f in fixes)
-                logger.info("Авто-исправление регистра «%s»: %s", raw_reg.get("name", "?"), fix_desc)
+                logger.info(
+                    "Авто-исправление регистра «%s»: %s",
+                    sanitize_for_log(raw_reg.get("name", "?")), fix_desc,
+                )
             reg = Register(**fixed_reg)
             registers.append(reg)
         except Exception as e:
             # Мягкая валидация — пробуем с минимальными полями
-            logger.warning("Ошибка парсинга регистра %s: %s", raw_reg, e)
+            logger.warning("Ошибка парсинга регистра %s: %s", sanitize_for_log(raw_reg), e)
             try:
                 reg = Register(
-                    address=int(raw_reg.get("address", 0)),
+                    address=parse_address(raw_reg.get("address", 0)),
                     name=str(raw_reg.get("name", "Unknown")),
                     **({"id": raw_reg["id"]} if preserve_id and raw_reg.get("id") else {}),
                 )
                 registers.append(reg)
             except Exception:
-                logger.error("Не удалось распарсить регистр, пропускаем: %s", raw_reg)
+                logger.error(
+                    "Не удалось распарсить регистр, пропускаем: %s", sanitize_for_log(raw_reg),
+                )
 
     return device_info, registers, auto_fixed_count
 
@@ -418,8 +477,8 @@ def _merge_batch_results(
     """
     device_info = DeviceInfo(name="Unknown Device", id="unknown-device")
     all_registers: list[Register] = []
-    # Ключ дедупа — (адрес, тип регистра, condition); адрес бывает строкой «109:1:2»
-    seen: set[tuple[int | str, str, str | None]] = set()
+    # Адрес в ключе канонической записью — 255 и «0xff» это один регистр
+    seen: set[tuple[str, str, str | None]] = set()
     total_auto_fixed = 0
 
     for batch_info, batch_regs, batch_fixed in batches:
@@ -429,24 +488,13 @@ def _merge_batch_results(
             device_info = batch_info
 
         for reg in batch_regs:
-            key = (reg.address, reg.reg_type, reg.condition)
+            key = (canonical_address(reg.address), reg.reg_type, reg.condition)
             if key in seen:
                 continue
             seen.add(key)
             all_registers.append(reg)
 
-    # Сортируем по адресу (address может быть int или str "109:1:2")
-    def _sort_key(r):
-        addr = r.address
-        if isinstance(addr, str):
-            # "109:1:2" → сортируем по первому числу
-            try:
-                addr = int(addr.split(":")[0])
-            except (ValueError, IndexError):
-                addr = 0
-        return (r.reg_type, addr)
-
-    all_registers.sort(key=_sort_key)
+    all_registers.sort(key=lambda r: (r.reg_type, address_sort_key(r.address)))
     return device_info, all_registers, total_auto_fixed
 
 
@@ -474,7 +522,9 @@ def _deterministic_fix_registers(registers: list[Register]) -> tuple[list[Regist
         try:
             out.append(Register(**fixed_raw))
         except Exception as e:  # noqa: BLE001 — оставляем оригинал, не теряем регистр
-            logger.warning("Детерминированный фикс не применился к «%s»: %s", reg.name, e)
+            logger.warning(
+                "Детерминированный фикс не применился к «%s»: %s", sanitize_for_log(reg.name), e,
+            )
             out.append(reg)
     return out, fixed_count
 
@@ -483,19 +533,20 @@ def _deterministic_fix_registers(registers: list[Register]) -> tuple[list[Regist
 # Вызов LLM API (асинхронный)
 # ---------------------------------------------------------------------------
 
-async def _call_llm(
+async def call_llm(
     client: AsyncOpenAI,
     model: str,
     system_prompt: str,
-    content: list[dict],
+    content: list[dict] | str,
     timeout: int,
     max_tokens: int = 16384,
     legacy_max_tokens: bool = False,
     temperature: float | None = None,
-) -> str:
+) -> tuple[str, CompletionUsage | None]:
     """Асинхронный вызов OpenAI-compatible API с vision-контентом.
 
-    Возвращает текстовый ответ LLM.
+    Возвращает текстовый ответ LLM и расход токенов. Расход приходит пустым, когда
+    провайдер его не отдаёт.
 
     При ошибке «Unsupported parameter» автоматически:
     - переключает max_tokens ↔ max_completion_tokens;
@@ -521,6 +572,8 @@ async def _call_llm(
         kwargs["temperature"] = temperature
 
     # До 3 попыток: каждая убирает/заменяет один неподдерживаемый параметр
+    token_key_switched = False
+    last_error: Exception | None = None
     for attempt in range(3):
         try:
             llm_start = time.monotonic()
@@ -547,25 +600,30 @@ async def _call_llm(
             return text, usage
         except Exception as e:
             err_str = str(e)
+            last_error = e
             fixed = False
 
-            # Фолбек max_tokens ↔ max_completion_tokens
-            if primary_key in kwargs and (fallback_key in err_str or primary_key in err_str):
+            # Фолбек max_tokens ↔ max_completion_tokens. Однократный: после подмены имена
+            # совпадают, и повторная «правка» удаляла бы и клала обратно тот же ключ
+            if not token_key_switched and primary_key in kwargs and (
+                fallback_key in err_str or primary_key in err_str
+            ):
                 logger.warning(
                     "Модель %s не поддерживает %s, переключаемся на %s. "
                     "Совет: измените настройку «Параметр токенов» в UI.",
-                    model, primary_key, fallback_key,
+                    sanitize_for_log(model), primary_key, fallback_key,
                 )
                 del kwargs[primary_key]
                 kwargs[fallback_key] = max_tokens
-                primary_key = fallback_key  # Запоминаем, чтобы не циклить
+                primary_key = fallback_key
+                token_key_switched = True
                 fixed = True
 
             # Фолбек temperature: некоторые модели (o1, gpt-4o) не поддерживают
             if "temperature" in err_str and "temperature" in kwargs:
                 logger.warning(
-                    "Модель %s не поддерживает temperature=0.1, убираем параметр.",
-                    model,
+                    "Модель %s отвергла temperature=%s, повторяем запрос без неё.",
+                    sanitize_for_log(model), kwargs["temperature"],
                 )
                 del kwargs["temperature"]
                 fixed = True
@@ -573,8 +631,9 @@ async def _call_llm(
             if not fixed:
                 raise
 
-    # Сюда не должны попасть, но на всякий случай
-    return "", None
+    # Попытки кончились, а запрос так и не прошёл — отдаём последний отказ провайдера,
+    # иначе вызывающий код принял бы пустой ответ за ответ модели
+    raise last_error if last_error else RuntimeError("Не удалось обратиться к LLM")
 
 
 def assemble_llm_content(
@@ -754,7 +813,7 @@ async def analyze_document(
     """
     try:
         logger.info("[%s] Начало анализа: %d файл(ов), тип=%s, custom_llm=%s",
-                     request_id, len(files), template_type, is_custom_llm)
+                     request_id, len(files), sanitize_for_log(template_type), is_custom_llm)
 
         # Изоляция: при серверной модели игнорируем пользовательский промпт
         if not is_custom_llm:
@@ -813,16 +872,28 @@ async def analyze_document(
                     total=len(files),
                     request_id=request_id,
                 )
-                text_parts.append(f"--- {filename} ---\n{excel_to_text(content_bytes)}")
+                try:
+                    sheet_text = excel_to_text(content_bytes)
+                except FileParseError as e:
+                    # Имя файла подставляем здесь, в разборе его нет
+                    yield sse_user_error(
+                        UserError(e.key, file=filename, **e.params), request_id=request_id,
+                    )
+                    return
+                text_parts.append(f"--- {filename} ---\n{sheet_text}")
 
             elif is_image_file(filename):
                 # Изображение -> PIL.Image. Битый файл прекращает анализ: пропустить его
                 # молча нельзя, иначе шаблон собрался бы по части документа незаметно.
                 try:
-                    img = Image.open(io.BytesIO(content_bytes))
-                    img.load()  # PIL ленив, битые данные вылезают здесь, а не на open()
+                    img = open_image(content_bytes)
+                except ImageTooLargeError as e:
+                    yield sse_user_error(
+                        UserError(e.key, file=filename, **e.params), request_id=request_id,
+                    )
+                    return
                 except Exception as e:  # noqa: BLE001 — любую ошибку PIL показываем понятным текстом
-                    logger.warning("Битое изображение %s: %s", filename, e)
+                    logger.warning("Битое изображение %s: %s", sanitize_for_log(filename), e)
                     yield sse_user_error(
                         UserError("serverError.brokenImage", file=filename),
                         request_id=request_id,
@@ -831,18 +902,23 @@ async def analyze_document(
                 all_images.append(img)
 
             else:
-                logger.warning("Неподдерживаемый формат файла: %s", filename)
+                logger.warning("Неподдерживаемый формат файла: %s", sanitize_for_log(filename))
 
         convert_duration = time.monotonic() - convert_start
         logger.info("[%s] Конвертация файлов: %.1f сек", request_id, convert_duration)
 
         # --- Этап 2: подготовка LLM-клиента ---
-        if custom_system_prompt:
-            system_prompt = render_custom_prompt(
-                custom_system_prompt, template_type, translation_languages,
-            )
-        else:
-            system_prompt = get_analyze_prompt(template_type, translation_languages)
+        try:
+            if custom_system_prompt:
+                system_prompt = render_custom_prompt(
+                    custom_system_prompt, template_type, translation_languages,
+                )
+            else:
+                system_prompt = get_analyze_prompt(template_type, translation_languages)
+        except UserError as e:
+            # Без перехвата ушла бы «внутренняя ошибка» вместо текста с числами потолка
+            yield sse_user_error(e, request_id=request_id)
+            return
         # Прокси только для серверного LLM: пользовательский запрос через него не гоняем
         http_client = get_llm_http_client(
             settings.LLM_PROXY if not is_custom_llm else None, is_custom=is_custom_llm,
@@ -857,7 +933,7 @@ async def analyze_document(
 
         batch_results: list[tuple[DeviceInfo, list[Register], int]] = []
         last_parse_error: str | None = None  # фрагмент ответа LLM при неудаче парсинга
-        last_api_error: str | None = None
+        last_api_error_key: str | None = None  # категория сбоя обращения к LLM
         unsupported_file = False
 
         # --- Этап 3: отправка всех файлов в LLM одним запросом ---
@@ -901,23 +977,26 @@ async def analyze_document(
             else:
                 last_parse_error = result
         except LLMApiError as e:
-            err_msg = str(e)
-            last_api_error = err_msg
-            unsupported_file = _is_file_unsupported(err_msg)
+            # Эвристике формата нужен текст провайдера, пользователю уйдёт категория
+            last_api_error_key = e.key
+            unsupported_file = _is_file_unsupported(e.raw)
+            # Единственное место, где текст провайдера доходит до лога — report_llm_api_error
+            # на своём ключе клиента выходит сразу
+            log_llm_failure(e.key, e.raw, request_id=request_id, action="Сбой обращения к LLM")
 
         if unsupported_file:
             yield sse_user_error(
-                UserError("serverError.modelUnsupportedFile", reason=last_api_error),
+                UserError("serverError.modelUnsupportedFile", reasonKey=last_api_error_key),
                 request_id=request_id,
             )
             return
 
         # --- Этап 4: мерж результатов ---
         if not batch_results:
-            if last_api_error:
+            if last_api_error_key:
                 # Запрос до модели не дошёл (ключ, квота, лимит, недоступность) —
                 # с форматом документа это не связано, иначе диагностика уводится не туда.
-                err = UserError("serverError.llmNoResponse", reason=last_api_error)
+                err = UserError("serverError.llmNoResponse", reasonKey=last_api_error_key)
             elif last_parse_error:
                 err = UserError(
                     "serverError.llmUnusableResultsWithFragment", fragment=last_parse_error,
@@ -1055,6 +1134,7 @@ async def analyze_document(
         )
 
     except Exception:
+        # Текст исключения наружу не отдаём — сюда доходят и сбои обращения к LLM
         logger.exception("Ошибка при анализе документа")
         yield sse_user_error(UserError("serverError.internalAnalyze"), request_id=request_id)
 
@@ -1101,7 +1181,7 @@ async def _analyze_single_batch(
 
     try:
         # Первая попытка
-        raw_response, _usage = await _call_llm(
+        raw_response, _usage = await call_llm(
             client, model, system_prompt, content, timeout, max_tokens, legacy_max_tokens, temperature,
         )
     except Exception as e:
@@ -1110,7 +1190,7 @@ async def _analyze_single_batch(
             e, endpoint=error_endpoint, request_id=error_request_id,
             model=error_model, is_custom_llm=is_custom_llm,
         )
-        raise LLMApiError(str(e)) from e
+        raise LLMApiError.from_provider(e) from e
 
     # Проверяем пустой ответ
     if not raw_response or not raw_response.strip():
@@ -1125,7 +1205,7 @@ async def _analyze_single_batch(
         logger.warning("Пустой ответ от LLM (completion_tokens=%d), повторная попытка", completion_tokens)
     else:
         try:
-            raw_data = _extract_json_from_response(raw_response)
+            raw_data = extract_json_from_response(raw_response)
             result = _parse_registers(raw_data)
 
             # --- Валидация: проверяем качество ответа ---
@@ -1185,7 +1265,7 @@ async def _analyze_single_batch(
             retry_content = content + [
                 {"type": "text", "text": get_retry_prompt()},
             ]
-        raw_response, _usage = await _call_llm(
+        raw_response, _usage = await call_llm(
             client, model, system_prompt, retry_content, timeout, max_tokens, legacy_max_tokens, temperature,
         )
     except Exception as e:
@@ -1194,7 +1274,7 @@ async def _analyze_single_batch(
             e, endpoint=error_endpoint, request_id=error_request_id,
             model=error_model, is_custom_llm=is_custom_llm,
         )
-        raise LLMApiError(str(e)) from e
+        raise LLMApiError.from_provider(e) from e
 
     # Проверяем пустой ответ повторной попытки
     if not raw_response or not raw_response.strip():
@@ -1203,7 +1283,7 @@ async def _analyze_single_batch(
         return "(пустой ответ LLM — обе попытки)"
 
     try:
-        raw_data = _extract_json_from_response(raw_response)
+        raw_data = extract_json_from_response(raw_response)
         return _parse_registers(raw_data)
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         logger.error("Повторная попытка парсинга JSON тоже не удалась: %s", e)
@@ -1265,7 +1345,7 @@ async def _fix_registers_core(
     content = [{"type": "text", "text": prompt}]
 
     try:
-        raw_response, _usage = await _call_llm(
+        raw_response, _usage = await call_llm(
             client, model, "You are a Modbus device template validator.",
             content, timeout, max_tokens, legacy_max_tokens, temperature,
         )
@@ -1274,17 +1354,17 @@ async def _fix_registers_core(
             api_exc, endpoint=error_endpoint, request_id=request_id,
             model=model, is_custom_llm=is_custom_llm,
         )
-        raise LLMApiError(str(api_exc)) from api_exc
+        raise LLMApiError.from_provider(api_exc) from api_exc
 
     if not raw_response or not raw_response.strip():
-        raise LLMApiError("LLM вернул пустой ответ")
+        raise LLMApiError("serverError.llmEmptyResponse")
 
-    raw_data = _extract_json_from_response(raw_response)
+    raw_data = extract_json_from_response(raw_response)
     # preserve_id=True — сохраняем временный id, чтобы вмёрдживать по нему.
     _device_info, fixed_registers, auto_fixed = _parse_registers(raw_data, preserve_id=True)
 
     if not fixed_registers:
-        raise LLMApiError("LLM не вернул регистров")
+        raise LLMApiError("serverError.llmNoRegisters")
 
     if all_registers is not None and error_positions is not None:
         fixed_registers = _merge_fixed_registers(all_registers, fixed_registers, error_positions)
@@ -1369,7 +1449,12 @@ async def fix_registers(
         try:
             fixed_registers = fix_task.result()
         except LLMApiError as e:
-            yield sse_error(str(e), request_id=request_id)
+            log_llm_failure(
+                e.key, e.raw, request_id=request_id, action="Сбой исправления регистров через LLM",
+            )
+            yield sse_user_error(
+                UserError("serverError.fixFailed", reasonKey=e.key), request_id=request_id,
+            )
             return
 
         # Валидация результата

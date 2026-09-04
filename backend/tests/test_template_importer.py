@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from models import Register
 from template_importer import (
     MAX_JINJA_SOURCE_CHARS,
     TemplateImportError,
@@ -21,6 +22,27 @@ def akko_template():
     """Реальный JSON-шаблон AKKO из wb-mqtt-serial."""
     raw = json.loads((FIXTURES / "config-akko.json").read_text())
     return raw
+
+
+@pytest.fixture
+def channel_template():
+    """Шаблон с одним каналом: поля канала задаёт тест."""
+    def build(fields: dict) -> dict:
+        channel = {
+            "name": "Ch", "reg_type": "holding", "address": 0,
+            "type": "value", "format": "u16", "group": "main",
+        }
+        channel.update(fields)
+        return {
+            "device_type": "test-device",
+            "title": "test_template_title",
+            "device": {
+                "name": "Test Device", "id": "test-device",
+                "groups": [{"title": "Main", "id": "main"}],
+                "channels": [channel],
+            },
+        }
+    return build
 
 
 @pytest.fixture
@@ -616,3 +638,72 @@ class TestJsonComments:
 
         assert result["device_info"]["id"] == "x"
         assert elapsed < 3.0, f"разбор занял {elapsed:.1f} с — регулярка снова квадратична"
+
+
+class TestAddressNotation:
+    """Импорт сохраняет запись адреса — hex не разворачивается в число."""
+
+    @pytest.mark.parametrize("address", ["0xff", "0x012F0000", "109:0:1"])
+    def test_notation_survives_import(self, channel_template, address):
+        """Разворот в число вывел бы четырёхбайтный код за 16-битный диапазон."""
+        imported = import_template(channel_template({"address": address}))
+        assert imported["registers"][0]["address"] == address
+
+    @pytest.mark.parametrize("address,expected", [(255, 255), ("255", 255)])
+    def test_decimal_becomes_number(self, channel_template, address, expected):
+        imported = import_template(channel_template({"address": address}))
+        assert imported["registers"][0]["address"] == expected
+
+
+class TestFieldNotation:
+    """Числовые поля — запятая и точка дают число, hex остаётся там, где схема его разрешает."""
+
+    @pytest.mark.parametrize("field,raw,expected", [
+        ("scale", "0,5", 0.5),
+        ("scale", "0.5", 0.5),
+        ("scale", 0.5, 0.5),
+        ("min", "1,5", 1.5),
+        ("max", "1,5", 1.5),
+        ("round_to", "1,5", 1.5),
+    ])
+    def test_comma_and_dot_become_number(self, channel_template, field, raw, expected):
+        """Строковое значение приводится к числу — иначе шаблон не собрать обратно."""
+        imported = import_template(channel_template({field: raw}))
+        assert imported["registers"][0][field] == expected
+
+    @pytest.mark.parametrize("field,value", [
+        ("error_value", "0xFFFF"),   # hex-запись стоит 333 раза в 38 шаблонах драйвера
+        ("error_value", 65535),      # то же поле числом, 1602 раза
+        ("on_value", "0x0101"),      # config-somfy-sdn.json
+        ("off_value", 1),
+        ("min", 0),
+    ])
+    def test_both_notations_accepted(self, channel_template, field, value):
+        """Схема драйвера разрешает в этих полях и число, и hex-строку."""
+        imported = import_template(channel_template({field: value}))
+        reg = imported["registers"][0]
+        assert reg[field] == value
+        Register(**reg)   # модель редактора обязана принять обе записи
+
+    @pytest.mark.parametrize("written,expected", [("0xff", 255), ("0x10", 16), ("5", 5)])
+    def test_hex_limit_becomes_number(self, channel_template, written, expected):
+        """Лимит редактор держит числом — hex из шаблона разворачивается при импорте."""
+        imported = import_template(channel_template({"max": written}))
+        assert imported["registers"][0]["max"] == expected
+
+    def test_serial_int_string_is_trimmed(self, channel_template):
+        """Пробелы по краям приезжают из копипасты даташита."""
+        imported = import_template(channel_template({"error_value": " 0x7FFF "}))
+        assert imported["registers"][0]["error_value"] == "0x7FFF"
+
+    def test_giant_hex_limit_is_dropped(self, channel_template):
+        """int из hex не ограничен лимитом CPython, а сериализация ответа ограничена."""
+        imported = import_template(channel_template({"max": "0x" + "F" * 3600}))
+        assert "max" not in imported["registers"][0]
+
+    def test_unparsable_limit_is_dropped(self, channel_template):
+        """Регистр важнее одного поля — остальные поля должны доехать."""
+        imported = import_template(channel_template({"max": "мин", "scale": 0.1}))
+        reg = imported["registers"][0]
+        assert "max" not in reg
+        assert reg["scale"] == 0.1

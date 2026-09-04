@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useStore } from '../store';
+import { restoreLlmConfig, useStore } from '../store';
 import { createTestRegister, createTestGroup, createTestDeviceInfo, resetFixtureCounter } from './fixtures';
 import { resetMocks } from './setup';
 import { importTemplate as importTemplateApi } from '../api';
@@ -218,5 +218,17 @@ describe('importTemplate', () => {
     await getState().importTemplate(new File(['{}'], 'good.json'));
 
     expect(getState().importError).toBeNull();
+  });
+});
+
+describe('restoreLlmConfig', () => {
+  it('зажимает сохранённую температуру в 0..2 — прежнее поле пускало больше', () => {
+    expect(restoreLlmConfig({ temperature: 7 }).temperature).toBe(2);
+    expect(restoreLlmConfig({ temperature: -1 }).temperature).toBe(0);
+  });
+
+  it('валидное значение и пустой конфиг не трогает', () => {
+    expect(restoreLlmConfig({ temperature: 0.7 }).temperature).toBe(0.7);
+    expect(restoreLlmConfig(undefined)).toEqual({});
   });
 });

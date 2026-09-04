@@ -1,0 +1,66 @@
+# Проверки кода переехали в Jenkins (Jenkinsfile): линт, типы, тесты, сборка образов.
+# Здесь остаётся только то, чего в Jenkins нет — дисциплина CHANGELOG и выпуск тега.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  changelog:
+    name: CHANGELOG — проверка версии
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Проверить обновление CHANGELOG.md
+        run: |
+          if git diff origin/main...HEAD --name-only | grep -q '^CHANGELOG.md$'; then
+            echo "✅ CHANGELOG.md обновлён"
+          else
+            echo "::error::CHANGELOG.md не обновлён в этом PR. Добавьте запись об изменениях."
+            exit 1
+          fi
+
+      - name: Проверить что есть версионная секция с записями
+        run: |
+          # Должна быть хотя бы одна версионная секция ## [X.Y.Z]
+          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "::error::В CHANGELOG.md нет ни одной версионной секции. Добавьте ## [X.Y.Z] - YYYY-MM-DD с записями."
+            exit 1
+          fi
+          # [Unreleased] допустима только пустая (без ### подсекций до следующего ## [X.Y.Z])
+          # Извлекаем содержимое между ## [Unreleased] и следующей ## секцией
+          UNRELEASED_CONTENT=$(sed -n '/^## \[Unreleased\]/,/^## \[/{ /^## \[/d; /^[[:space:]]*$/d; p; }' CHANGELOG.md)
+          if [ -n "$UNRELEASED_CONTENT" ]; then
+            echo "::error::Секция [Unreleased] содержит записи. Перенесите их в версионную секцию ## [X.Y.Z] - $(date +%Y-%m-%d) перед мержем."
+            exit 1
+          fi
+          echo "✅ Версия: $VERSION"
+
+  tag:
+    name: Создать git-тег из версии в CHANGELOG
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Извлечь версию и создать тег
+        run: |
+          VERSION=$(grep -oP '## \[\K[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1)
+          TAG="v${VERSION}"
+          if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+            echo "Тег ${TAG} уже существует — пропускаем"
+          else
+            git tag "${TAG}"
+            git push origin "${TAG}"
+            echo "✅ Создан тег ${TAG}"
+          fi

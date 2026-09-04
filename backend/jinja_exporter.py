@@ -17,12 +17,18 @@
 Минимум 2 элемента для паттерна.
 """
 
+import itertools
 import json
 import re
 from collections import defaultdict
 from typing import Any
 
+from serial_values import decimal_address
+
 _PLACEHOLDER = "\x00"
+
+# Сколько чисел в одной строке рассматриваем как кандидаты на подстановку, см. _extract_number_variants
+MAX_NUMBER_VARIANTS = 16
 
 # Поля, которые могут содержать варьирующийся номер и шаблонизируются
 _CHANNEL_TEMPLATED_FIELDS = {"group", "condition"}
@@ -42,12 +48,15 @@ _VARIANT_FIELDS = {"sporadic", "condition"}
 # ---------------------------------------------------------------------------
 
 def _extract_number_variants(text: str) -> list[tuple[str, int, int, int]]:
-    """Извлекает все варианты замены числа на placeholder в тексте.
+    """Извлекает варианты замены числа на placeholder в тексте.
 
-    Возвращает список кортежей (шаблон, число, start_позиция, end_позиция).
+    Возвращает кортежи (шаблон, число, start_позиция, end_позиция), не больше
+    `MAX_NUMBER_VARIANTS` штук — на каждое число копируется вся строка, и без потолка
+    имя канала из одних цифр даёт квадратичный расход памяти и времени. Обрезка не портит
+    результат, а лишь уменьшает шанс собрать цикл.
     """
     variants = []
-    for match in re.finditer(r"\d+", text):
+    for match in itertools.islice(re.finditer(r"\d+", text), MAX_NUMBER_VARIANTS):
         num = int(match.group())
         start, end = match.start(), match.end()
         template = text[:start] + _PLACEHOLDER + text[end:]
@@ -107,23 +116,25 @@ def _detect_templated_fields(items: list[tuple[Any, int, dict]],
     return result
 
 
+def _progression_addresses(items: list[dict], address_field: str = "address") -> list[int] | None:
+    """Адреса группы каналов для свёртки в цикл. None — хотя бы один не годится."""
+    addresses: list[int] = []
+    for item in items:
+        addr = decimal_address(item.get(address_field, 0))
+        if addr is None:
+            return None
+        addresses.append(addr)
+    return addresses
+
+
 def _validate_address_progression(items: list[tuple[Any, int, dict]],
                                   address_field: str = "address") -> tuple[bool, int, int]:
     """Проверяет арифметическую прогрессию адресов.
 
     Возвращает (valid, base_address, step).
     """
-    addresses = []
-    for _, _, item in items:
-        addr = item.get(address_field, 0)
-        if isinstance(addr, str):
-            try:
-                addr = int(addr, 0)
-            except (ValueError, TypeError):
-                return False, 0, 0
-        addresses.append(addr)
-
-    if len(addresses) < 2:
+    addresses = _progression_addresses([item for _, _, item in items], address_field)
+    if addresses is None or len(addresses) < 2:
         return False, 0, 0
 
     steps = [addresses[i + 1] - addresses[i] for i in range(len(addresses) - 1)]
@@ -673,8 +684,8 @@ def _detect_string_channel_patterns(
             continue
 
         # Проверяем арифметическую прогрессию адресов
-        addresses = [ch.get("address", 0) for _, ch in group_items]
-        if len(addresses) < 2:
+        addresses = _progression_addresses([ch for _, ch in group_items])
+        if addresses is None or len(addresses) < 2:
             continue
         steps = [addresses[i + 1] - addresses[i] for i in range(len(addresses) - 1)]
         if len(set(steps)) != 1:

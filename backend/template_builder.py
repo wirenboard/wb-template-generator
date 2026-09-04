@@ -3,6 +3,7 @@
 import re
 
 from models import BuildRequest, DeviceInfo, Register, RegisterGroup
+from serial_values import parse_address
 
 
 def _make_group_id(group: str) -> str:
@@ -45,18 +46,6 @@ def _build_groups(
     return list(seen.values())
 
 
-def _format_address(address: int | str) -> int | str:
-    """Адрес: строка с ':' для побитового, иначе int."""
-    if isinstance(address, str) and ":" in address:
-        return address
-    if isinstance(address, str):
-        try:
-            return int(address)
-        except ValueError:
-            return address
-    return address
-
-
 def _get_enum_data(reg: Register) -> tuple[list[int] | None, list[str] | None]:
     """Извлекает enum данные: приоритет у enum_entries, иначе enum + enum_titles."""
     if reg.enum_entries:
@@ -88,7 +77,7 @@ def _build_channel(reg: Register, group_id: str, channel_id: str) -> dict:
         "id": channel_id,
         "name": _sanitize_channel_name(reg.name),
         "reg_type": reg.reg_type,
-        "address": _format_address(reg.address),
+        "address": parse_address(reg.address),
         "group": group_id,
     }
 
@@ -179,7 +168,7 @@ def _build_parameter(reg: Register, group_id: str, order: int) -> tuple[str, dic
 
     param: dict = {
         "title": _sanitize_channel_name(reg.name),
-        "address": _format_address(reg.address),
+        "address": parse_address(reg.address),
         "reg_type": reg.reg_type,
         "group": group_id,
         "order": order,

@@ -1,0 +1,9 @@
+Device: Hex Power Meter HPM-20
+
+Holding Registers (addresses are given in hexadecimal):
+
+| Address | Name          | Data Type | R/W | Description                |
+|---------|---------------|-----------|-----|----------------------------|
+| 0x0000  | Voltage       | UINT16    | R   | Line voltage in 0.1 V      |
+| 0x000A  | Current       | UINT16    | R   | Line current in 0.01 A     |
+| 0x0064  | Active Power  | UINT32    | R   | Active power in 0.1 W      |

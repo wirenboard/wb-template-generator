@@ -22,5 +22,5 @@
 
 - Undo/redo для операций редактирования
 - Bulk-операции: массовое изменение group, reg_type, format
-- Keyboard shortcuts (Ctrl+Z, Ctrl+S, Delete)
+- Keyboard shortcuts: сделаны Ctrl+Z, Insert, Delete, обход таблицы по Tab; остаётся Ctrl+S
 - Поиск/фильтрация в таблице регистров

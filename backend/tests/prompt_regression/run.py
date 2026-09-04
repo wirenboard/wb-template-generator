@@ -25,8 +25,9 @@ import yaml  # noqa: E402
 from openai import AsyncOpenAI  # noqa: E402
 
 from config import Settings  # noqa: E402
-from llm_service import _call_llm, _extract_json_from_response, _parse_registers  # noqa: E402
+from llm_service import _parse_registers, call_llm, extract_json_from_response  # noqa: E402
 from prompts import get_analyze_prompt  # noqa: E402
+from serial_values import canonical_address  # noqa: E402
 
 CASES_DIR = Path(__file__).parent / "cases"
 EXPECTATIONS_FILE = Path(__file__).parent / "expectations.yaml"
@@ -55,6 +56,13 @@ def load_cases() -> list[tuple[str, str]]:
     return cases
 
 
+def _same_address(written: object, expected: object) -> bool:
+    """Совпадение адреса. У hex сверяем значение, но запись обязана остаться hex."""
+    if isinstance(expected, str) and expected.lower().startswith("0x"):
+        return isinstance(written, str) and canonical_address(written) == canonical_address(expected)
+    return str(written) == str(expected)
+
+
 def check_register(actual_regs, expected_reg) -> tuple[bool, str]:
     """Проверяет один ожидаемый регистр в списке фактических.
 
@@ -70,9 +78,7 @@ def check_register(actual_regs, expected_reg) -> tuple[bool, str]:
     # Ищем по (address, reg_type)
     found = None
     for reg in actual_regs:
-        reg_addr = reg.address
-        # Сравниваем с учётом типов (int vs str для bitwise адресов)
-        if str(reg_addr) == str(addr) and reg.reg_type == reg_type:
+        if reg.reg_type == reg_type and _same_address(reg.address, addr):
             found = reg
             break
 
@@ -96,6 +102,14 @@ def check_register(actual_regs, expected_reg) -> tuple[bool, str]:
             errors.append(
                 f"has_enum: ожидали {expected_reg['has_enum']}, "
                 f"получили {actual_has_enum}"
+            )
+
+    # Проверяем scale — кейс про запятую как десятичный разделитель
+    if "scale" in expected_reg:
+        if found.scale != expected_reg["scale"]:
+            errors.append(
+                f"scale: ожидали {expected_reg['scale']!r}, "
+                f"получили {found.scale!r}"
             )
 
     # Проверяем format
@@ -131,7 +145,7 @@ async def run_case(
     content = [{"type": "text", "text": case_text}]
 
     try:
-        raw_response, _usage = await _call_llm(
+        raw_response, _usage = await call_llm(
             client, model, system_prompt, content,
             timeout, max_tokens, legacy_max_tokens, temperature,
         )
@@ -144,7 +158,7 @@ async def run_case(
         return 0, len(expected.get("registers", []))
 
     try:
-        raw_data = _extract_json_from_response(raw_response)
+        raw_data = extract_json_from_response(raw_response)
         _device_info, registers, _fixes = _parse_registers(raw_data)
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"  {_RED}ОШИБКА парсинга: {e}{_RESET}")

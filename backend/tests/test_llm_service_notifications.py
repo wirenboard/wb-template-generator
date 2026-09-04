@@ -116,14 +116,13 @@ class TestServerLLMErrorReporting:
 
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
-            patch("llm_service.Image") as mock_image,
+            patch("llm_service.open_image", return_value=MagicMock()),
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
-            # Каждый _call_llm бросает quota-ошибку (включая retry)
+            # Каждый call_llm бросает quota-ошибку (включая retry)
             mock_client.chat.completions.create = AsyncMock(side_effect=_make_quota_error())
-            mock_image.open.return_value = MagicMock()
 
             events = await _collect(analyze_document(
                 files=[("test.png", b"fake-png")],
@@ -162,13 +161,12 @@ class TestCustomLLMSkipsReporting:
 
         with (
             patch("llm_service.AsyncOpenAI") as mock_openai,
-            patch("llm_service.Image") as mock_image,
+            patch("llm_service.open_image", return_value=MagicMock()),
             patch("llm_service.image_to_base64", return_value="dGVzdA=="),
         ):
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create = AsyncMock(side_effect=_make_quota_error())
-            mock_image.open.return_value = MagicMock()
 
             await _collect(analyze_document(
                 files=[("test.png", b"fake-png")],
@@ -201,13 +199,12 @@ class TestNotifierDisabled:
         try:
             with (
                 patch("llm_service.AsyncOpenAI") as mock_openai,
-                patch("llm_service.Image") as mock_image,
+                patch("llm_service.open_image", return_value=MagicMock()),
                 patch("llm_service.image_to_base64", return_value="dGVzdA=="),
             ):
                 mock_client = AsyncMock()
                 mock_openai.return_value = mock_client
                 mock_client.chat.completions.create = AsyncMock(side_effect=_make_quota_error())
-                mock_image.open.return_value = MagicMock()
 
                 await _collect(analyze_document(
                     files=[("test.png", b"fake-png")],

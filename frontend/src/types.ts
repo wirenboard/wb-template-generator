@@ -63,13 +63,14 @@ export interface Register {
   string_data_size?: number;
   word_order?: string;
   byte_order?: string;
-  error_value?: string;
+  error_value?: number | string;
   readonly?: boolean;
   min?: number;
   max?: number;
   round_to?: number;
-  on_value?: number;
-  off_value?: number;
+  // Строка — hex-запись из шаблона, драйвер её разрешает («on_value»: «0x0101»)
+  on_value?: number | string;
+  off_value?: number | string;
   default_value?: number;
   translations?: Record<string, { name?: string; description?: string }>;
   sporadic?: boolean;
@@ -103,7 +104,7 @@ export interface WBChannel {
   scale?: number;
   offset?: number;
   readonly?: boolean;
-  error_value?: string;
+  error_value?: number | string;
   word_order?: string;
   byte_order?: string;
   string_data_size?: number;
@@ -113,8 +114,8 @@ export interface WBChannel {
   min?: number;
   max?: number;
   round_to?: number;
-  on_value?: number;
-  off_value?: number;
+  on_value?: number | string;
+  off_value?: number | string;
   enabled?: boolean;
 }
 

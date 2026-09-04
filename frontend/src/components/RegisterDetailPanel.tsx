@@ -6,6 +6,7 @@ import { translateStrings } from '../api';
 import { HAS_NON_LATIN } from '../constants';
 import { getFieldErrors, type FieldValidationError } from '../utils/registerValidation';
 import EnumEditor from './EnumEditor';
+import NumberField from './NumberField';
 
 interface Props {
   register: Register;
@@ -514,15 +515,15 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
                   <div className="flex gap-1.5">
                     <div>
                       <label className={labelClass}>Scale</label>
-                      <input type="number" step="any" value={reg.scale} onChange={(e) => update({ scale: parseFloat(e.target.value) || 1 })} className={`${inputClass} w-20`} />
+                      <NumberField value={reg.scale} fallback={1} onChange={(v) => update({ scale: v ?? 1 })} className={`${inputClass} w-20`} />
                     </div>
                     <div>
                       <label className={labelClass}>Offset</label>
-                      <input type="number" step="any" value={reg.offset} onChange={(e) => update({ offset: parseFloat(e.target.value) || 0 })} className={`${inputClass} w-20`} />
+                      <NumberField value={reg.offset} fallback={0} onChange={(v) => update({ offset: v ?? 0 })} className={`${inputClass} w-20`} />
                     </div>
                     <div>
                       <label className={labelClass}>Round to</label>
-                      <input type="number" step="any" value={reg.round_to ?? ''} onChange={(e) => { const v = parseFloat(e.target.value); update({ round_to: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-20`} />
+                      <NumberField value={reg.round_to} onChange={(v) => update({ round_to: v })} placeholder="—" className={`${inputClass} w-20`} />
                     </div>
                   </div>
                 </div>
@@ -537,11 +538,11 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
                   <div className="flex gap-1.5">
                     <div>
                       <label className={labelClass}>Min</label>
-                      <input type="number" step="any" value={reg.min ?? ''} onChange={(e) => { const v = parseFloat(e.target.value); update({ min: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-20`} />
+                      <NumberField value={reg.min} onChange={(v) => update({ min: v })} placeholder="—" className={`${inputClass} w-20`} />
                     </div>
                     <div>
                       <label className={labelClass}>Max</label>
-                      <input type="number" step="any" value={reg.max ?? ''} onChange={(e) => { const v = parseFloat(e.target.value); update({ max: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-20`} />
+                      <NumberField value={reg.max} onChange={(v) => update({ max: v })} placeholder="—" className={`${inputClass} w-20`} />
                     </div>
                   </div>
                 </div>
@@ -555,11 +556,11 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
               <div className="flex gap-1.5">
                 <div>
                   <label className={labelClass}>On</label>
-                  <input type="number" value={reg.on_value ?? ''} onChange={(e) => { const v = parseInt(e.target.value, 10); update({ on_value: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-20`} />
+                  <NumberField value={reg.on_value} hex onChange={(v) => update({ on_value: v })} placeholder="—" className={`${inputClass} w-20`} />
                 </div>
                 <div>
                   <label className={labelClass}>Off</label>
-                  <input type="number" value={reg.off_value ?? ''} onChange={(e) => { const v = parseInt(e.target.value, 10); update({ off_value: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-20`} />
+                  <NumberField value={reg.off_value} hex onChange={(v) => update({ off_value: v })} placeholder="—" className={`${inputClass} w-20`} />
                 </div>
               </div>
             </div>
@@ -568,7 +569,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
           {vis.stringSize && (
             <div>
               <SectionTitle>{t('detail.stringSize')} <Tip text={t('detail.stringSizeTip')} /></SectionTitle>
-              <input type="number" value={reg.string_data_size ?? ''} onChange={(e) => { const v = parseInt(e.target.value, 10); update({ string_data_size: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-24 ${fieldErrClass('string_data_size')}`} />
+              <NumberField value={reg.string_data_size} integer onChange={(v) => update({ string_data_size: v })} placeholder="—" className={`${inputClass} w-24 ${fieldErrClass('string_data_size')}`} />
               <FieldErrors errors={fieldErrs('string_data_size')} />
             </div>
           )}
@@ -608,7 +609,7 @@ export default function RegisterDetailPanel({ register: reg }: Props) {
                 {vis.defaultValue && (
                   <div>
                     <label className={labelClass}>Default</label>
-                    <input type="number" step="any" value={reg.default_value ?? ''} onChange={(e) => { const v = parseFloat(e.target.value); update({ default_value: isNaN(v) ? undefined : v }); }} placeholder="—" className={`${inputClass} w-20`} />
+                    <NumberField value={reg.default_value} onChange={(v) => update({ default_value: v })} placeholder="—" className={`${inputClass} w-20`} />
                   </div>
                 )}
               </div>

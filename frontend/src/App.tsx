@@ -259,6 +259,7 @@ export default function App() {
                 setDownloadOpen={setDownloadOpen}
                 downloadRef={downloadRef}
                 onResetAll={() => setConfirmResetOpen(true)}
+                modalOpen={confirmResetOpen || validationGateOpen}
               />
             </section>
 
@@ -304,6 +305,7 @@ export default function App() {
                 setDownloadOpen={setDownloadOpen}
                 downloadRef={downloadRef}
                 onResetAll={() => setConfirmResetOpen(true)}
+                modalOpen={confirmResetOpen || validationGateOpen}
               />
             </section>
 

@@ -11,14 +11,16 @@ LLM_PROXY=             # HTTP/SOCKS5 прокси для запросов к LLM
 LLM_ALLOW_PRIVATE_URLS=false # Разрешить пользовательский адрес LLM во внутренней сети (см. ниже)
 LLM_TIMEOUT=600        # Жёсткий таймаут HTTP-запроса к LLM (сек)
 LLM_SOFT_TIMEOUT=180   # Мягкий таймаут — предложить продолжить/отменить (сек)
-MAX_FILE_SIZE_MB=2
+MAX_REQUEST_SIZE_MB=2  # Потолок на запрос целиком (МБ). То же число у nginx в
+                       # client_max_body_size, он статикой в образе — менять оба места
+MAX_FILES=10           # Максимум файлов в одном запросе на анализ
 QUEUE_SERVER_MAX_CONCURRENT=15   # Параллельных запросов к серверному LLM
 QUEUE_CUSTOM_MAX_CONCURRENT=15   # Параллельных запросов с пользовательским LLM
 QUEUE_ACTIVATION_DELAY=1.0       # Задержка перед стартом того, кто ждал в очереди (сек)
 RATE_LIMIT_REQUESTS=10
 RATE_LIMIT_WINDOW=60
 LOG_FORMAT=text              # Формат логов: text или json
-CORS_ORIGINS=*               # Разрешённые CORS-источники через запятую
+CORS_ORIGINS=                # Разрешённые CORS-источники через запятую (пусто = кросс-домен запрещён)
 
 # Telegram-уведомления о сбоях OpenAI API (только для серверного LLM)
 TELEGRAM_NOTIFY_ENABLED=false                       # Включить алерты в Telegram
@@ -63,10 +65,10 @@ LLM стоит рядом (`http://ollama:11434/v1`, адрес в локаль�
 | `auth` | CRITICAL | 401, невалидный API-ключ | Сразу + cooldown |
 | `permission` | CRITICAL | 403 без quota-маркеров (отозван доступ) | Сразу + cooldown |
 | `not_found` | CRITICAL | 404, модель не найдена | Сразу + cooldown |
-| `bad_request` | CRITICAL | 400/422, ошибка в нашем запросе | Сразу + cooldown |
+| `bad_request` | WARNING | 400/422, провайдер не принял присланный файл или запрос | По порогу в окне |
 | `rate_limit` | WARNING | 429 без quota-маркеров (RPM/TPM) | По порогу в окне |
-| `timeout` | WARNING | `APITimeoutError` | По порогу в окне |
-| `connection` | WARNING | `APIConnectionError` (сеть, прокси) | По порогу в окне |
+| `timeout` | WARNING | `APITimeoutError` от SDK или `httpx.TimeoutException` | По порогу в окне |
+| `connection` | WARNING | `APIConnectionError` от SDK или `httpx.TransportError` (сеть, прокси) | По порогу в окне |
 | `server_error` | WARNING | 5xx | По порогу в окне |
 | `unknown` | WARNING | Прочее | По порогу в окне |
 

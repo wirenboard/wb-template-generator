@@ -182,9 +182,9 @@ class TestAnalyzeEndpointCarriesKeys:
         assert body["message_key"] == "serverError.unsupportedFormat"
         assert body["message_params"]["file"] == "doc.txt"
 
-    def test_file_too_large(self, client):
+    def test_request_too_large(self, client):
         settings = main.get_settings()
-        oversized = b"0" * (settings.MAX_FILE_SIZE_MB * 1024 * 1024 + 1024)
+        oversized = b"0" * (settings.MAX_REQUEST_SIZE_MB * 1024 * 1024 + 1024)
 
         resp = client.post(
             "/api/analyze", files=self._files("doc.pdf", oversized), data=self._CUSTOM_LLM,
@@ -192,8 +192,8 @@ class TestAnalyzeEndpointCarriesKeys:
         body = resp.json()
 
         assert resp.status_code == 413
-        assert body["message_key"] == "serverError.fileTooLarge"
-        assert body["message_params"]["max"] == settings.MAX_FILE_SIZE_MB
+        assert body["message_key"] == "serverError.requestTooLarge"
+        assert body["message_params"]["max"] == settings.MAX_REQUEST_SIZE_MB
 
     def test_llm_not_configured(self, client, monkeypatch):
         """Без своего адреса и без серверного LLM — 503 с ключом."""

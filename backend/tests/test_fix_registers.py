@@ -93,3 +93,12 @@ def test_parse_registers_preserve_id():
         preserve_id=True,
     )
     assert regs_keep[0].id == "__fix_0"
+
+
+def test_hex_address_survives_parse_fallback():
+    """Мягкая ветка _parse_registers не должна терять регистр из-за записи адреса."""
+    raw = {"device_info": {}, "registers": [{"address": "0xff", "name": "V", "enum": "не список"}]}
+
+    _, registers, _ = _parse_registers(raw)
+
+    assert [r.address for r in registers] == ["0xff"]

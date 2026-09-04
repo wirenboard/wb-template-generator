@@ -3,6 +3,8 @@ import { useStore } from '../store';
 import type { Register } from '../types';
 import { REG_TYPES, UNITS, CHANNEL_TYPES, PARAMETER_CHANNEL_TYPES, getChannelTypesForRegType, HAS_NON_LATIN } from '../constants';
 import { generateId } from '../utils';
+import { compareAddresses, parseAddressInput } from '../utils/serialValues';
+import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId, rowHotkeyAction } from '../utils/tableNavigation';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
 import { translateStrings } from '../api';
@@ -22,6 +24,8 @@ interface RegisterTableProps {
   setDownloadOpen: (open: boolean) => void;
   downloadRef: React.RefObject<HTMLDivElement>;
   onResetAll: () => void;
+  /** Открыта модалка, которой владеет App — тогда таблица не слушает клавиши строк */
+  modalOpen?: boolean;
 }
 
 /** Состояние undo-удаления */
@@ -97,6 +101,7 @@ export default function RegisterTable({
   setDownloadOpen,
   downloadRef,
   onResetAll,
+  modalOpen,
 }: RegisterTableProps) {
   const t = useT();
   const hasTranslations = useHasTranslations();
@@ -107,6 +112,7 @@ export default function RegisterTable({
   const removeRegister = useStore((s) => s.removeRegister);
   const toggleRegister = useStore((s) => s.toggleRegister);
   const highlightedRegisterId = useStore((s) => s.highlightedRegisterId);
+  const setHighlightedRegister = useStore((s) => s.setHighlightedRegister);
   const newlyAddedRegisterId = useStore((s) => s.newlyAddedRegisterId);
   const expandedRows = useStore((s) => s.expandedRows);
   const toggleRowExpanded = useStore((s) => s.toggleRowExpanded);
@@ -319,9 +325,8 @@ export default function RegisterTable({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && undoState) {
-        // Не перехватываем если фокус в input/textarea
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        // Не перехватываем, когда пользователь набирает текст
+        if (isTypingTarget(e.target as HTMLElement)) return;
         e.preventDefault();
         handleUndo();
       }
@@ -348,11 +353,13 @@ export default function RegisterTable({
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
-      const cmp = typeof av === 'boolean' && typeof bv === 'boolean'
-        ? Number(av) - Number(bv)
-        : typeof av === 'number' && typeof bv === 'number'
-          ? av - bv
-          : String(av).localeCompare(String(bv));
+      const cmp = sortField === 'address'
+        ? compareAddresses(av as string | number, bv as string | number)
+        : typeof av === 'boolean' && typeof bv === 'boolean'
+          ? Number(av) - Number(bv)
+          : typeof av === 'number' && typeof bv === 'number'
+            ? av - bv
+            : String(av).localeCompare(String(bv));
       return sortDir === 'asc' ? cmp : -cmp;
     });
   }, [registers, sortField, sortDir]);
@@ -495,10 +502,95 @@ export default function RegisterTable({
     showUndoToast(deleted);
   }, [registers, removeRegister, showUndoToast]);
 
+  /**
+   * Единственный путь удаления — из кнопки тулбара, «x» в строке и с клавиатуры.
+   * Помимо тоста отмены убирает удалённые id из отметок и снимает подсветку,
+   * иначе они указывают на строки, которых больше нет.
+   */
+  const aliveIds = useMemo(() => new Set(registers.map((r) => r.id)), [registers]);
+
+  /**
+   * Отметки без исчезнувших строк. Локальный `selected` переживает и удаление
+   * строки кнопкой «x», и сброс шаблона, и замену таблицы импортом или анализом,
+   * поэтому счётчик на кнопке показывал бы строки, которых нет.
+   */
+  const selectedAlive = useMemo(
+    () => new Set([...selected].filter((id) => aliveIds.has(id))),
+    [selected, aliveIds],
+  );
+
+  const runDelete = useCallback((ids: Set<string>) => {
+    deleteWithUndo(ids);
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((id) => !ids.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    if (highlightedRegisterId && ids.has(highlightedRegisterId)) {
+      setHighlightedRegister(null);
+    }
+  }, [deleteWithUndo, highlightedRegisterId, setHighlightedRegister]);
+
   const deleteSelected = useCallback(() => {
-    deleteWithUndo(selected);
-    setSelected(new Set());
-  }, [selected, deleteWithUndo]);
+    runDelete(selectedAlive);
+  }, [selectedAlive, runDelete]);
+
+  // Новая строка сразу открывается на «Адресе»: вместе с переходом по Tab
+  // это даёт непрерывный ввод — Insert, адрес, Tab, имя, Insert
+  useEffect(() => {
+    if (!newlyAddedRegisterId) return;
+    setHighlightedRegister(newlyAddedRegisterId);
+    startEdit(newlyAddedRegisterId, 'address');
+  }, [newlyAddedRegisterId, startEdit, setHighlightedRegister]);
+
+  // Insert — добавить регистр, Delete — удалить отмеченные или текущую строку
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Один источник «где фокус» на обе клавиши
+      const active = (document.activeElement as HTMLElement | null) ?? (e.target as HTMLElement | null);
+      const typing = active ? isTypingTarget(active) : false;
+      const focusedRow = active?.closest('tr[id^="reg-row-"]') ?? null;
+
+      const action = rowHotkeyAction({
+        key: e.key,
+        repeat: e.repeat,
+        // Shift+Insert — вставка из буфера, Shift+Delete — вырезание
+        hasModifier: e.ctrlKey || e.metaKey || e.altKey || e.shiftKey,
+        // Пока открыта модалка, таблица под ней клавиши не слушает
+        modalOpen: Boolean(modalOpen) || groupManagerOpen || languageManagerOpen || llmImportOpen || llmSettingsOpen,
+        typing,
+        inRow: focusedRow !== null,
+      });
+      if (!action) return;
+
+      if (action === 'add') {
+        e.preventDefault();
+        // blur коммитит значение открытой ячейки, поэтому ввод не теряется
+        if (typing) active?.blur();
+        addRegister();
+        return;
+      }
+
+      // Цель — строка, где стоит фокус: подсветка ставится только кликом мыши
+      // и обходом по Tab не двигается.
+      const focusedRowId = rowIdFromDomId(focusedRow?.id);
+      // Подсветка — запасной вариант и только когда фокус нигде. Иначе Delete
+      // сносил бы регистр, пока пользователь работает в его же панели деталей
+      // (она лежит в соседнем <tr> без id) или в панели превью.
+      const focusNowhere = !active || active === document.body || active === document.documentElement;
+      const currentId = focusedRowId ?? (focusNowhere ? highlightedRegisterId : null);
+      // Строку в свёрнутой группе не видно — удалять её молча нельзя
+      const visibleId = currentId && document.getElementById(`reg-row-${currentId}`) ? currentId : null;
+      const targets = deleteTargets(selectedAlive, visibleId, aliveIds);
+      if (!targets) return;
+      e.preventDefault();
+      runDelete(targets);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [
+    addRegister, runDelete, selectedAlive, aliveIds, highlightedRegisterId,
+    modalOpen, groupManagerOpen, languageManagerOpen, llmImportOpen, llmSettingsOpen,
+  ]);
 
   // --- Скачать CSV-шаблон с примерами ---
   const downloadCsvTemplate = useCallback(() => {
@@ -743,9 +835,7 @@ export default function RegisterTable({
         allRegs.push({
           id: generateId(),
           enabled: col(cols, 'enabled', 0) !== '0',
-          address: col(cols, 'address', 1)?.includes(':')
-            ? col(cols, 'address', 1)
-            : (parseInt(col(cols, 'address', 1), 10) || 0),
+          address: parseAddressInput(col(cols, 'address', 1)) || 0,
           name: col(cols, 'name', 2) || 'New Register',
           description: col(cols, 'description', 3) || undefined,
           reg_type: (col(cols, 'reg_type', 4) as Register['reg_type']) || 'holding',
@@ -824,15 +914,23 @@ export default function RegisterTable({
 
   return (
     <div>
+      {/* Тулбар закреплён: при длинном списке кнопки нужны там, где идёт правка,
+          а не в начале страницы. Отрицательные отступы растягивают фон на padding
+          секции, иначе строки таблицы просвечивали бы по краям. */}
       {hasRegisters && (
-      <div className="flex flex-wrap items-center gap-2 mb-3" ref={menuRef}>
+      <div
+        className="sticky top-0 z-30 -mx-4 px-4 py-2 mb-1 bg-white border-b border-gray-100 flex flex-wrap items-center gap-2"
+        ref={menuRef}
+      >
         {/* Редактирование */}
-        <button onClick={addRegister} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+        <button onClick={addRegister} title={t('toolbar.addTip')} aria-keyshortcuts="Insert" className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
           {t('toolbar.add')}
         </button>
-        <button onClick={deleteSelected} disabled={selected.size === 0} className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          {t('toolbar.delete')} ({selected.size})
-        </button>
+        <span title={t('toolbar.deleteTip')}>
+          <button onClick={deleteSelected} disabled={selectedAlive.size === 0} aria-keyshortcuts="Delete" className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            {t('toolbar.delete')} ({selectedAlive.size})
+          </button>
+        </span>
 
         {/* CSV dropdown */}
         <div className="relative">
@@ -955,7 +1053,7 @@ export default function RegisterTable({
           <span className="text-xs text-green-600">{translateResult}</span>
         )}
         {translateError && !translating && (
-          <span className="text-xs text-red-600 truncate max-w-48" title={translateError}>{translateError}</span>
+          <span className="text-xs text-red-600 max-w-72 whitespace-pre-wrap break-words">{translateError}</span>
         )}
         {/* Счётчик ошибок валидации + кнопка "Исправить через AI" */}
         {(validationErrorCount > 0 || validationWarningCount > 0) && (
@@ -979,7 +1077,7 @@ export default function RegisterTable({
           </span>
         )}
         {fixWithAiError && (
-          <span className="text-xs text-red-600 truncate max-w-48" title={fixWithAiError}>{fixWithAiError}</span>
+          <span className="text-xs text-red-600 max-w-72 whitespace-pre-wrap break-words">{fixWithAiError}</span>
         )}
 
         {/* Экспорт (правая сторона) */}
@@ -1159,7 +1257,7 @@ export default function RegisterTable({
                           }}
                           onToggle={() => toggleRegister(reg.id)}
                           onToggleSelect={() => toggleSelected(reg.id)}
-                          onRemove={() => deleteWithUndo(new Set([reg.id]))}
+                          onRemove={() => runDelete(new Set([reg.id]))}
                           onStartEdit={startEdit}
                           onStopEdit={stopEdit}
                           onChange={handleCellChange}
@@ -1200,7 +1298,7 @@ export default function RegisterTable({
                     }}
                     onToggle={() => toggleRegister(reg.id)}
                     onToggleSelect={() => toggleSelected(reg.id)}
-                    onRemove={() => deleteWithUndo(new Set([reg.id]))}
+                    onRemove={() => runDelete(new Set([reg.id]))}
                     onStartEdit={startEdit}
                     onStopEdit={stopEdit}
                     onChange={handleCellChange}
@@ -1347,6 +1445,9 @@ const COLUMNS: ColumnConfig[] = [
   { field: 'group', type: 'group' },
 ];
 
+/** Поля в порядке колонок — он же порядок обхода по Tab */
+const FIELDS: readonly EditableField[] = COLUMNS.map((c) => c.field);
+
 function getDisplayValue(reg: Register, field: EditableField): string {
   const value = reg[field];
   if (value == null) return '';
@@ -1458,13 +1559,55 @@ function RegisterRow({
   const inputClass =
     'w-full border border-blue-400 rounded px-1 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500';
 
+  /**
+   * Переход на соседнюю ячейку строки. За краем колонок редактирование
+   * закрывается, а фокус уходит на соседний чекбокс — так строка обходится
+   * целиком: Адрес → … → Группа → R/O → Параметр → кнопки.
+   */
+  const moveEdit = (field: EditableField, dir: 1 | -1) => {
+    const next = nextField(FIELDS, field, dir);
+    if (next) {
+      onStartEdit(reg.id, next);
+    } else {
+      onStopEdit();
+      focusRowEdge(reg.id, dir === 1 ? 'after' : 'before');
+    }
+  };
+
+  /**
+   * Клавиатура открытой ячейки: Enter — коммит, Escape — отмена, Tab — переход.
+   * Tab перехватываем: без этого onBlur размонтирует поле, и фокус,
+   * лишившись элемента-источника, сваливается в document.body.
+   */
+  const handleEditKeyDown = (
+    field: EditableField,
+    e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    if (e.key === 'Enter') {
+      // Только для текстового поля: у списка Enter выбирает подсвеченную опцию
+      // в раскрытом дропдауне, и перехват отнял бы выбор с клавиатуры
+      if (e.currentTarget.tagName === 'INPUT') e.currentTarget.blur();
+    } else if (e.key === 'Escape') {
+      onStopEdit();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      // blur синхронно коммитит значение через onBlur и закрывает ячейку,
+      // moveEdit тут же открывает соседнюю — оба setState батчатся
+      e.currentTarget.blur();
+      moveEdit(field, e.shiftKey ? -1 : 1);
+    }
+  };
+
   const renderColumnInput = (col: ColumnConfig): ((ref: React.RefCallback<HTMLElement>) => React.ReactNode) => {
     // Формат — используем FormatSelect
     if (col.type === 'format') {
-      return () => (
+      return (ref) => (
         <FormatSelect
+          inputRef={ref}
           value={String(getDefaultValue(reg, col.field))}
-          onChange={(val) => { onChange(reg.id, col.field, val); onStopEdit(); }}
+          onChange={(val) => onChange(reg.id, col.field, val)}
+          onKeyDown={(e) => handleEditKeyDown(col.field, e)}
+          onBlur={onStopEdit}
           className={inputClass}
         />
       );
@@ -1490,8 +1633,8 @@ function RegisterRow({
           onChange={(e) => {
             if (e.target.value === '__new__') return;
             onChange(reg.id, col.field, e.target.value);
-            onStopEdit();
           }}
+          onKeyDown={(e) => handleEditKeyDown(col.field, e)}
           className={inputClass}
         >
           {groupOptions.map((g) => (
@@ -1517,7 +1660,8 @@ function RegisterRow({
           ref={ref}
           defaultValue={currentValue}
           onBlur={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
-          onChange={(e) => { onChange(reg.id, col.field, e.target.value); onStopEdit(); }}
+          onChange={(e) => onChange(reg.id, col.field, e.target.value)}
+          onKeyDown={(e) => handleEditKeyDown(col.field, e)}
           className={`${inputClass}${isCurrentInvalid ? ' text-red-600 ring-1 ring-red-400' : ''}`}
         >
           {allOptions.map((opt) => (
@@ -1535,16 +1679,14 @@ function RegisterRow({
         type="text"
         defaultValue={getDefaultValue(reg, col.field)}
         onBlur={(e) => {
-          let val: string | number = e.target.value;
-          // Адрес: если чистое число — конвертируем, иначе строка (побитовый)
-          if (col.field === 'address' && !e.target.value.includes(':')) {
-            const num = parseInt(e.target.value, 10);
-            if (!isNaN(num)) val = num;
-          }
+          // Адрес: число для десятичной записи, строка для hex и побитовой
+          const val = col.field === 'address'
+            ? parseAddressInput(e.target.value)
+            : e.target.value;
           onChange(reg.id, col.field, val);
           onStopEdit();
         }}
-        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') onStopEdit(); }}
+        onKeyDown={(e) => handleEditKeyDown(col.field, e)}
         placeholder={col.field === 'address' ? t('row.addressPlaceholder') : col.placeholder}
         className={inputClass}
       />
@@ -1602,12 +1744,12 @@ function RegisterRow({
                 </svg>
               </span>
             )}
-            <input type="checkbox" checked={isSelected} onChange={onToggleSelect} className="rounded" />
+            <input type="checkbox" data-cell={`${reg.id}:select`} checked={isSelected} onChange={onToggleSelect} className="rounded" />
           </div>
         </td>
         <td className="px-1 py-1">
           {!reg.is_parameter && (
-            <input type="checkbox" checked={reg.enabled} onChange={onToggle} className="rounded" />
+            <input type="checkbox" data-cell={`${reg.id}:enabled`} checked={reg.enabled} onChange={onToggle} className="rounded" />
           )}
         </td>
 
@@ -1683,7 +1825,7 @@ function RegisterRow({
 
         {/* R/O */}
         <td className="px-1 py-1 text-center">
-          <input type="checkbox" checked={reg.readonly ?? false} onChange={(e) => updateRegister(reg.id, { readonly: e.target.checked })} className="rounded" title={t('row.readonlyTip')} />
+          <input type="checkbox" data-cell={`${reg.id}:readonly`} checked={reg.readonly ?? false} onChange={(e) => updateRegister(reg.id, { readonly: e.target.checked })} className="rounded" title={t('row.readonlyTip')} />
         </td>
 
         {/* Параметр */}
@@ -1699,7 +1841,7 @@ function RegisterRow({
         </td>
 
         <td className="px-1 py-1">
-          <button onClick={onRemove} className="text-red-400 hover:text-red-600 font-bold text-xs" title={t('row.deleteRegister')}>x</button>
+          <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="text-red-400 hover:text-red-600 font-bold text-xs" title={t('row.deleteRegister')}>x</button>
         </td>
 
         {/* Раскрыть/свернуть — в самом конце строки */}
@@ -1730,6 +1872,23 @@ function RegisterRow({
 
 // --- Ячейка с inline-редактированием ---
 
+/**
+ * Увести фокус за пределы редактируемых колонок строки: вперёд — на чекбокс R/O,
+ * назад — на «Вкл». У параметров чекбокса «Вкл» нет, там крайний слева — выбор строки.
+ */
+function focusRowEdge(regId: string, edge: 'before' | 'after') {
+  const keys = edge === 'after'
+    ? [`${regId}:readonly`]
+    : [`${regId}:enabled`, `${regId}:select`];
+  for (const key of keys) {
+    const el = document.querySelector<HTMLElement>(`[data-cell="${key}"]`);
+    if (el) {
+      el.focus();
+      return;
+    }
+  }
+}
+
 interface EditableCellProps {
   isEditing: boolean;
   displayValue: string;
@@ -1759,8 +1918,21 @@ function EditableCell({ isEditing, displayValue, placeholder, onStartEdit, rende
     );
   }
 
+  // tabIndex обязателен: без него span выпадает из порядка табуляции,
+  // и Tab уходил с чекбокса «Вкл» сразу на «R/O», минуя все колонки
   return (
-    <span onClick={onStartEdit} className="cursor-pointer block truncate min-h-[1.25rem] text-xs" title={t('row.clickToEdit')}>
+    <span
+      tabIndex={0}
+      onClick={onStartEdit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === 'F2') {
+          e.preventDefault();
+          onStartEdit();
+        }
+      }}
+      className="cursor-pointer block truncate min-h-[1.25rem] text-xs rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+      title={t('row.clickToEdit')}
+    >
       {displayValue || <span className="text-gray-300">{placeholder ?? ''}</span>}
     </span>
   );

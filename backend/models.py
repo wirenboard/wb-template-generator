@@ -1,33 +1,46 @@
 """Pydantic-модели данных для API запросов и ответов."""
 
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StringConstraints, model_validator
+
+# Потолки на длину строк и размер списков ограничивают объём работы одного запроса.
+# Детекция паттернов в jinja_exporter копирует строку на каждое число в ней, поэтому
+# расход растёт и по длине строки, и по числу каналов.
+ShortText = Annotated[str, StringConstraints(max_length=512)]
+LongText = Annotated[str, StringConstraints(max_length=2048)]
+# Запись `definitions/serial_int` — число и hex-строка равноправны
+SerialInt = int | ShortText
+MAX_REGISTERS = 5_000
+MAX_GROUPS = 2_000
+MAX_ENUM_ENTRIES = 4_096
+# Строк в одном запросе на перевод. Перевод уходит на серверный ключ, поэтому потолок конечный.
+MAX_TRANSLATE_STRINGS = 10_000
 
 
 class DeviceInfo(BaseModel):
     """Информация об устройстве — имя, идентификатор, группа."""
 
-    name: str = ""
-    id: str = ""
-    device_group: str | None = None
+    name: ShortText = ""
+    id: ShortText = ""
+    device_group: ShortText | None = None
     # Поля, сохраняемые при roundtrip импорт→экспорт
     hw: list[dict] | None = None
     max_read_registers: int | None = None
     response_timeout_ms: int | None = None
     frame_timeout_ms: int | None = None
     enable_wb_continuous_read: bool | None = None
-    title_key: str | None = None
-    title_translations: dict[str, str] | None = None
+    title_key: ShortText | None = None
+    title_translations: dict[str, ShortText] | None = None
 
 
 class EnumEntry(BaseModel):
     """Элемент enum с переводами на произвольные языки."""
 
     value: int
-    title: str = ""
-    translations: dict[str, str] | None = None
+    title: ShortText = ""
+    translations: dict[str, ShortText] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -48,19 +61,19 @@ class EnumEntry(BaseModel):
 class GroupTranslation(BaseModel):
     """Переводы для группы: title и description."""
 
-    title: str | None = None
-    description: str | None = None
+    title: ShortText | None = None
+    description: LongText | None = None
 
 
 class RegisterGroup(BaseModel):
     """Группа регистров с переводами."""
 
-    id: str
-    title: str = ""
+    id: ShortText
+    title: ShortText = ""
     order: int = 0
-    description: str | None = None
+    description: LongText | None = None
     translations: dict[str, GroupTranslation] | None = None
-    parent_group: str | None = None
+    parent_group: ShortText | None = None
     ui_options: dict | None = None
 
     @model_validator(mode="before")
@@ -82,52 +95,53 @@ class RegisterGroup(BaseModel):
 class RegisterTranslation(BaseModel):
     """Переводы для регистра: name и description."""
 
-    name: str | None = None
-    description: str | None = None
+    name: ShortText | None = None
+    description: LongText | None = None
 
 
 class Register(BaseModel):
     """Описание одного Modbus-регистра устройства."""
 
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    address: int | str  # int или строка "109:1:2" для побитового доступа
-    name: str
-    reg_type: str = "holding"
-    format: str = "u16"
+    id: ShortText = Field(default_factory=lambda: str(uuid4()))
+    # int или строка "109:1:2" для побитового доступа
+    address: int | Annotated[str, StringConstraints(max_length=64)]
+    name: ShortText
+    reg_type: ShortText = "holding"
+    format: ShortText = "u16"
     scale: float = 1
     offset: float = 0
-    units: str | None = None
+    units: ShortText | None = None
     access: Literal["read", "write", "readwrite"] = "read"
-    description: str | None = None
-    channel_type: str = "value"
-    group: str = "general"
-    group_title: str | None = None
+    description: LongText | None = None
+    channel_type: ShortText = "value"
+    group: ShortText = "general"
+    group_title: ShortText | None = None
     is_parameter: bool = False
 
-    condition: str | None = None
+    condition: LongText | None = None
     enabled: bool = True
-    enum: list[int] | None = None
-    enum_titles: list[str] | None = None
-    enum_entries: list[EnumEntry] | None = None
+    enum: list[int] | None = Field(default=None, max_length=MAX_ENUM_ENTRIES)
+    enum_titles: list[ShortText] | None = Field(default=None, max_length=MAX_ENUM_ENTRIES)
+    enum_entries: list[EnumEntry] | None = Field(default=None, max_length=MAX_ENUM_ENTRIES)
     string_data_size: int | None = None
-    word_order: str | None = None
-    byte_order: str | None = None
-    error_value: str | None = None
+    word_order: ShortText | None = None
+    byte_order: ShortText | None = None
+    error_value: SerialInt | None = None
     readonly: bool | None = None
     min: int | float | None = None
     max: int | float | None = None
     round_to: int | float | None = None
-    on_value: int | None = None
-    off_value: int | None = None
+    on_value: SerialInt | None = None
+    off_value: SerialInt | None = None
     default_value: int | float | None = None
     translations: dict[str, RegisterTranslation] | None = None
-    group_title_translations: dict[str, str] | None = None
+    group_title_translations: dict[str, ShortText] | None = None
     # Поля для roundtrip
     sporadic: bool | None = None
     read_only: bool | None = None
     required: bool | None = None
-    fw: str | None = None
-    original_channel_id: str | None = None
+    fw: ShortText | None = None
+    original_channel_id: ShortText | None = None
     param_order: int | None = None
 
     @model_validator(mode="before")
@@ -153,7 +167,7 @@ class DeviceData(BaseModel):
     """Базовый класс — информация об устройстве и список регистров."""
 
     device_info: DeviceInfo
-    registers: list[Register]
+    registers: list[Register] = Field(max_length=MAX_REGISTERS)
 
 
 class AnalyzeResponse(DeviceData):
@@ -165,13 +179,13 @@ class AnalyzeResponse(DeviceData):
 class BuildRequest(DeviceData):
     """Запрос на сборку JSON-шаблона из отредактированных пользователем данных."""
 
-    groups: list[RegisterGroup] = []
+    groups: list[RegisterGroup] = Field(default=[], max_length=MAX_GROUPS)
 
 
 class ValidateRequest(BaseModel):
     """Запрос на валидацию списка регистров."""
 
-    registers: list[Register]
+    registers: list[Register] = Field(max_length=MAX_REGISTERS)
 
 
 class LlmOverrides(BaseModel):
@@ -182,12 +196,13 @@ class LlmOverrides(BaseModel):
     сравнивается дальше, решает `resolve_llm_target` в llm_service.
     """
 
-    llm_api_url: str | None = None
-    llm_api_key: str | None = None
-    llm_model: str | None = None
+    llm_api_url: ShortText | None = None
+    llm_api_key: ShortText | None = None
+    llm_model: ShortText | None = None
     llm_timeout: int | None = None
     llm_legacy_max_tokens: bool | None = None
-    llm_temperature: float | None = None
+    # Верхняя граница у провайдеров разная, 2 — потолок OpenAI-совместимых
+    llm_temperature: Annotated[float, Field(ge=0, le=2)] | None = None
 
 
 class FixRegistersRequest(ValidateRequest, LlmOverrides):
@@ -197,9 +212,10 @@ class FixRegistersRequest(ValidateRequest, LlmOverrides):
 class TranslateRequest(LlmOverrides):
     """Запрос на перевод строк через LLM."""
 
-    strings: dict[str, str]  # key → English text
-    target_lang: str  # "ru", "de" и т.д.
-    target_lang_name: str  # "Russian", "Deutsch" — для промпта
+    # key → English text
+    strings: dict[ShortText, LongText] = Field(max_length=MAX_TRANSLATE_STRINGS)
+    target_lang: ShortText  # "ru", "de" и т.д.
+    target_lang_name: ShortText  # "Russian", "Deutsch" — для промпта
 
 
 class TranslateResponse(BaseModel):
