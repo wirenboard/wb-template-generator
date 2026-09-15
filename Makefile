@@ -7,7 +7,8 @@ TAG            ?= $(shell git rev-parse HEAD)
 SMOKE_URL      ?= http://127.0.0.1:8080
 
 .DEFAULT_GOAL := help
-.PHONY: help lint lint-backend lint-frontend test test-backend test-frontend build smoke up down
+.PHONY: help lint lint-backend lint-frontend test test-backend test-frontend \
+	ci-lint ci-test build smoke up down
 
 help: ## показать цели
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -45,3 +46,17 @@ up: ## поднять локально (сборка на месте — тол�
 
 down: ## остановить локально
 	docker compose down
+
+# Цели для CI: то же самое, но в контейнере, поэтому не требуют установленных
+# локально ruff, mypy и node. Локально удобнее звать lint и test напрямую.
+CI_PYTHON ?= python:3.12-slim
+CI_NODE ?= node:20-alpine
+CI_RUN = docker run --rm -v $(PWD):/src -w /src
+
+ci-lint: ## линт обоих подпроектов в контейнерах
+	$(CI_RUN) $(CI_PYTHON) sh -c "pip install --no-cache-dir -q -r backend/requirements.txt && make lint-backend"
+	$(CI_RUN) $(CI_NODE) sh -c "apk add --no-cache make >/dev/null && cd frontend && npm ci --silent && cd .. && make lint-frontend"
+
+ci-test: ## тесты обоих подпроектов в контейнерах
+	$(CI_RUN) $(CI_PYTHON) sh -c "apt-get update >/dev/null && apt-get install -y --no-install-recommends make poppler-utils >/dev/null && pip install --no-cache-dir -q -r backend/requirements.txt && make test-backend"
+	$(CI_RUN) $(CI_NODE) sh -c "apk add --no-cache make >/dev/null && cd frontend && npm ci --silent && cd .. && make test-frontend"
