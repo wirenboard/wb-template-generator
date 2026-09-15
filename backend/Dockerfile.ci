@@ -1,0 +1,10 @@
+# Образ для проверок бэкенда: инструменты и зависимости, исходники внутри.
+# Без bind-mount: агент Jenkins сам в контейнере, и примонтированный путь хоста пуст.
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends make poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY backend/requirements.txt backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY . .
