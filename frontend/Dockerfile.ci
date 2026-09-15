@@ -1,0 +1,8 @@
+# Образ для проверок фронтенда: см. backend/Dockerfile.ci о том, почему не bind-mount.
+FROM node:20-alpine
+
+RUN apk add --no-cache make
+WORKDIR /src
+COPY frontend/package.json frontend/package-lock.json frontend/
+RUN cd frontend && npm ci --silent
+COPY . .
