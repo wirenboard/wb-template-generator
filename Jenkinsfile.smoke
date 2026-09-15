@@ -1,0 +1,6 @@
+// ВРЕМЕННО: обкатка выката из jenkins-pipeline-lib#193. Релиз уходит в джобу-пустышку
+// tmp-deploy-receiver, ревизия проверяется по GitHub API. Хосты не трогаются.
+@Library('wbci@feature/CLOUD-622-docker-service-deploy') _
+
+dockerService(images: [backend: [repository: 'ghcr.io/wirenboard/wb-tgen-smoke',
+                                 dockerfile: 'backend/Dockerfile']])
