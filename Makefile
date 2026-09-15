@@ -47,16 +47,20 @@ up: ## поднять локально (сборка на месте — тол�
 down: ## остановить локально
 	docker compose down
 
-# Цели для CI: то же самое, но в контейнере, поэтому не требуют установленных
-# локально ruff, mypy и node. Локально удобнее звать lint и test напрямую.
-CI_PYTHON ?= python:3.12-slim
-CI_NODE ?= node:20-alpine
-CI_RUN = docker run --rm -v $(PWD):/src -w /src
+# Цели для CI: те же проверки, но внутри образа с инструментами, поэтому не требуют
+# ruff, mypy и node на агенте. Исходники кладутся в образ, а не монтируются: агент
+# Jenkins сам работает в контейнере, и путь хоста в -v оказывается пустым.
+CI_BACKEND ?= wb-template-generator-ci-backend
+CI_FRONTEND ?= wb-template-generator-ci-frontend
 
-ci-lint: ## линт обоих подпроектов в контейнерах
-	$(CI_RUN) $(CI_PYTHON) sh -c "pip install --no-cache-dir -q -r backend/requirements.txt && make lint-backend"
-	$(CI_RUN) $(CI_NODE) sh -c "apk add --no-cache make >/dev/null && cd frontend && npm ci --silent && cd .. && make lint-frontend"
+ci-lint: ## линт обоих подпроектов в образах с инструментами
+	docker build -q -f backend/Dockerfile.ci -t $(CI_BACKEND) .
+	docker run --rm $(CI_BACKEND) make lint-backend
+	docker build -q -f frontend/Dockerfile.ci -t $(CI_FRONTEND) .
+	docker run --rm $(CI_FRONTEND) make lint-frontend
 
-ci-test: ## тесты обоих подпроектов в контейнерах
-	$(CI_RUN) $(CI_PYTHON) sh -c "apt-get update >/dev/null && apt-get install -y --no-install-recommends make poppler-utils >/dev/null && pip install --no-cache-dir -q -r backend/requirements.txt && make test-backend"
-	$(CI_RUN) $(CI_NODE) sh -c "apk add --no-cache make >/dev/null && cd frontend && npm ci --silent && cd .. && make test-frontend"
+ci-test: ## тесты обоих подпроектов в образах с инструментами
+	docker build -q -f backend/Dockerfile.ci -t $(CI_BACKEND) .
+	docker run --rm $(CI_BACKEND) make test-backend
+	docker build -q -f frontend/Dockerfile.ci -t $(CI_FRONTEND) .
+	docker run --rm $(CI_FRONTEND) make test-frontend
