@@ -1,0 +1,10 @@
+# Исходники копируются, а не монтируются: агент Jenkins сам в контейнере,
+# и путь хоста в -v оказался бы пустым.
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends make poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY backend/requirements.txt backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY . .
