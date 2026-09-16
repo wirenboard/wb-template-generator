@@ -9,3 +9,5 @@ dist/
 tmp/
 .venv/
 backend/data/
+
+.coverage

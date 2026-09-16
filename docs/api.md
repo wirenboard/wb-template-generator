@@ -11,7 +11,7 @@
 | POST | `/api/fix-registers` | **SSE** — исправление ошибочных регистров через LLM |
 | POST | `/api/translate` | Перевод строк через LLM |
 | POST | `/api/models` | Список моделей LLM API |
-| GET | `/api/status` | Статус сервера (LLM, лимиты) |
+| GET | `/api/status` | Статус сервера (LLM, лимиты, `version`, `revision` = git-SHA выкаченного образа) |
 | GET | `/api/prompts` | Сырые промпты для редактирования |
 | GET | `/api/health` | Healthcheck (uptime, очереди) |
 | GET | `/api/queue-status` | Состояние очередей |
