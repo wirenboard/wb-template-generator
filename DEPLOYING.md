@@ -45,8 +45,8 @@
 | Симптом | Куда смотреть |
 |---|---|
 | Красная стадия проверок или **Build** | лог стадии; прод не тронут, до выката дело не дошло |
-| Красная стадия **Deploy** | лог прогона джобы `pipelines/deploy-infra`, который она запустила |
-| Красная стадия **Verify** (`verification_failed`) | образы уехали, но сервис не отдал новую ревизию: смотреть контейнеры на хосте и `https://tgen.wirenboard.com/api/status` |
+| Красная стадия **Deploy**, код `deployment_failed` | лог прогона джобы `pipelines/deploy-infra`, который она запустила: роль не подняла стек или контейнер не стал healthy |
+| Красная стадия **Deploy**, код `verification_failed` | образы уехали, но сервис не отдал новую ревизию: смотреть контейнеры на хосте и `https://tgen.wirenboard.com/api/status`. Проверка ревизии — последний шаг той же стадии, отдельной стадии у неё нет |
 | `stale_branch` | ветка отстала от `main`: «Update branch» в GitHub и выкатить заново |
 | `NOT_BUILT` с алертом | был прямой push в `main` — не выкачено; провести изменение через PR |
 | `NOT_BUILT` без алерта | подряд два мержа: этот прогон уступил следующему, выкатит тот |
@@ -59,10 +59,21 @@
 
 Только если Jenkins лежит **и** дело срочное. Согласование не нужно.
 
+Выкатывать можно только образы, которые уже собрал конвейер и которые лежат в `ghcr.io`: собирать на сервере нельзя и сейчас.
+
 1. Озвучить в общем канале, что выкатываете руками.
-2. `ssh jenkins@tgen.wirenboard.com`, каталог `/var/wb-services/wb-template-generator`.
-3. Поднять нужную версию руками — compose-файл на сервере принадлежит роли `wb_template_generator` из `wirenboard/infra`, там же его переменные.
-4. После инцидента — написать разбор, а следующий выкат провести обычным путём через Jenkins.
+2. Зайти на хост, каталог `/var/wb-services/wb-template-generator`.
+3. Найти ссылки на образы вида `ghcr.io/wirenboard/wb-template-generator-backend@sha256:…`. Что запущено сейчас — `docker inspect --format '{{.Config.Image}}' <контейнер>`; ссылки прошлых выкатов — в `deployment-outcome.json` на странице их прогона, если Jenkins хоть как-то открывается.
+4. Поднять стек на этих образах. Без переменных compose-файл запускаться откажется — это защита от ручного запуска:
+
+   ```bash
+   BACKEND_IMAGE=ghcr.io/wirenboard/wb-template-generator-backend@sha256:… \
+   FRONTEND_IMAGE=ghcr.io/wirenboard/wb-template-generator-frontend@sha256:… \
+   docker compose -f docker-compose.deploy.yml up -d --wait
+   ```
+
+5. Проверить `https://tgen.wirenboard.com/api/status` — поле `revision`.
+6. Когда Jenkins поднимется — выкатить ту же версию кнопкой `REVISION` (или влить исправление PR-ом), чтобы история прогонов снова совпадала с тем, что запущено. Написать разбор.
 
 ## 👤 Контакты
 
