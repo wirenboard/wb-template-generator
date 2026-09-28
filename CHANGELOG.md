@@ -5,6 +5,11 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.7.11] - 2026-09-28
+
+### Исправлено
+- **Единицы измерения осадков и уровня.** ИИ подменял миллиметры метрами с пересчитанным множителем или `mm/h`, а в таблице их было не выбрать. Добавлены `mm`, `cm`, `mmHg` и недостающие единицы конвенций WB; ИИ не дописывает к единице то, чего нет в источнике, а влажность пишет как `%, RH`. Запрошено с форума (INT-1280).
+
 ## [0.7.10] - 2026-09-04
 
 ### Изменено
@@ -423,6 +428,7 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
+[0.7.11]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.10...v0.7.11
 [0.7.10]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.9...v0.7.10
 [0.7.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.8...v0.7.9
 [0.7.8]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.7...v0.7.8
