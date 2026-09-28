@@ -7,5 +7,4 @@ dockerService(
         backend:  [dockerfile: 'backend/Dockerfile'],
         frontend: [dockerfile: 'frontend/Dockerfile', context: 'frontend'],
     ],
-    verify: [revisionUrl: 'https://tgen.wirenboard.com/api/status'],
 )
