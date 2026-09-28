@@ -23,8 +23,7 @@ LABEL org.opencontainers.image.title="wb-template-generator-backend" \
 # Файлы остаются за root, поэтому процесс не перезапишет собственный код
 RUN adduser --system --no-create-home --group app
 USER app
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=10s \
-  CMD curl -sf "http://127.0.0.1:${APP_PORT}/api/health" || exit 1
+# Проверка живости — в compose-файле (dev здесь, прод — в роли инфраструктуры): curl нужен ей.
 
 # exec — чтобы uvicorn получил SIGTERM напрямую и завершился штатно
 CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${APP_PORT} --no-access-log"]

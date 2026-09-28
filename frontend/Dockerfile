@@ -14,6 +14,4 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 
-# 127.0.0.1, а не localhost: в контейнере localhost резолвится в ::1, nginx слушает IPv4
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=5s \
-  CMD wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1
+# Проверка живости (/healthz) — в compose-файле: dev здесь, прод — в роли инфраструктуры.
