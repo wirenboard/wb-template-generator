@@ -93,7 +93,7 @@ frontend/src/
   constants.ts         # Форматы, единицы, языки
   components/          # UI-компоненты редактора
 
-Jenkinsfile            # один вызов dockerService: проверки, сборка образов, выкат и проверка ревизии
+Jenkinsfile            # один вызов dockerService: проверки и сборка образов
 backend/Dockerfile.ci  # образ с инструментами бэкенда для целей ci-lint / ci-test
 frontend/Dockerfile.ci # то же для фронтенда
 .github/workflows/ci.yml # прежние проверки в GitHub Actions — работают, пока Jenkins не выкатит первый раз
@@ -194,7 +194,7 @@ event: error     ->  {message, request_id}
 - Откат — джоба `main` → **Build with Parameters** → `REVISION` = SHA нужной версии (из описания прошлого прогона `prod @ <sha> · <кто>`).
 - Упавший выкат — красный прогон и алерт в Telegram; автоматического отката нет.
 - Пошагово, включая аварийные сценарии и break-glass, — в [`DEPLOYING.md`](DEPLOYING.md).
-- Что сейчас в проде: `/api/status`, поле `revision`.
+- Что сейчас в проде: описание последней зелёной сборки `main` (`prod @ <sha> · <кто>`); образы — `docker ps` на хосте.
 
 Прод-конфигурация — шаблон `docker-compose.yml.j2` в репозитории `wirenboard/infra`
 (роль `wb_template_generator`): образы из `ghcr.io` по дайджесту, их подставляет выкат, bridge-сеть, `restart: always`, healthcheck-зависимость frontend от
@@ -250,7 +250,7 @@ make test      # pytest --cov (порог 70%) + vitest
 | Прогон | Что делает |
 |---|---|
 | любая ветка или PR | `make ci-lint`, `make ci-test` и дисциплина `CHANGELOG` |
-| `main` после merge PR | проверки → сборка образов по git-SHA → выкат в прод; роль на хосте сверяет образы и проверяет `/api/status` |
+| `main` после merge PR | проверки → сборка образов по git-SHA → выкат в прод; роль на хосте сверяет образы и проверяет публичный адрес |
 | `main` после прямого push | ничего не выкатывает: `NOT_BUILT` и алерт |
 | кнопка с `REVISION` | заново выкатывает опубликованный релиз этой ревизии (откат или перевыкат) |
 

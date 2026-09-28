@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import os
 import re
 import time
 from collections import defaultdict, deque
@@ -58,11 +57,6 @@ def get_version() -> str:
         except OSError:
             continue
     return "dev"
-
-
-def get_revision() -> str:
-    """git-SHA собранного образа: видно, из какого коммита собран работающий артефакт."""
-    return os.environ.get("GIT_SHA", "unknown")
 
 
 # Допустимые расширения загружаемых файлов. Совпадает со списком в диалоге выбора (FileUpload.tsx)
@@ -359,7 +353,6 @@ async def status():
         "max_files": settings.MAX_FILES,
         "allowed_extensions": sorted(_ALLOWED_EXTENSIONS),
         "version": app.version,
-        "revision": get_revision(),
     }
     if settings.LLM_API_URL:
         result["server_model"] = settings.LLM_MODEL

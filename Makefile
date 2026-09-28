@@ -36,7 +36,7 @@ build: ## собрать образы локально (в CI это делае�
 
 smoke: ## проверка живости руками (SMOKE_URL=https://...)
 	curl -fsS --retry 3 --max-time 10 -o /dev/null "$(SMOKE_URL)"
-	curl -fsS --max-time 10 "$(SMOKE_URL)/api/status" | grep -q revision
+	curl -fsS --max-time 10 -o /dev/null "$(SMOKE_URL)/api/status"
 
 up: ## поднять локально (сборка на месте — только dev!)
 	docker compose up -d --build

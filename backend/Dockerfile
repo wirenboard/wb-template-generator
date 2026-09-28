@@ -1,6 +1,5 @@
 FROM python:3.12-slim
 
-# git-SHA запекается в образ → якорь отката и /api/status.revision
 ARG GIT_SHA=unknown
 
 # curl нужен проверке живости из compose; версии apt не пиним — управляем базовым образом
@@ -13,8 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY CHANGELOG.md /app/CHANGELOG.md
 COPY backend/ .
 
-ENV APP_PORT=9000 \
-    GIT_SHA=${GIT_SHA}
+ENV APP_PORT=9000
 
 LABEL org.opencontainers.image.title="wb-template-generator-backend" \
       org.opencontainers.image.revision="${GIT_SHA}" \
