@@ -13,5 +13,3 @@ LABEL org.opencontainers.image.title="wb-template-generator-frontend" \
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
-
-# Проверка живости (/healthz) — в compose-файле: dev здесь, прод — в роли инфраструктуры.

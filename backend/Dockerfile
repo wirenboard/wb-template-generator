@@ -3,7 +3,7 @@ FROM python:3.12-slim
 # git-SHA запекается в образ → якорь отката и /api/status.revision
 ARG GIT_SHA=unknown
 
-# версии apt не пиним: управляем ими через базовый образ
+# curl нужен проверке живости из compose; версии apt не пиним — управляем базовым образом
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
@@ -23,7 +23,6 @@ LABEL org.opencontainers.image.title="wb-template-generator-backend" \
 # Файлы остаются за root, поэтому процесс не перезапишет собственный код
 RUN adduser --system --no-create-home --group app
 USER app
-# Проверка живости — в compose-файле (dev здесь, прод — в роли инфраструктуры): curl нужен ей.
 
 # exec — чтобы uvicorn получил SIGTERM напрямую и завершился штатно
 CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${APP_PORT} --no-access-log"]
