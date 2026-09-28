@@ -91,16 +91,18 @@ Usually 0. Examples:
      - `"V"` — voltage, `"mV"` — millivolts
      - `"A"` — current, `"mA"` — milliamperes
      - `"W"` — power, `"kWh"` — energy, `"mAh"` — battery capacity
+     - `"var"` — reactive power, `"VA"` — apparent power, `"kvarh"` — reactive energy
      - `"Hz"` — frequency, `"rpm"` — revolutions per minute
      - `"Ohm"` — resistance, `"mOhm"` — milliohms
-     - `"bar"` — pressure, `"mbar"` — millibar, `"Pa"` — pascals
+     - `"bar"` — pressure, `"mbar"` — millibar, `"Pa"` — pascals, `"mmHg"` — millimeters of mercury
      - `"deg C"` — temperature (degrees Celsius)
      - `"%"` — percentage (load, level, duty cycle)
      - `"RH"` — relative humidity
-     - `"ppm"` — parts per million (CO2), `"ppb"` — parts per billion
+     - `"ppm"` — parts per million (CO2), `"ppb"` — parts per billion, `"g/m^3"` — gas concentration
      - `"lx"` — illuminance, `"dB"` — decibels
      - `"s"` — seconds, `"min"` — minutes, `"h"` — hours, `"day"` — days
-     - `"m"` — meters, `"m/s"` — speed, `"mm/h"` — precipitation
+     - `"m"` — meters, `"cm"` — centimeters, `"mm"` — millimeters (rainfall amount, level)
+     - `"m/s"` — speed, `"mm/h"` — precipitation rate (ONLY when the document says per hour)
      - `"m^3"` — volume, `"m^3/h"` — flow rate
      - `"g"` — grams, `"kg"` — kilograms
      - `"Gcal/h"` — heat power, `"cal"` — calories, `"Gcal"` — gigacalories
@@ -108,7 +110,10 @@ Usually 0. Examples:
      - `"mol"` — moles, `"cd"` — candela
      If the document specifies units, map them to the closest match from this list \
 (e.g. "°C" → "deg C", "kW" → "W" with scale=1000, "MWh" → "kWh" with scale=1000, \
-"mbar" → "mbar", "%" or "% RH" → "RH" for humidity).
+"mbar" → "mbar", "hPa" → "mbar" (1 hPa = 1 mbar, same scale), "%" or "% RH" → "RH" for humidity).
+     If the document's unit IS in the list, use it as is: "mm" → "mm", NOT "m" with a rescaled \
+factor and NOT "mm/h". Never add a time base or any other part the document does not state.
+     Never output a unit that is not in the list above.
      If the document does NOT specify units but the register meaning is clear, \
 **infer the appropriate unit** from the list above (e.g. temperature register → "deg C", \
 voltage register → "V", power register → "W", humidity → "RH").

@@ -126,11 +126,12 @@ export const HAS_NON_LATIN = /[^\u0020-\u007F\u00C0-\u024F\u1E00-\u1EFF]/;
 /** Допустимые единицы измерения (пустая строка = без единиц) */
 export const UNITS = [
   '', 'V', 'mV', 'A', 'mA', 'W', 'kWh', 'mAh', 'Hz', 'rpm',
-  'Ohm', 'mOhm', 'bar', 'mbar', 'Pa',
-  'deg C', '%', 'RH',
-  'ppm', 'ppb', 'lx', 'dB',
+  'var', 'VA', 'kvarh',
+  'Ohm', 'mOhm', 'bar', 'mbar', 'Pa', 'mmHg',
+  'deg C', '%', 'RH', '%, RH',
+  'ppm', 'ppb', 'g/m^3', 'lx', 'dB',
   's', 'min', 'h', 'day',
-  'm', 'mm/h', 'm/s', 'm^3/h', 'm^3',
+  'm', 'cm', 'mm', 'mm/h', 'm/s', 'm^3/h', 'm^3',
   'g', 'kg', 'mol', 'cd',
   'Gcal/h', 'cal', 'Gcal',
   'deg', 'rad',
