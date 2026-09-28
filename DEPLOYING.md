@@ -64,13 +64,13 @@
 1. Озвучить в общем канале, что выкатываете руками.
 2. Зайти на хост, каталог `/var/wb-services/wb-template-generator`.
 3. Найти ссылки на образы вида `ghcr.io/wirenboard/wb-template-generator-backend@sha256:…`. Что запущено сейчас — `docker inspect --format '{{.Config.Image}}' <контейнер>`; ссылки прошлых выкатов — в `deployment-outcome.json` на странице их прогона, если Jenkins хоть как-то открывается.
-4. Поднять стек на этих образах. Без переменных compose-файл запускаться откажется — это защита от ручного запуска:
+4. Вписать эти ссылки в `image:` файла `docker-compose.yml` в каталоге сервиса и поднять стек:
 
    ```bash
-   BACKEND_IMAGE=ghcr.io/wirenboard/wb-template-generator-backend@sha256:… \
-   FRONTEND_IMAGE=ghcr.io/wirenboard/wb-template-generator-frontend@sha256:… \
-   docker compose -f docker-compose.deploy.yml up -d --wait
+   docker compose up -d --wait
    ```
+
+   Файл принадлежит роли `wb_template_generator` из `wirenboard/infra`: следующий выкат через Jenkins перезапишет его.
 
 5. Проверить `https://tgen.wirenboard.com/api/status` — поле `revision`.
 6. Когда Jenkins поднимется — выкатить ту же версию кнопкой `REVISION` (или влить исправление PR-ом), чтобы история прогонов снова совпадала с тем, что запущено. Написать разбор.

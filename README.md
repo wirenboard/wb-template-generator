@@ -196,8 +196,8 @@ event: error     ->  {message, request_id}
 - Пошагово, включая аварийные сценарии и break-glass, — в [`DEPLOYING.md`](DEPLOYING.md).
 - Что сейчас в проде: `/api/status`, поле `revision`.
 
-Прод-конфигурация — `docker-compose.deploy.yml` в репозитории `wirenboard/infra`
-(роль `wb_template_generator`): образы из `ghcr.io`, bridge-сеть, `restart: always`, healthcheck-зависимость frontend от
+Прод-конфигурация — шаблон `docker-compose.yml.j2` в репозитории `wirenboard/infra`
+(роль `wb_template_generator`): образы из `ghcr.io` по дайджесту, их подставляет выкат, bridge-сеть, `restart: always`, healthcheck-зависимость frontend от
 backend. Порт публикуется **только на `127.0.0.1:8080`** — снаружи сервис отдаёт nginx на
 хосте (он держит TLS и домен), напрямую в контейнер извне не ходят. Jenkins на хост не ходит:
 он публикует образы и передаёт релиз джобе выката. Credentials и адрес хоста лежат в реестре
@@ -205,7 +205,7 @@ backend. Порт публикуется **только на `127.0.0.1:8080`** 
 
 **Здесь лежит только `docker-compose.yml` — для локальной разработки** (`make up`): собирает образы из исходников, host networking, порты 9080/9000.
 
-Прод-файл выката (`docker-compose.deploy.yml`) живёт в `wirenboard/infra`, роль `wb_template_generator`: поднимает образы, которые ей передал выкат, и публикует только на `127.0.0.1:8080`.
+Прод-файл выката живёт в `wirenboard/infra`, роль `wb_template_generator`: при выкате она подставляет переданные образы в `docker-compose.yml` на хосте, перезапускает стек и публикует его только на `127.0.0.1:8080`.
 
 ## Разработка
 
