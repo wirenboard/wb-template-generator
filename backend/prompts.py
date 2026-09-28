@@ -97,7 +97,7 @@ Usually 0. Examples:
      - `"bar"` — pressure, `"mbar"` — millibar, `"Pa"` — pascals, `"mmHg"` — millimeters of mercury
      - `"deg C"` — temperature (degrees Celsius)
      - `"%"` — percentage (load, level, duty cycle)
-     - `"RH"` — relative humidity
+     - `"%, RH"` — relative humidity (one value, exactly this string)
      - `"ppm"` — parts per million (CO2), `"ppb"` — parts per billion, `"g/m^3"` — gas concentration
      - `"lx"` — illuminance, `"dB"` — decibels
      - `"s"` — seconds, `"min"` — minutes, `"h"` — hours, `"day"` — days
@@ -110,13 +110,13 @@ Usually 0. Examples:
      - `"mol"` — moles, `"cd"` — candela
      If the document specifies units, map them to the closest match from this list \
 (e.g. "°C" → "deg C", "kW" → "W" with scale=1000, "MWh" → "kWh" with scale=1000, \
-"mbar" → "mbar", "hPa" → "mbar" (1 hPa = 1 mbar, same scale), "%" or "% RH" → "RH" for humidity).
+"mbar" → "mbar", "hPa" → "mbar" (1 hPa = 1 mbar, same scale), "%" or "% RH" → "%, RH" for humidity).
      If the document's unit IS in the list, use it as is: "mm" → "mm", NOT "m" with a rescaled \
 factor and NOT "mm/h". Never add a time base or any other part the document does not state.
      Never output a unit that is not in the list above.
      If the document does NOT specify units but the register meaning is clear, \
 **infer the appropriate unit** from the list above (e.g. temperature register → "deg C", \
-voltage register → "V", power register → "W", humidity → "RH").
+voltage register → "V", power register → "W", humidity → "%, RH").
      If no unit from the list fits, set to null.
    - `access`: "read", "write", or "readwrite"
    - `word_order`: "big_endian" or "little_endian" for multi-word registers (u32, s32, float) if specified. \
