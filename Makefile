@@ -45,17 +45,12 @@ down: ## остановить локально
 	docker compose down
 
 # Те же проверки внутри образа с инструментами — на агенте нужен только docker.
-CI_BACKEND ?= wb-template-generator-ci-backend
-CI_FRONTEND ?= wb-template-generator-ci-frontend
+# Образ берётся по ID из docker build -q, без тега: параллельные сборки на общем демоне не подменяют его друг другу.
 
 ci-lint: ## линт обоих подпроектов в образах с инструментами
-	docker build -q -f backend/Dockerfile.ci -t $(CI_BACKEND) .
-	docker run --rm $(CI_BACKEND) make lint-backend
-	docker build -q -f frontend/Dockerfile.ci -t $(CI_FRONTEND) .
-	docker run --rm $(CI_FRONTEND) make lint-frontend
+	id=$$(docker build -q -f backend/Dockerfile.ci .) && docker run --rm "$$id" make lint-backend
+	id=$$(docker build -q -f frontend/Dockerfile.ci .) && docker run --rm "$$id" make lint-frontend
 
 ci-test: ## тесты обоих подпроектов в образах с инструментами
-	docker build -q -f backend/Dockerfile.ci -t $(CI_BACKEND) .
-	docker run --rm $(CI_BACKEND) make test-backend
-	docker build -q -f frontend/Dockerfile.ci -t $(CI_FRONTEND) .
-	docker run --rm $(CI_FRONTEND) make test-frontend
+	id=$$(docker build -q -f backend/Dockerfile.ci .) && docker run --rm "$$id" make test-backend
+	id=$$(docker build -q -f frontend/Dockerfile.ci .) && docker run --rm "$$id" make test-frontend
