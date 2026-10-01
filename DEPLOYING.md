@@ -94,6 +94,7 @@ sudo docker compose -p wb-template-generator --project-directory "$B" -f "$B/doc
 
 ## Контакты
 
-- Владелец сервиса: инфраструктура, группа WB Инфра
-- Владелец выката: продукт; инфраструктурой владеет инфра (режим «владеет инфра» — см. [таблицу продуктовых сервисов](https://docs.google.com/spreadsheets/d/1_BdvU9gZEzW_rhKqA1Tk_pSxwL37UaOxQknWGl4Rfmk/edit?gid=945932788#gid=945932788))
+- Владелец продукта: не назначен
+- Код: отдел «Интеграции»
+- Инфраструктура: инфра, группа WB Инфра; выкатывает и откатывает продукт (режим «владеет инфра» — см. [таблицу продуктовых сервисов](https://docs.google.com/spreadsheets/d/1_BdvU9gZEzW_rhKqA1Tk_pSxwL37UaOxQknWGl4Rfmk/edit?gid=945932788#gid=945932788))
 - Вопросы по стандарту: владелец стандарта (назван в шапке стандарта)
