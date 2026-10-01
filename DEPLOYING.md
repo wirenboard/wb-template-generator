@@ -81,6 +81,17 @@ Jenkins работает, а сломаны `deploy-infra`, агент `infra` �
 5. Проверить, что `https://tgen.wirenboard.com` открывается и `docker ps` показывает нужные образы.
 6. Когда Jenkins поднимется — выкатить ту же версию кнопкой `REVISION` (или влить исправление PR-ом), чтобы история прогонов снова совпадала с тем, что запущено. Написать разбор.
 
+### Вернуть стек, работавший до стандарта
+
+Пока по стандарту выкачено меньше двух версий, кнопке `REVISION` возвращать нечего. Ручной стек возвращается из бэкапа, снятого до первого прогона роли, в `/var/backups/wb-template-generator-pre-standard`:
+
+```bash
+B=/var/backups/wb-template-generator-pre-standard
+docker compose -p wb-template-generator --project-directory "$B" -f "$B/docker-compose.yml" --env-file "$B/.env" up -d --no-build --wait
+```
+
+Без `--env-file` подстановки возьмут `.env`, который нарисовала роль. Бэкап не удалять до второго выката по стандарту.
+
 ## Контакты
 
 - Владелец сервиса: ⟨заполнить⟩
