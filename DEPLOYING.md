@@ -87,7 +87,7 @@ Jenkins работает, а сломаны `deploy-infra`, агент `infra` �
 
 ```bash
 B=/var/backups/wb-template-generator-pre-standard
-docker compose -p wb-template-generator --project-directory "$B" -f "$B/docker-compose.yml" --env-file "$B/.env" up -d --no-build --wait
+sudo docker compose -p wb-template-generator --project-directory "$B" -f "$B/docker-compose.yml" --env-file "$B/.env" up -d --no-build --wait
 ```
 
 Без `--env-file` подстановки возьмут `.env`, который нарисовала роль. Бэкап не удалять до второго выката по стандарту.
