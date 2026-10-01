@@ -62,4 +62,4 @@ Roundtrip-поля (сохраняются при импорт/экспорт): 
 - **channel.type**: value, switch, wo-switch, pushbutton, range, text, rgb, temperature, voltage, current, power, ...
 - **channel.format**: u16, s16, u32, s32, u64, s64, float, double, u8, s8, string
 - **channel.reg_type**: holding, input, coil, discrete, holding_single, holding_multi
-- **channel.units**: V, mV, A, mA, W, kWh, Hz, rpm, Ohm, mOhm, bar, mbar, Pa, deg C, %, RH, ppm, ppb, lx, dB, s, min, h, m, mm/h, m/s, m^3/h, m^3, g, kg, mol, cd, Gcal/h, cal, Gcal, deg, rad
+- **channel.units**: `V`, `mV`, `A`, `mA`, `W`, `kWh`, `mAh`, `Hz`, `rpm`, `var`, `VA`, `kvarh`, `Ohm`, `mOhm`, `bar`, `mbar`, `Pa`, `mmHg`, `deg C`, `%`, `RH`, `%, RH`, `ppm`, `ppb`, `g/m^3`, `lx`, `dB`, `s`, `min`, `h`, `day`, `m`, `cm`, `mm`, `mm/h`, `m/s`, `m^3/h`, `m^3`, `g`, `kg`, `mol`, `cd`, `Gcal/h`, `cal`, `Gcal`, `deg`, `rad`. Список взят из [конвенций WB](https://github.com/wirenboard/conventions#units); `cm`, `mm`, `mmHg`, `mAh`, `day` добавлены сверх конвенций
