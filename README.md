@@ -30,7 +30,7 @@ cp env.example .env
 # Отредактируйте .env — укажите LLM_API_KEY и LLM_API_URL
 
 docker compose up --build -d
-# Откройте http://localhost:8080
+# Откройте http://localhost:9080
 ```
 
 ## Как это работает
@@ -54,7 +54,7 @@ docker compose up --build -d
 ```
                 ┌─────────┐     ┌─────────┐     ┌─────────────┐
  Браузер ──────>│  nginx  │────>│ FastAPI  │────>│ OpenAI API  │
-                │ :8080   │     │ :8000    │     │ (любой LLM) │
+                │ :9080   │     │ :9000    │     │ (любой LLM) │
                 └─────────┘     └─────────┘     └─────────────┘
                  frontend        backend
 ```
@@ -93,8 +93,13 @@ frontend/src/
   constants.ts         # Форматы, единицы, языки
   components/          # UI-компоненты редактора
 
-.github/workflows/
-  ci.yml               # CI: ruff, mypy, pytest, eslint, tsc
+Jenkinsfile            # один вызов dockerService: проверки и сборка образов
+backend/Dockerfile.ci  # образ с инструментами бэкенда для целей ci-lint / ci-test
+frontend/Dockerfile.ci # то же для фронтенда
+.github/workflows/ci.yml # прежние проверки в GitHub Actions — работают, пока Jenkins не выкатит первый раз
+
+Makefile               # локальные команды: make lint / test / build / up / down / smoke
+DEPLOYING.md           # операторская карточка: как выкатить, откатить, что делать при аварии
 ```
 
 ## API
@@ -181,17 +186,26 @@ event: error     ->  {message, request_id}
 
 ### Продакшен-деплой
 
-```bash
-# Копируйте .env и настройте для production
-cp env.example .env
+Выкат автоматический и **сборки на сервере нет**: образы собираются в CI и закрепляются
+за своим digest, сервер только скачивает готовый образ. Поэтому откат на любую версию —
+обычный прогон джобы на несколько минут без пересборки: образ уже лежит в реестре.
 
-# В файле .env важно добавить ваш API ключ из личного кабинета OpenAI
+- Смержил PR в `main` → джоба `main` сама выкатывает и проверяет ревизию. Прямой push в `main` не выкатывается.
+- Откат — джоба `main` → **Build with Parameters** → `REVISION` = SHA нужной версии (из описания прошлого прогона `prod @ <sha> · <кто>`).
+- Упавший выкат — красный прогон и алерт в Telegram; автоматического отката нет.
+- Пошагово, включая аварийные сценарии и break-glass, — в [`DEPLOYING.md`](DEPLOYING.md).
+- Что сейчас в проде: описание последней зелёной сборки `main` (`prod @ <sha> · <кто>`); образы — `docker ps` на хосте.
 
-# Запуск через prod-конфигурацию (bridge networking, restart: always)
-docker compose -f docker-compose.prod.yml up --build -d
-```
+Прод-конфигурация — шаблон `docker-compose.yml.j2` в репозитории `wirenboard/infra`
+(роль `wb_template_generator`): образы из `ghcr.io` по дайджесту, их подставляет выкат, bridge-сеть, `restart: always`, healthcheck-зависимость frontend от
+backend. Порт публикуется **только на `127.0.0.1:8080`** — снаружи сервис отдаёт nginx на
+хосте (он держит TLS и домен), напрямую в контейнер извне не ходят. Jenkins на хост не ходит:
+он публикует образы и передаёт релиз джобе выката. Credentials и адрес хоста лежат в реестре
+общей библиотеки, `Jenkinsfile` их не называет. `.env` с ключами — на сервере, в репозиторий не попадает.
 
-`docker-compose.prod.yml` отличается от dev: bridge-сеть вместо host, `restart: always`, healthcheck-зависимость frontend от backend, без volume-маунтов исходников.
+**Здесь лежит только `docker-compose.yml` — для локальной разработки** (`make up`): собирает образы из исходников, host networking, порты 9080/9000.
+
+Прод-файл выката живёт в `wirenboard/infra`, роль `wb_template_generator`: при выкате она подставляет переданные образы в `docker-compose.yml` на хосте, перезапускает стек и публикует его только на `127.0.0.1:8080`.
 
 ## Разработка
 
@@ -223,9 +237,30 @@ docker compose logs -f backend
 
 ### CI/CD
 
-GitHub Actions (`ci.yml`) запускается на push/PR в `main`:
-- **Backend**: `ruff check`, `mypy`, `pytest --cov` (порог покрытия 70%)
-- **Frontend**: `npm ci`, `eslint`, `tsc -b`
+Один вход для всех проверок — `make`: те же команды локально и в CI.
+
+```bash
+make lint      # ruff + mypy, eslint + tsc
+make test      # pytest --cov (порог 70%) + vitest
+```
+
+Конвейер описан одним `Jenkinsfile`; в Jenkins это одна multibranch-джоба, и что делает
+прогон, решает ветка:
+
+| Прогон | Что делает |
+|---|---|
+| любая ветка или PR | `make ci-lint`, `make ci-test` и дисциплина `CHANGELOG` |
+| `main` после merge PR | проверки → сборка образов по git-SHA → выкат в прод; роль на хосте сверяет образы и проверяет публичный адрес |
+| `main` после прямого push | ничего не выкатывает: `NOT_BUILT` и алерт |
+| кнопка с `REVISION` | заново выкатывает опубликованный релиз этой ревизии (откат или перевыкат) |
+
+Логика живёт в общей библиотеке Jenkins (`wirenboard/jenkins-pipeline-lib`), здесь — только
+объявление сервиса: какие цели прогонять и из каких Dockerfile собирать образы. Куда релиз имеет право поехать, решает реестр в библиотеке,
+репозиторий это переопределить не может.
+
+Прежние проверки в GitHub Actions (`.github/workflows/ci.yml`) пока продолжают работать
+параллельно с Jenkins. Их уберёт отдельный PR после первого зелёного выката через Jenkins —
+чтобы ни одного дня не остаться без проверок.
 
 ## Формат шаблона wb-mqtt-serial
 
