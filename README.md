@@ -185,8 +185,17 @@ event: error     ->  {message, request_id}
 
 ### Продакшен-деплой
 
-Выкат — через Jenkins при слиянии PR в `main`, откат — кнопкой `REVISION`. Пошагово — в [`DEPLOYING.md`](DEPLOYING.md).
-Файл выката прода — в `wirenboard/infra`, роль `wb_template_generator`; `docker-compose.yml` здесь — только для разработки.
+```bash
+# Копируйте .env и настройте для production
+cp env.example .env
+
+# В файле .env важно добавить ваш API ключ из личного кабинета OpenAI
+
+# Запуск через prod-конфигурацию (bridge networking, restart: always)
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+`docker-compose.prod.yml` отличается от dev: bridge-сеть вместо host, `restart: always`, healthcheck-зависимость frontend от backend, без volume-маунтов исходников.
 
 ## Разработка
 
@@ -218,7 +227,7 @@ docker compose logs -f backend
 
 ### CI/CD
 
-Jenkins на каждой ветке и PR запускает `make ci-lint` и `make ci-test`, на `main` после слияния PR — ещё и выкат.
+Jenkins на каждой ветке и PR запускает `make ci-lint` и `make ci-test`, на `main` после слияния PR — ещё и выкат ([`DEPLOYING.md`](DEPLOYING.md)).
 Логика — в общей библиотеке `wirenboard/jenkins-pipeline-lib`, здесь только `Jenkinsfile`.
 
 GitHub Actions (`ci.yml`) запускается на push/PR в `main`:
