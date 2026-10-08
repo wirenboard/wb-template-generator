@@ -17,7 +17,7 @@ test-backend:
 test-frontend:
 	cd frontend && npm test
 
-# Образ по ID, а не по тегу: параллельные сборки на общем docker не подменят его друг другу.
+# Образ берётся по ID, а не по тегу, чтобы параллельные сборки на общем docker не подменили его друг другу.
 ci-lint:
 	id=$$(docker build -q -f backend/Dockerfile.ci .) && docker run --rm "$$id" make lint-backend
 	id=$$(docker build -q -f frontend/Dockerfile.ci .) && docker run --rm "$$id" make lint-frontend

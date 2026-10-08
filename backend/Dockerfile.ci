@@ -1,4 +1,4 @@
-# Исходники через COPY, не -v: агент Jenkins сам в контейнере, путь хоста в -v был бы пуст.
+# Исходники копируются в образ, а не монтируются через -v: агент Jenkins сам работает в контейнере, и смонтированный каталог оказался бы пустым.
 FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends make poppler-utils \
     && rm -rf /var/lib/apt/lists/*

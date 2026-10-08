@@ -1,5 +1,5 @@
 FROM python:3.12-slim
-# curl нужен healthcheck в файле выката (роль wb_template_generator в wirenboard/infra)
+# curl нужен проверке здоровья в файле выката (роль wb_template_generator в wirenboard/infra)
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY backend/requirements.txt .

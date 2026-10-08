@@ -39,7 +39,7 @@ docker compose down                   # Остановка
 
 Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
 
-Проверки как в CI: `make ci-lint`, `make ci-test`. Выкат и откат — `DEPLOYING.md`.
+Проверки, как в CI, запускаются командами `make ci-lint` и `make ci-test`. Как выкатить и откатить сервис, описано в `DEPLOYING.md`.
 
 ## Флоу разработки
 
