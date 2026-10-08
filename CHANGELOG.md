@@ -5,6 +5,11 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.7.13] - 2026-10-09
+
+### Удалено
+- Ручной выкат: `docker-compose.prod.yml` и проверки в GitHub Actions. Сервис выкатывается через Jenkins, а в Actions осталась только постановка git-тега.
+
 ## [0.7.12] - 2026-10-09
 
 ### Добавлено
