@@ -23,7 +23,7 @@
 
 ## Запуск и тестирование
 
-**Приложение запускаем только в Docker, локально на хосте — не поднимаем.**
+**Все команды — только через Docker, НЕ локально.**
 
 ```bash
 docker compose up --build -d          # Сборка и запуск
@@ -39,16 +39,7 @@ docker compose down                   # Остановка
 
 Dev: `http://localhost:9080` (frontend), `http://localhost:9000` (backend).
 
-### make — единый вход для проверок
-
-```bash
-make lint          # ruff + mypy, eslint + tsc
-make test          # pytest --cov (порог 70%) + vitest
-make help          # все цели
-```
-
-Конвейер живёт в общей библиотеке Jenkins, в репозитории — один `Jenkinsfile` с объявлением
-сервиса. Как выкатить и откатить — `DEPLOYING.md`.
+Проверки как в CI: `make ci-lint`, `make ci-test`. Выкат и откат — `DEPLOYING.md`.
 
 ## Флоу разработки
 

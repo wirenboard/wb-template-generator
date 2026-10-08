@@ -1,4 +1,3 @@
-
 dockerService(
     checks: ['ci-lint', 'ci-test'],
     images: [

@@ -1,6 +1,4 @@
-# Почему копируем, а не монтируем — см. backend/Dockerfile.ci.
 FROM node:20-alpine
-
 RUN apk add --no-cache make
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json frontend/
