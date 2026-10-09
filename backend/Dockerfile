@@ -6,8 +6,6 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY CHANGELOG.md /app/CHANGELOG.md
 COPY backend/ .
-ARG GIT_SHA=unknown
-LABEL org.opencontainers.image.revision="${GIT_SHA}"
 # Файлы остаются за root, поэтому процесс не перезапишет собственный код
 RUN adduser --system --no-create-home --group app
 USER app
