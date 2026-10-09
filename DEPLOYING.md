@@ -15,7 +15,7 @@
 2. Открыть джобу `main`, нажать **Build with Parameters**, вписать этот SHA в поле `REVISION`, поле `ENVIRONMENT` оставить пустым и нажать **Build**.
 3. Дождаться зелёного прогона. Согласовывать откат ни с кем не нужно.
 
-Обычно образы берутся готовыми из `ghcr.io`. Если их там уже нет, Jenkins соберёт их заново из той же ревизии. Если между версиями менялась схема базы данных, сначала убедиться, что старый код с ней работает.
+Обычно образы берутся готовыми из `ghcr.io`. Если их там уже нет, Jenkins соберёт их заново из той же ревизии.
 
 ## Сменить секрет или настройку
 
@@ -39,7 +39,7 @@
 
 Если Jenkins не работает, а выкатить нужно срочно, написать в группу WB Инфра: вручную выкатывает только инфраструктура. Порядок такой:
 
-1. На сервере в файле `/var/wb-services/wb-template-generator/docker-compose.yml` вписать в `image:` ссылки на образы нужной версии вида `ghcr.io/wirenboard/wb-template-generator-…@sha256:…`. Их можно взять из `deployment-outcome.json` прогона этой версии.
+1. Найти в истории `main` на GitHub полный SHA нужной версии и на сервере в файле `/var/wb-services/wb-template-generator/docker-compose.yml` вписать в `image:` ссылки `ghcr.io/wirenboard/wb-template-generator-backend:main-<SHA>` и `ghcr.io/wirenboard/wb-template-generator-frontend:main-<SHA>`. Такие образы есть у каждой версии, которую выкатывал Jenkins.
 2. В этом каталоге выполнить `sudo docker compose up -d --wait`.
 3. Когда Jenkins заработает, выкатить ту же версию через `REVISION`, чтобы история прогонов совпадала с тем, что запущено.
 
