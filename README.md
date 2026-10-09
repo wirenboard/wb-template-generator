@@ -94,7 +94,7 @@ frontend/src/
   components/          # UI-компоненты редактора
 
 .github/workflows/
-  ci.yml               # CI: ruff, mypy, pytest, eslint, tsc
+  ci.yml               # git-тег с версией из CHANGELOG.md
 
 Jenkinsfile            # объявление сервиса для общей библиотеки Jenkins
 Makefile               # команды проверок: make lint и make test, в CI — make ci-lint и make ci-test
@@ -185,17 +185,7 @@ event: error     ->  {message, request_id}
 
 ### Продакшен-деплой
 
-```bash
-# Копируйте .env и настройте для production
-cp env.example .env
-
-# В файле .env важно добавить ваш API ключ из личного кабинета OpenAI
-
-# Запуск через prod-конфигурацию (bridge networking, restart: always)
-docker compose -f docker-compose.prod.yml up --build -d
-```
-
-`docker-compose.prod.yml` отличается от dev: bridge-сеть вместо host, `restart: always`, healthcheck-зависимость frontend от backend, без volume-маунтов исходников.
+Сервис выкатывается через Jenkins при слиянии PR в `main` и откатывается кнопкой в Jenkins; порядок действий описан в [`DEPLOYING.md`](DEPLOYING.md). Файл выката прода лежит в `wirenboard/infra`, в роли `wb_template_generator`, а `docker-compose.yml` в этом репозитории нужен только для разработки.
 
 ## Разработка
 
@@ -230,9 +220,7 @@ docker compose logs -f backend
 Jenkins запускает `make ci-lint` и `make ci-test` на каждой ветке и в каждом PR, а после слияния PR в `main` ещё и выкатывает сервис (см. [`DEPLOYING.md`](DEPLOYING.md)).
 Логика сборки и выката живёт в общей библиотеке `wirenboard/jenkins-pipeline-lib`, в этом репозитории лежит только `Jenkinsfile`.
 
-GitHub Actions (`ci.yml`) запускается на push/PR в `main`:
-- **Backend**: `ruff check`, `mypy`, `pytest --cov` (порог покрытия 70%)
-- **Frontend**: `npm ci`, `eslint`, `tsc -b`
+GitHub Actions (`ci.yml`) после каждого слияния в `main` ставит git-тег с версией из `CHANGELOG.md`.
 
 ## Формат шаблона wb-mqtt-serial
 
