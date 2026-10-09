@@ -49,3 +49,5 @@
 
 - Код сервиса — отдел «Интеграции».
 - Выкат, откат и сервер — инфраструктура, группа WB Инфра. Сервис в режиме «владеет инфра», см. [реестр сервисов](https://docs.google.com/spreadsheets/d/1_BdvU9gZEzW_rhKqA1Tk_pSxwL37UaOxQknWGl4Rfmk/edit?gid=945932788#gid=945932788).
+
+Как настроить такой выкат для своего сервиса, описано в [Инструкции настройки деплоя для продуктового сервиса](https://docs.google.com/document/d/1ts1EV4qtyyvfcKuZ7ZHbAUjpbIcsIYLaNXZWcOf0hgg/edit).
