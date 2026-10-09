@@ -1,8 +1,0 @@
-# Исходники копируются в образ, а не монтируются через -v: агент Jenkins сам работает в контейнере, и смонтированный каталог оказался бы пустым.
-FROM python:3.12-slim
-RUN apt-get update && apt-get install -y --no-install-recommends make \
-    && rm -rf /var/lib/apt/lists/*
-WORKDIR /src
-COPY backend/requirements.txt backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
-COPY . .
