@@ -95,6 +95,10 @@ frontend/src/
 
 .github/workflows/
   ci.yml               # CI: ruff, mypy, pytest, eslint, tsc
+
+Jenkinsfile            # объявление сервиса для общей библиотеки Jenkins
+Makefile               # команды проверок: make lint и make test, в CI — make ci-lint и make ci-test
+DEPLOYING.md           # как выкатить и откатить
 ```
 
 ## API
@@ -222,6 +226,9 @@ docker compose logs -f backend
 ```
 
 ### CI/CD
+
+Jenkins запускает `make ci-lint` и `make ci-test` на каждой ветке и в каждом PR, а после слияния PR в `main` ещё и выкатывает сервис (см. [`DEPLOYING.md`](DEPLOYING.md)).
+Логика сборки и выката живёт в общей библиотеке `wirenboard/jenkins-pipeline-lib`, в этом репозитории лежит только `Jenkinsfile`.
 
 GitHub Actions (`ci.yml`) запускается на push/PR в `main`:
 - **Backend**: `ruff check`, `mypy`, `pytest --cov` (порог покрытия 70%)
