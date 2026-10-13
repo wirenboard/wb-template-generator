@@ -5,6 +5,11 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.7.14] - 2026-10-13
+
+### Изменено
+- **Модель по умолчанию `gpt-5.6-luna` → `gpt-6-luna`.** Касается анализа на серверном ключе, а также своих настроек LLM, в которых модель не указана. Кто указал модель явно, продолжает работать на ней.
+
 ## [0.7.13] - 2026-10-12
 
 ### Удалено
@@ -441,6 +446,7 @@
 - Рендер параметров, удалён alarm channel_type (#5)
 - Уточнение wo-switch vs switch в промпте LLM (#6)
 
+[0.7.14]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.13...v0.7.14
 [0.7.11]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.10...v0.7.11
 [0.7.10]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.9...v0.7.10
 [0.7.9]: https://github.com/wirenboard/wb-template-generator/compare/v0.7.8...v0.7.9

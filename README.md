@@ -139,7 +139,7 @@ event: error     ->  {message, request_id}
 |------------|-------------|----------|
 | `LLM_API_URL` | _(пусто)_ | URL OpenAI-совместимого API. Пусто = анализ недоступен, пока пользователь не укажет свой LLM в настройках |
 | `LLM_API_KEY` | _(пусто)_ | API-ключ |
-| `LLM_MODEL` | `gpt-5.6-luna` | Модель (`gpt-5.4-mini` — ещё дешевле, `gpt-5.5` — дороже, качество то же) |
+| `LLM_MODEL` | `gpt-6-luna` | Модель по умолчанию |
 | `LLM_MAX_TOKENS` | `0` | 0 = без ограничения, >0 = лимит токенов |
 | `LLM_LEGACY_MAX_TOKENS` | `false` | `true` = `max_tokens` (старые API), `false` = `max_completion_tokens` |
 | `LLM_TIMEOUT` | `600` | Жёсткий таймаут HTTP-запроса к LLM (сек) |
