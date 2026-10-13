@@ -3,7 +3,7 @@
 ```bash
 LLM_API_URL=           # URL OpenAI-совместимого API
 LLM_API_KEY=           # API-ключ (необязательно для локальных LLM)
-LLM_MODEL=gpt-6-luna # Модель (gpt-5.4-mini — ещё дешевле при том же качестве, gpt-5.5 — дороже)
+LLM_MODEL=gpt-6-luna   # Модель по умолчанию
 LLM_MAX_TOKENS=16384
 LLM_LEGACY_MAX_TOKENS=false  # true = max_tokens (старые API), false = max_completion_tokens
 LLM_TEMPERATURE=       # пусто = дефолт модели (нужно для gpt-5.x, они принимают только 1); 0 = детерминизм для gpt-4o/локальных
