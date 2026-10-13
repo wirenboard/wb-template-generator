@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     LLM_API_URL: str = ""  # если пусто — серверный LLM отключён, нужен свой в настройках
     LLM_API_KEY: str = ""  # необязательное — для локальных LLM ключ не нужен
-    LLM_MODEL: str = "gpt-5.6-luna"
+    LLM_MODEL: str = "gpt-6-luna"
     LLM_MAX_TOKENS: int = 0  # 0 = не ограничивать (модель использует свой максимум)
     LLM_LEGACY_MAX_TOKENS: bool = False  # True = max_tokens (старые API), False = max_completion_tokens (OpenAI 2024+)
     # None = не отправлять параметр. gpt-5.x принимают только temperature=1 и отвергают 0;
