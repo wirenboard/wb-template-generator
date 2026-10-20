@@ -5,6 +5,12 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.7.15] - 2026-10-20
+
+### Исправлено
+- **DEPLOYING.md: ручной выкат без Jenkins — по дайджесту образа.** Метка `main-<SHA>` в `image:` заменена на ссылку `@sha256:…`, как требует стандарт деплоя.
+- **DEPLOYING.md: где искать причину `NOT_BUILT`.** Артефакт `deployment-outcome.json` есть только у прогонов, дошедших до выката; у `NOT_BUILT` причина — в описании прогона.
+
 ## [0.7.14] - 2026-10-13
 
 ### Изменено

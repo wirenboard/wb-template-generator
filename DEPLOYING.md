@@ -33,15 +33,25 @@
 | `NOT_BUILT` и алерт | Был прямой push в `main`, и он не выкачен. Провести изменение через PR. |
 | `NOT_BUILT` без алерта | Следом влили ещё один PR, и выкатит его сборка. Делать ничего не нужно. |
 
-Подробности любого прогона лежат в его артефакте `deployment-outcome.json`.
+Подробности прогона, дошедшего до выката, лежат в его артефакте `deployment-outcome.json`. У `NOT_BUILT` такого артефакта нет, причина — в описании прогона.
 
 ## Если Jenkins недоступен
 
 Если Jenkins не работает, а выкатить нужно срочно, написать в группу WB Инфра: вручную выкатывает только инфраструктура. Порядок такой:
 
-1. Найти в истории `main` на GitHub полный SHA нужной версии и на сервере в файле `/var/wb-services/wb-template-generator/docker-compose.yml` вписать в `image:` ссылки `ghcr.io/wirenboard/wb-template-generator-backend:main-<SHA>` и `ghcr.io/wirenboard/wb-template-generator-frontend:main-<SHA>`. Такие образы есть у каждой версии, которую выкатывал Jenkins.
-2. В этом каталоге выполнить `sudo docker compose up -d --wait`.
-3. Когда Jenkins заработает, выкатить ту же версию через `REVISION`, чтобы история прогонов совпадала с тем, что запущено.
+1. Найти в истории `main` на GitHub полный SHA нужной версии: образы есть у каждой версии, которую выкатывал Jenkins.
+2. На сервере получить дайджест каждого образа этой версии:
+
+   ```sh
+   for img in backend frontend; do
+     ref=ghcr.io/wirenboard/wb-template-generator-$img:main-<SHA>
+     sudo docker pull -q "$ref" >/dev/null && sudo docker inspect --format '{{index .RepoDigests 0}}' "$ref"
+   done
+   ```
+
+   Вписать полученные ссылки вида `ghcr.io/wirenboard/wb-template-generator-backend@sha256:…` в `image:` файла `/var/wb-services/wb-template-generator/docker-compose.yml`. Метка `main-<SHA>` — только подпись, на сервер версия попадает по дайджесту.
+3. В этом каталоге выполнить `sudo docker compose up -d --wait`.
+4. Когда Jenkins заработает, выкатить ту же версию через `REVISION`, чтобы история прогонов совпадала с тем, что запущено.
 
 Если Jenkins работает, а сломаны `deploy-infra` или vault, вручную ничего не выкатывать, а написать в группу WB Инфра.
 
