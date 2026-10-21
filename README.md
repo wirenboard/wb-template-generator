@@ -98,7 +98,7 @@ frontend/src/
 
 Jenkinsfile            # объявление сервиса для общей библиотеки Jenkins
 Makefile               # команды проверок: make lint и make test, в CI — make ci-lint и make ci-test
-DEPLOYING.md           # как выкатить и откатить
+DEPLOYING.md           # как задеплоить и откатить
 ```
 
 ## API
@@ -185,7 +185,7 @@ event: error     ->  {message, request_id}
 
 ### Продакшен-деплой
 
-Сервис выкатывается через Jenkins при слиянии PR в `main` и откатывается кнопкой в Jenkins; порядок действий описан в [`DEPLOYING.md`](DEPLOYING.md). Файл выката прода лежит в `wirenboard/infra`, в роли `wb_template_generator`, а `docker-compose.yml` в этом репозитории нужен только для разработки.
+Сервис деплоится через Jenkins при слиянии PR в `main` и откатывается кнопкой в Jenkins; порядок действий описан в [`DEPLOYING.md`](DEPLOYING.md). Файл запуска прода лежит в `wirenboard/infra`, в роли `wb_template_generator`, а `docker-compose.yml` в этом репозитории нужен только для разработки.
 
 ## Разработка
 
@@ -217,8 +217,8 @@ docker compose logs -f backend
 
 ### CI/CD
 
-Jenkins запускает `make ci-lint` и `make ci-test` на каждой ветке и в каждом PR, а после слияния PR в `main` ещё и выкатывает сервис (см. [`DEPLOYING.md`](DEPLOYING.md)).
-Логика сборки и выката живёт в общей библиотеке `wirenboard/jenkins-pipeline-lib`, в этом репозитории лежит только `Jenkinsfile`.
+Jenkins запускает `make ci-lint` и `make ci-test` на каждой ветке и в каждом PR, а после слияния PR в `main` ещё и деплоит сервис (см. [`DEPLOYING.md`](DEPLOYING.md)).
+Логика сборки и деплоя живёт в общей библиотеке `wirenboard/jenkins-pipeline-lib`, в этом репозитории лежит только `Jenkinsfile`.
 
 GitHub Actions (`ci.yml`) после каждого слияния в `main` ставит git-тег с версией из `CHANGELOG.md`.
 
