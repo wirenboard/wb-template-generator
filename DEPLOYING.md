@@ -33,7 +33,7 @@
 | `NOT_BUILT` и алерт | Был прямой push в `main`, и он не задеплоен. Провести изменение через PR. |
 | `NOT_BUILT` без алерта | Следом влили ещё один PR, и задеплоит его сборка. Делать ничего не нужно. |
 
-Подробности прогона, дошедшего до деплоя, лежат в его артефакте `deployment-outcome.json`. У `NOT_BUILT` такого артефакта нет, причина — в описании прогона.
+Подробности прогона `main` лежат в его артефакте `deployment-outcome.json`, в том числе у упавшего на проверках, Build или `stale_branch`. У `NOT_BUILT` такого артефакта нет, причина — в описании прогона.
 
 ## Если Jenkins недоступен
 
@@ -45,11 +45,11 @@
    ```sh
    for img in backend frontend; do
      ref=ghcr.io/wirenboard/wb-template-generator-$img:main-<SHA>
-     sudo docker pull -q "$ref" >/dev/null && sudo docker inspect --format '{{index .RepoDigests 0}}' "$ref"
+     sudo docker pull -q "$ref" >/dev/null && sudo docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}} {{index .RepoDigests 0}}' "$ref"
    done
    ```
 
-   Вписать полученные ссылки вида `ghcr.io/wirenboard/wb-template-generator-backend@sha256:…` в `image:` файла `/var/wb-services/wb-template-generator/docker-compose.yml`. Метка `main-<SHA>` — только подпись, на сервер версия попадает по дайджесту.
+   Команда выводит ревизию образа и ссылку. Если ревизия не совпала с `<SHA>`, метку перезаписали: такой образ не деплоить, а написать в группу WB Инфра. Совпала — вписать ссылки вида `ghcr.io/wirenboard/wb-template-generator-backend@sha256:…` в `image:` файла `/var/wb-services/wb-template-generator/docker-compose.yml`. Метка `main-<SHA>` — только подпись, на сервер версия попадает по дайджесту.
 3. В этом каталоге выполнить `sudo docker compose up -d --wait`.
 4. Когда Jenkins заработает, задеплоить ту же версию через `REVISION`, чтобы история прогонов совпадала с тем, что запущено.
 
