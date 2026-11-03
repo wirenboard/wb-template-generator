@@ -51,6 +51,43 @@ async function errorDetail(
   return { detail, requestId };
 }
 
+const CLIENT_ID_KEY = 'wb-template-client-id';
+let memoryClientId = '';
+
+/** Случайный идентификатор браузера для статистики; без localStorage живёт до перезагрузки */
+export function getClientId(): string {
+  try {
+    let id = localStorage.getItem(CLIENT_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(CLIENT_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    try {
+      memoryClientId ||= crypto.randomUUID();
+    } catch { /* randomUUID нет вне защищённого контекста */ }
+    return memoryClientId;
+  }
+}
+
+function clientHeaders(): Record<string, string> {
+  const id = getClientId();
+  return id ? { 'X-Client-Id': id } : {};
+}
+
+export type UsageEvent = 'page_open' | 'import_csv' | 'download_json' | 'download_jinja' | 'export_csv';
+
+/** Событие статистики. Сбой отправки не показывается и не мешает работе */
+export function trackUsage(event: UsageEvent): void {
+  fetch('/api/usage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...clientHeaders() },
+    body: JSON.stringify({ event }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 export interface ServerStatus {
   llm_available: boolean;
   max_request_size_mb?: number;
@@ -164,7 +201,7 @@ export async function analyzeFiles(
   }
 
   try {
-    const response = await fetch('/api/analyze', { method: 'POST', body: formData, signal });
+    const response = await fetch('/api/analyze', { method: 'POST', body: formData, signal, headers: clientHeaders() });
 
     if (!response.ok) {
       const { detail, requestId } = await errorDetail(
@@ -276,7 +313,7 @@ export async function fixRegisters(
   try {
     const res = await fetch('/api/fix-registers', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...clientHeaders() },
       body: JSON.stringify({ registers, ...llmBody(llmConfig) }),
     });
     if (!res.ok) {
@@ -339,7 +376,7 @@ export async function importTemplate(
 ): Promise<{ device_info: DeviceInfo; registers: Register[]; groups: RegisterGroup[] }> {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch('/api/import-template', { method: 'POST', body: formData });
+  const res = await fetch('/api/import-template', { method: 'POST', body: formData, headers: clientHeaders() });
   if (!res.ok) {
     const { detail } = await errorDetail(res, getT()('api.importError', { code: res.status }));
     throw new Error(detail);
@@ -356,7 +393,7 @@ export async function translateStrings(
   const targetLangName = LANGUAGE_NAMES[targetLang] || targetLang;
   const res = await fetch('/api/translate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...clientHeaders() },
     body: JSON.stringify({
       strings,
       target_lang: targetLang,

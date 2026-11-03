@@ -21,6 +21,8 @@ RATE_LIMIT_REQUESTS=10
 RATE_LIMIT_WINDOW=60
 LOG_FORMAT=text              # Формат логов: text или json
 CORS_ORIGINS=                # Разрешённые CORS-источники через запятую (пусто = кросс-домен запрещён)
+STATS_DB_PATH=/data/stats.sqlite3  # База статистики использования (пусто = статистика выключена)
+STATS_RETENTION_DAYS=365     # Сколько суток хранить статистику
 
 # Telegram-уведомления о сбоях OpenAI API (только для серверного LLM)
 TELEGRAM_NOTIFY_ENABLED=false                       # Включить алерты в Telegram

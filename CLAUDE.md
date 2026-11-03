@@ -72,6 +72,7 @@ backend/
   prompts.py           # Системные промпты для LLM
   queue_manager.py     # Управление очередями анализа (server + custom)
   sse.py               # Формирование SSE-событий
+  usage_stats.py       # Статистика использования по дням в SQLite
   request_context.py   # Request ID через ContextVar (middleware)
   tests/               # pytest: builder, importer, jinja_exporter, key_isolation
 

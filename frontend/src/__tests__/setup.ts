@@ -37,4 +37,5 @@ vi.mock('../api', () => ({
   // Без заглушек обе функции в моке undefined, и падает не там, где ошибка
   validateRegisters: vi.fn().mockResolvedValue({ registers: [], error_count: 0, warning_count: 0 }),
   fixRegisters: vi.fn(),
+  trackUsage: vi.fn(),
 }));

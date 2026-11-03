@@ -222,3 +222,9 @@ class TranslateResponse(BaseModel):
     """Ответ перевода строк."""
 
     translations: dict[str, str]  # key → translated text
+
+
+class UsageEventRequest(BaseModel):
+    """Событие статистики, которое видно только во фронте."""
+
+    event: Literal["page_open", "import_csv", "download_json", "download_jinja", "export_csv"]
