@@ -4,7 +4,7 @@ import TemplatePreview from './components/TemplatePreview';
 import ConfirmModal from './components/ConfirmModal';
 import ValidationGateModal from './components/ValidationGateModal';
 import { useStore } from './store';
-import { buildJinjaTemplate } from './api';
+import { buildJinjaTemplate, trackUsage } from './api';
 import { useT, useLocale, LOCALES } from './i18n';
 
 /** Скачивание Blob как файла */
@@ -67,6 +67,7 @@ export default function App() {
     if (!currentTemplate) return;
     const json = JSON.stringify(currentTemplate, null, 2);
     downloadBlob(new Blob([json], { type: 'application/json' }), `${currentTemplate.device_type || 'template'}.json`);
+    trackUsage('download_json');
   }, []);
 
   const actualDownloadJinja = useCallback(async () => {
@@ -81,6 +82,7 @@ export default function App() {
         groups,
       });
       downloadBlob(new Blob([text], { type: 'text/plain' }), `${deviceInfo.id || 'template'}.json.jinja`);
+      trackUsage('download_jinja');
     } catch (e) {
       const msg = e instanceof Error ? e.message : t('api.downloadJinjaError');
       setDownloadError(msg);

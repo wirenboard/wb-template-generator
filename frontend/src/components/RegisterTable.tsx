@@ -7,7 +7,7 @@ import { compareAddresses, parseAddressInput } from '../utils/serialValues';
 import { nextField, deleteTargets, isTypingTarget, rowIdFromDomId, rowHotkeyAction } from '../utils/tableNavigation';
 import { findInvalidConditionIds } from '../utils/conditionValidation';
 import { getRegisterSeverity, type FieldValidationError } from '../utils/registerValidation';
-import { translateStrings } from '../api';
+import { trackUsage, translateStrings } from '../api';
 import { useT, useHasTranslations, useLocale } from '../i18n';
 import FormatSelect from './FormatSelect';
 import RegisterDetailPanel from './RegisterDetailPanel';
@@ -707,6 +707,7 @@ export default function RegisterTable({
     a.download = 'registers.csv';
     a.click();
     URL.revokeObjectURL(url);
+    trackUsage('export_csv');
   }, [registers]);
 
   // --- CSV импорт (поддержка и запятой, и точки с запятой) ---
@@ -857,6 +858,7 @@ export default function RegisterTable({
       }
       if (allRegs.length > 0) {
         useStore.getState().setRegisters([...useStore.getState().registers, ...allRegs]);
+        trackUsage('import_csv');
       }
     };
     reader.readAsText(file);

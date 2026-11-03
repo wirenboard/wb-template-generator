@@ -16,6 +16,8 @@
 | GET | `/api/health` | Healthcheck (uptime, очереди) |
 | GET | `/api/queue-status` | Состояние очередей |
 | GET | `/api/metrics` | Метрики (счётчики, гистограммы) |
+| POST | `/api/usage` | Событие статистики от интерфейса |
+| GET | `/api/stats` | Статистика использования по дням |
 
 ### Параметры `/api/analyze` (multipart/form-data)
 
@@ -124,6 +126,14 @@ event: error      → {message, request_id, message_key?, message_params?}
     и запрос, который уронил обработчик, и сам запрос за метриками. **Сбои внутри
     SSE-потока сюда не попадают по устройству протокола**: ответ уже отдан с кодом 200,
     а ошибка приходит событием в теле — для анализа их считает `analyze_errors`.
+- **Статистика использования**: хранится в SQLite (`STATS_DB_PATH`) и переживает перезапуск, что считается — в [docs/features.md](features.md).
+  - `POST /api/usage` — тело `{"event": "page_open" | "import_csv" | "download_json" | "download_jinja" | "export_csv"}`, ответ 204. События, которые бэкенд пишет сам, отклоняются с 422.
+  - Заголовок `X-Client-Id` (UUID браузера) принимают `/api/usage`, `/api/analyze`, `/api/import-template`, `/api/fix-registers`, `/api/translate`. Без него или с битым событие идёт в итоги, но не в уникальные браузеры.
+  - `GET /api/stats?days=N` — сводка за последние N суток (по умолчанию 30, не больше `STATS_RETENTION_DAYS`). Открытый, отдаёт только агрегаты:
+    `unique_clients`, `returning_clients` (заходили больше чем в одни сутки), `clients_by_day`,
+    `funnel` — браузеры `{opened, started, downloaded}`, `events` — `{event: {count, clients}}`,
+    `top_clients_actions` — действия десяти самых активных браузеров без идентификаторов.
+    Статистика выключена или база недоступна — `{"enabled": false}`.
 - **Telegram-алерты**: при сбоях серверного OpenAI API (квота, auth, 5xx и т. п.)
   бэкенд шлёт уведомления в Telegram-чат (см. [docs/config.md](config.md) →
   «Telegram-уведомления»). Антиспам: CRITICAL — cooldown по категории,

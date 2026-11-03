@@ -8,5 +8,7 @@ COPY CHANGELOG.md /app/CHANGELOG.md
 COPY backend/ .
 # Файлы остаются за root, поэтому процесс не перезапишет собственный код
 RUN adduser --system --no-create-home --group app
+# Единственный каталог, куда пишет процесс: база статистики. Том наследует владельца отсюда
+RUN mkdir /data && chown app:app /data
 USER app
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000", "--no-access-log"]

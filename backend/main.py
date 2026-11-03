@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from openai import AsyncOpenAI
@@ -34,7 +34,13 @@ from llm_service import (
     resolve_llm_target,
 )
 from log_utils import SecretRedactingFilter, sanitize_for_log
-from models import BuildRequest, FixRegistersRequest, TranslateRequest, ValidateRequest
+from models import (
+    BuildRequest,
+    FixRegistersRequest,
+    TranslateRequest,
+    UsageEventRequest,
+    ValidateRequest,
+)
 from notifier import init_notifier, register_metric_hook, shutdown_notifier
 from prompts import get_raw_prompts, get_translate_prompt
 from queue_manager import QueueTicket, init_queues
@@ -42,6 +48,7 @@ from request_context import generate_request_id, get_request_id, set_request_id
 from sse import sse_progress, sse_user_error
 from template_builder import build_template
 from template_importer import TemplateImportError, detect_and_import
+from usage_stats import UsageStats, open_usage_stats, parse_client_id
 from user_errors import UserError
 
 
@@ -144,6 +151,16 @@ _metrics = {
 _endpoint_hits: dict[str, int] = defaultdict(int)
 _endpoint_errors: dict[str, int] = defaultdict(int)
 
+# Статистика использования; None — выключена или lifespan не выполнялся
+_usage: UsageStats | None = None
+
+# События статистики, которые бэкенд пишет сам по успешному ответу маршрута.
+# Анализ, перевод и /api/usage задают событие через request.state.usage_event.
+_USAGE_EVENTS = {
+    "POST /api/import-template": "import_template",
+    "POST /api/fix-registers": "fix_registers",
+}
+
 
 @lru_cache(maxsize=1)
 def _known_routes() -> frozenset[str]:
@@ -190,9 +207,10 @@ def _check_rate_limit(ip: str, max_requests: int, window: int) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Инициализация при старте, очистка при остановке."""
-    global _start_time
+    global _start_time, _usage
     _start_time = time.monotonic()
     settings = get_settings()
+    _usage = open_usage_stats(settings.STATS_DB_PATH, settings.STATS_RETENTION_DAYS)
     init_queues(
         server_max=settings.QUEUE_SERVER_MAX_CONCURRENT,
         custom_max=settings.QUEUE_CUSTOM_MAX_CONCURRENT,
@@ -225,6 +243,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await asyncio.sleep(0.5)
     await shutdown_notifier()
     await close_llm_http_clients()
+    if _usage:
+        _usage.close()
+        _usage = None
     logger.info("Приложение остановлено")
 
 
@@ -286,6 +307,10 @@ async def request_id_middleware(request: Request, call_next):
 
     if key and response.status_code >= 400:
         _endpoint_errors[key] += 1
+
+    event = getattr(request.state, "usage_event", None) or _USAGE_EVENTS.get(key or "")
+    if _usage and event and response.status_code < 400:
+        _usage.record(event, parse_client_id(request.headers.get("X-Client-Id")))
 
     logger.info("%s %s → %d (%.0f мс)", request.method, safe_path, response.status_code, duration_ms)
     return response
@@ -393,6 +418,20 @@ async def metrics():
     }
 
 
+@app.post("/api/usage", status_code=204)
+async def usage_event(request: Request, body: UsageEventRequest):
+    """Событие статистики от фронта; записывает его request_id_middleware."""
+    request.state.usage_event = body.event
+
+
+@app.get("/api/stats")
+def stats(days: int = Query(30, ge=1)):
+    """Статистика использования за последние `days` суток: только агрегаты, без идентификаторов."""
+    if not _usage:
+        return {"enabled": False}
+    return _usage.report(min(days, get_settings().STATS_RETENTION_DAYS))
+
+
 @app.get("/api/prompts")
 async def get_prompts():
     """Возвращает сырые шаблоны промптов для отображения/редактирования на фронте."""
@@ -481,6 +520,7 @@ async def analyze(
     settings = get_settings()
     request_id = get_request_id()
     is_custom_llm = is_custom_llm_url(llm_api_url)
+    request.state.usage_event = "analyze_custom" if is_custom_llm else "analyze_server"
 
     # Rate limiting по IP
     client_ip = request.client.host if request.client else "unknown"
@@ -751,7 +791,7 @@ async def build_jinja(request: BuildRequest):
 
 
 @app.post("/api/translate")
-async def translate(request: TranslateRequest):
+async def translate(request: TranslateRequest, http_request: Request):
     """Перевод строк через LLM."""
     settings = get_settings()
     request_id = get_request_id()
@@ -783,6 +823,8 @@ async def translate(request: TranslateRequest):
     if not request.strings:
         return JSONResponse(content={"translations": {}})
 
+    # Английский — базовый язык шаблона, перевод на него и есть нормализация
+    http_request.state.usage_event = "normalize_en" if request.target_lang == "en" else "translate"
     prompt = get_translate_prompt(request.target_lang_name)
     strings_json = json.dumps(request.strings, ensure_ascii=False)
 
@@ -795,7 +837,7 @@ async def translate(request: TranslateRequest):
     )
 
     try:
-        raw_response, _usage = await call_llm(
+        raw_response, _llm_usage = await call_llm(
             client,
             effective_model,
             prompt,

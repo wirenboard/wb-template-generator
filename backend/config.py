@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -34,6 +35,10 @@ class Settings(BaseSettings):
 
     # Логирование
     LOG_FORMAT: str = "text"  # text или json
+
+    # Статистика использования
+    STATS_DB_PATH: str = "/data/stats.sqlite3"  # пусто = статистика выключена
+    STATS_RETENTION_DAYS: int = Field(365, ge=1)
 
     # Пусто = кросс-доменные запросы запрещены. Интерфейс ходит через тот же origin, CORS ему не нужен.
     CORS_ORIGINS: str = ""  # Через запятую: "http://localhost:9080,https://app.example.com"

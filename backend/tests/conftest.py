@@ -1,10 +1,13 @@
 """Общие фикстуры бэкенд-тестов."""
 
+import os
 import sys
 from pathlib import Path
 
 # Добавляем backend/ в sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+# Тесты с lifespan не должны писать в рабочую базу статистики
+os.environ["STATS_DB_PATH"] = ""
 
 import pytest  # noqa: E402
 
