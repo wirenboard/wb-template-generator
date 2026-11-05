@@ -132,7 +132,7 @@ event: error      → {message, request_id, message_key?, message_params?}
   - `GET /api/stats?days=N` — сводка за последние N суток (по умолчанию 30, не больше `STATS_RETENTION_DAYS`). Открытый, отдаёт только агрегаты:
     `unique_clients`, `returning_clients` (заходили больше чем в одни сутки), `clients_by_day`,
     `funnel` — браузеры `{opened, started, downloaded}`, `events` — `{event: {count, clients}}`,
-    `top_clients_actions` — действия десяти самых активных браузеров без идентификаторов.
+    `templates_downloaded` — сколько шаблонов скачано (JSON и Jinja вместе).
     Статистика выключена или база недоступна — `{"enabled": false}`.
 - **Telegram-алерты**: при сбоях серверного OpenAI API (квота, auth, 5xx и т. п.)
   бэкенд шлёт уведомления в Telegram-чат (см. [docs/config.md](config.md) →
