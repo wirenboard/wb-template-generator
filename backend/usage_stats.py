@@ -139,11 +139,10 @@ class UsageStats:
                 "WHERE day >= ? GROUP BY event ORDER BY event",
                 (start,),
             ).fetchall()
-            top = q(
-                "SELECT SUM(count) AS n FROM usage WHERE day >= ? AND client_id != '' "
-                "AND event != 'page_open' GROUP BY client_id ORDER BY n DESC LIMIT 10",
-                (start,),
-            ).fetchall()
+            downloaded = q(
+                "SELECT COALESCE(SUM(count), 0) FROM usage WHERE day >= ? AND event IN (?, ?)",
+                (start, *_DOWNLOADED),
+            ).fetchone()[0]
             funnel = {
                 "opened": distinct_clients(("page_open",)),
                 "started": distinct_clients(_STARTED),
@@ -159,7 +158,7 @@ class UsageStats:
             "clients_by_day": {day: n for day, n in by_day},
             "funnel": funnel,
             "events": {e: {"count": n, "clients": c} for e, n, c in events},
-            "top_clients_actions": [r[0] for r in top],
+            "templates_downloaded": downloaded,
         }
 
     def close(self) -> None:

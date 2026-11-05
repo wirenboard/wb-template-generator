@@ -117,19 +117,20 @@ def test_report_period_bounds(stats):
     assert stats.report(7, today=TODAY)["events"]["translate"]["count"] == 1
 
 
-def test_funnel_and_top(stats):
-    """Доведение до результата считает браузеры; в топ не входит открытие страницы."""
+def test_funnel_and_downloads(stats):
+    """Воронка считает браузеры, а скачанные шаблоны — штуки, JSON и Jinja вместе."""
     for _ in range(3):
         stats.record("page_open", A, today=TODAY)
     stats.record("analyze_server", A, today=TODAY)
     stats.record("download_json", A, today=TODAY)
+    stats.record("download_json", A, today=TODAY)
     stats.record("page_open", B, today=TODAY)
     stats.record("import_csv", B, today=TODAY)
+    stats.record("download_jinja", B, today=TODAY - timedelta(days=1))
 
-    report = stats.report(1, today=TODAY)
-
-    assert report["funnel"] == {"opened": 2, "started": 2, "downloaded": 1}
-    assert report["top_clients_actions"] == [2, 1]
+    assert stats.report(1, today=TODAY)["funnel"] == {"opened": 2, "started": 2, "downloaded": 1}
+    assert stats.report(1, today=TODAY)["templates_downloaded"] == 2
+    assert stats.report(2, today=TODAY)["templates_downloaded"] == 3
 
 
 def test_data_survives_reopen(tmp_path):
