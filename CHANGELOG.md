@@ -5,6 +5,11 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.7.19] - 2026-11-26
+
+### Исправлено
+- **RUNBOOK.md: новое имя хоста для `deploy-infra`.** Сервер переехал в офис, и в infra хост теперь называется `ai_template_creating_vm` (INT-1515).
+
 ## [0.7.18] - 2026-11-10
 
 ### Изменено

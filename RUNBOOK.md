@@ -19,7 +19,7 @@
 
 ## Сменить секрет или настройку
 
-Открыть PR в `wirenboard/infra`. Секреты лежат в vault, остальные настройки — в `roles/wb_template_generator/defaults/main.yaml`. После слияния инфраструктура запускает `deploy-infra` с параметрами `Host = ai-template-creating` и `Tag = wb_template_generator`. Роль обновит `.env` и перезапустит сервис. Деплоить новую версию приложения для этого не нужно.
+Открыть PR в `wirenboard/infra`. Секреты лежат в vault, остальные настройки — в `roles/wb_template_generator/defaults/main.yaml`. После слияния инфраструктура запускает `deploy-infra` с параметрами `Host = ai_template_creating_vm` и `Tag = wb_template_generator`. Роль обновит `.env` и перезапустит сервис. Деплоить новую версию приложения для этого не нужно.
 
 ## Если деплой упал
 
